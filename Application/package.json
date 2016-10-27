@@ -28,8 +28,8 @@
     "ionic-gulp-scripts-copy": "^2.0.0",
     "run-sequence": "1.1.5"
   },
-  "name": "run",
-  "description": "RUN: An Ionic project",
+  "name": "BuskingCloud",
+  "description": "2016 GIF Project",
   "cordovaPlugins": [
     "cordova-plugin-device",
     "cordova-plugin-console",
