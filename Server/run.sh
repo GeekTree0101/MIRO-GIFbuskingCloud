@@ -10,4 +10,4 @@ npm install
 ./node_modules/.bin/tsc --sourcemap --module commonjs ./bin/www.ts
 
 # Run
-DEBUG=Express-4x-Typescript-Sample:* ./bin/www
+DEBUG=Busking-Could:* ./bin/www
