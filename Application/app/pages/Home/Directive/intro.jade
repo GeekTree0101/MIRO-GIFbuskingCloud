@@ -1,0 +1,5 @@
+ion-list(*ngFor ="let index of appData")
+    ion-item(*ngIf = "index.show")
+        center
+            img(src="{{index.image}}" )
+        p  {{index.script}}

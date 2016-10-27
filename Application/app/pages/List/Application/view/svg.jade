@@ -1,0 +1,9 @@
+ion-header
+  ion-navbar
+    ion-title SVG
+    button((click)="close()" menuToggle)
+        ion-icon(md="md-arrow-round-back" style="color : #fff; font-weight : 700")
+ion-content(padding class="svgApplication")
+    button((click)="actSVG()" class="button button-full light") SVG action
+    svg(*ngIf="flag" width="400" height="800")
+        path(id="draw")       

@@ -1,0 +1,73 @@
+.home{
+    
+    
+    hello-miro{
+        
+        ion-list{
+            
+            .item{
+                
+                border-top : 0px;
+                border-bottom : 0px;
+            }
+            ion-item{
+                background-color :#D6E6F2;
+                animation-duration: 3s;
+                animation-name: output;
+                
+                p{
+                    font-size : 1em;
+                    position : relative;
+                    text-align : center;
+                    white-space : pre-line;
+                    font-weight: 700;
+                    margin-bottom : 50%;
+                }
+                
+                img{
+                    width : 60%;
+                    height : 60%;
+                    margin-bottom : 10%;
+                    margin-top : 30%;
+                } 
+            }
+           
+        }
+        ion-list:nth-child(1){
+            ion-item{
+                animation-duration : 2.5s;
+                animation-name : output;
+                img{
+                    margin-top : 10%;
+                    width : 120%;
+                    
+                }
+                p{
+                    font-size : 1.5em;
+                }
+       
+            }
+        }
+        ion-list:nth-child(4){
+            ion-item{
+                img{
+                    width : 30%;
+                }
+            }
+        }
+    }
+    
+}
+
+
+@keyframes output{
+    0%{
+        opacity :0;
+    }
+    30%{
+        opacity : 0;
+    }
+    100%{
+        opacity :1;
+    }
+}

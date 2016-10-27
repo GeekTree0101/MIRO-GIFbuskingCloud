@@ -1,0 +1,38 @@
+<?xml version='1.0' encoding='utf-8'?>
+<plugin id="cordova-plugin-SDKvsJDK" version="0.0.2" xmlns="http://apache.org/cordova/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
+
+
+    <name>NativeCall</name>
+    
+    <!--Cordova Engine-->
+    <engine>
+        <engine name="cordova" version=">=3.4.0"/>
+    </engine>
+ 
+    <!-- 설치중 충돌을 방지한다.-->
+    <asset src="www/nativeCall.js" target="js/nativeCall.js"/>
+
+    <js-module name="nativeCall" src="www/nativeCall.js">
+        <clobbers target="nativeCall" />
+    </js-module>
+    
+    <platform name="android">
+        <config-file parent="/*" target="res/xml/config.xml">
+        
+         <feature name="SDKvsJDK">
+             <param name="android-package" value="org.apache.cordova.SDKvsJDK.SDKvsJDK" />
+        </feature>
+        
+        </config-file>
+        
+        <config-file parent="/*" target="AndroidManifest.xml">
+        </config-file>
+        
+        <source-file src="src/android/SDKvsJDK.java" target-dir="src/org/apache/cordova/SDKvsJDK/"/>
+        <source-file src="src/android/NativeCall.java" target-dir="src/org/apache/cordova/SDKvsJDK/"/>
+        <source-file src="src/android/libs/armeabi/librunningNative.so" target-dir="libs/armeabi/"/>
+        
+        
+    </platform>
+        
+</plugin>

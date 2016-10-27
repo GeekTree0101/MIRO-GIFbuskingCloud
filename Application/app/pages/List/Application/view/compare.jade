@@ -1,0 +1,21 @@
+ion-header
+  ion-navbar
+    ion-title Native Compare Plugin
+    button((click)="close()" menuToggle)
+        ion-icon(md="md-arrow-round-back" style="color : #fff; font-weight : 700")
+ion-content(class="application")
+    ion-list
+        ion-item
+            ion-label Select Value
+            ion-select([(ngModel)]="selectValue")
+                ion-option(value=1000000 checked="true" cancelText="Cancel" okText="Ok") 1000000Times
+                ion-option(value=10000000 cancelText="Cancel" okText="Ok") 10000000Times
+                ion-option(value=100000000 cancelText="Cancel" okText="Ok") 100000000Times
+                ion-option(value=1000000000 cancelText="Cancel" okText="Ok") 1000000000Times                                                                  
+    ion-list(*ngFor = "let app of appData" )
+        ion-item
+            ion-card
+                ion-card-content
+                    ion-card-title {{app.name}}
+                    h2 {{app.outputValue}} [ms]
+                button((click)="Run(app.target)" class="button-full" ) {{app.state}}  

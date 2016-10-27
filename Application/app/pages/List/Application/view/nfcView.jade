@@ -1,0 +1,21 @@
+ion-header
+  ion-navbar
+    ion-title NFC test
+    button((click)="close()" menuToggle)
+        ion-icon(md="md-arrow-round-back" style="color : #fff; font-weight : 700")
+ion-content(class="nfc")
+    ion-list
+        ion-item
+            ion-card
+                ion-card-content
+                    ion-card-title NFC ID
+                    h2 {{NFC_ID}}
+                button((click)="Run()" class="button-full" ) PUSH
+        ion-item(*ngIf ="NFC_ID.length < 15 ")
+            center
+                button((click)="Get()" class="button-full button-secondary button-GET") GET        
+        ion-item(*ngIf="GET_DATA.flag" class="fadeIn")
+            ion-card
+                ion-card-content        
+                    ion-card-title NFC GET output
+                    h2 {{GET_DATA.data}}

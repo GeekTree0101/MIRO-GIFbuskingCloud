@@ -1,0 +1,45 @@
+{
+    "prepare_queue": {
+        "installed": [],
+        "uninstalled": []
+    },
+    "config_munge": {
+        "files": {}
+    },
+    "installed_plugins": {
+        "cordova-plugin-console": {
+            "PACKAGE_NAME": "com.ionicframework.run847874"
+        },
+        "cordova-plugin-device": {
+            "PACKAGE_NAME": "com.ionicframework.run847874"
+        },
+        "cordova-plugin-splashscreen": {
+            "PACKAGE_NAME": "com.ionicframework.run847874"
+        },
+        "cordova-plugin-statusbar": {
+            "PACKAGE_NAME": "com.ionicframework.run847874"
+        },
+        "cordova-plugin-whitelist": {
+            "PACKAGE_NAME": "com.ionicframework.run847874"
+        },
+        "ionic-plugin-keyboard": {
+            "PACKAGE_NAME": "com.ionicframework.run847874"
+        },
+        "cordova-plugin-inappbrowser": {
+            "PACKAGE_NAME": "com.ionicframework.run847874"
+        },
+        "cordova-plugin-vibration": {
+            "PACKAGE_NAME": "com.ionicframework.run847874"
+        },
+        "cordova-plugin-SDKvsJDK": {
+            "PACKAGE_NAME": "com.ionicframework.run847874"
+        },
+        "com.ab.cordovafloatingactivity": {
+            "PACKAGE_NAME": "com.miro.InteractionLab"
+        },
+        "phonegap-nfc": {
+            "PACKAGE_NAME": "com.miro.InteractionLab"
+        }
+    },
+    "dependent_plugins": {}
+}

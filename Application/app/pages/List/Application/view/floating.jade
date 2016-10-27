@@ -1,0 +1,10 @@
+ion-header
+  ion-navbar
+    ion-title Floating Plugin
+    button((click)="close()" menuToggle)
+        ion-icon(md="md-arrow-round-back" style="color : #fff; font-weight : 700")
+ion-content(padding class="floatingStyle")
+    button( (click)="start()" class="button-secondary")
+        ion-icon(name="md-radio-button-on")
+    button( (click)="stop()" class="button-danger")
+        ion-icon(name="md-radio-button-off")        
