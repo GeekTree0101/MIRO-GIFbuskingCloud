@@ -9,7 +9,7 @@ import app = require('../app');
 import debugModule = require('debug');
 import http = require('http');
 
-var debug = debugModule('Express-4x-Typescript-Sample:server');
+var debug = debugModule('Busking-Could:server');
 
 /**
  * Get port from environment and store in Express.
