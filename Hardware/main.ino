@@ -8,6 +8,8 @@
 #define LED_GREEN 6;      //green color led
 #define LED_BLUE 7;       //blue color led
 
+char NFC_chip_code_number[7] = "A123B33";    //NFC chip number
+
 void reset_light_function();     //reset light function
 void red_light_function();       //red light function
 void green_light_function();     //green light function
@@ -20,6 +22,23 @@ void setup(){
   pinMode(LED_GREEN, OUTPUT);    //green led output state
   pinMode(LED_BLUE, OUTPUT);     //blue led output state
   
+  while(1){
+   
+    char recv_data = (char)Serial.read();
+    
+    if(recv_data == '*'){                          //Confirm
+     
+        for(int i = 0; i < 7; i++){
+         
+          Serial.print(NFC_chip_code_number[i]);   // send data
+        }
+      
+        Serial.print('*');   // END send flag
+        break;
+    }
+    
+  }
+  
 }
 
 void loop(){
@@ -27,7 +46,13 @@ void loop(){
   if(Serial.available() > 0){
     
     char recv_data = (char)Serial.read();            // Recieve Char type data from Mobile
-  
+
+    if(recv_data == '*'){                            // User Disconnect with devices
+     
+      setup();
+    }
+    
+    
     if(recv_data == 'R' || recv_data == 'r'){        // recieve data is Red
     
       reset_light_function();
