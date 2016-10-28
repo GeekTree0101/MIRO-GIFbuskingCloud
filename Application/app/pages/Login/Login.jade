@@ -1,1 +1,11 @@
+img(src="image/2.png")
+ion-list
+    ion-item
+        ion-label(fixed) User ID
+        ion-input((keyup)="insertID($event)" type="text" value="")
+    
+    ion-item
+        ion-label(fixed) Password
+        ion-input((keyup)="insertPassword($event)" type="password")
+
 button((click)="Auth_Login()" class="button-full") Login

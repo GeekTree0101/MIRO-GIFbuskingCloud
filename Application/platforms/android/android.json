@@ -41,10 +41,6 @@
                             "count": 1
                         },
                         {
-                            "xml": "<feature name=\"cordovafloatingactivity\"><param name=\"android-package\" value=\"com.ab.cordovafloatingactivityPack.cordovafloatingactivity\" /></feature>",
-                            "count": 1
-                        },
-                        {
                             "xml": "<feature name=\"NfcPlugin\"><param name=\"android-package\" value=\"com.chariotsolutions.nfc.plugin.NfcPlugin\" /><param name=\"onload\" value=\"true\" /></feature>",
                             "count": 1
                         }
@@ -59,10 +55,6 @@
                             "count": 1
                         },
                         {
-                            "xml": "<uses-permission android:name=\"android.permission.SYSTEM_ALERT_WINDOW\" />",
-                            "count": 1
-                        },
-                        {
                             "xml": "<uses-permission android:name=\"android.permission.NFC\" />",
                             "count": 1
                         },
@@ -71,12 +63,7 @@
                             "count": 1
                         }
                     ],
-                    "/manifest/application": [
-                        {
-                            "xml": "<service android:name=\"com.ab.cordovafloatingactivityPack.ChatHeadService\"></service>",
-                            "count": 1
-                        }
-                    ]
+                    "/manifest/application": []
                 }
             }
         }
@@ -108,9 +95,6 @@
         },
         "cordova-plugin-SDKvsJDK": {
             "PACKAGE_NAME": "com.ionicframework.run847874"
-        },
-        "com.ab.cordovafloatingactivity": {
-            "PACKAGE_NAME": "com.miro.InteractionLab"
         },
         "phonegap-nfc": {
             "PACKAGE_NAME": "com.miro.InteractionLab"
@@ -171,13 +155,6 @@
             ]
         },
         {
-            "file": "plugins/com.ab.cordovafloatingactivity/www/cordovafloatingactivity.js",
-            "id": "com.ab.cordovafloatingactivity.cordovafloatingactivity",
-            "clobbers": [
-                "cordovafloatingactivity"
-            ]
-        },
-        {
             "file": "plugins/phonegap-nfc/www/phonegap-nfc.js",
             "id": "phonegap-nfc.NFC",
             "runs": true
@@ -193,7 +170,6 @@
         "cordova-plugin-inappbrowser": "1.4.0",
         "cordova-plugin-vibration": "2.1.1",
         "cordova-plugin-SDKvsJDK": "0.0.2",
-        "com.ab.cordovafloatingactivity": "0.7.0",
         "phonegap-nfc": "0.6.6"
     }
 }

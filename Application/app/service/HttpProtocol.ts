@@ -33,7 +33,7 @@ export class HttpProtocalService{
     }
     
   
-    GET(type : string, url :string, userToken :string){
+    GET(type : string, url :string, userToken :Object){
         
         //TODO: Http Protocol GET Task
             
@@ -42,7 +42,7 @@ export class HttpProtocalService{
         //Header append
         if(userToken != null){
             console.log("[+] User Authoraization Header appending!");
-            authHeader.append('Authoraization', userToken);
+            authHeader.append('Authoraization', JSON.stringify(userToken));
         }
         else{
             console.log("[-] User avoid Authoraization! He is Hacker!");

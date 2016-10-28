@@ -53,13 +53,6 @@ module.exports = [
         ]
     },
     {
-        "file": "plugins/com.ab.cordovafloatingactivity/www/cordovafloatingactivity.js",
-        "id": "com.ab.cordovafloatingactivity.cordovafloatingactivity",
-        "clobbers": [
-            "cordovafloatingactivity"
-        ]
-    },
-    {
         "file": "plugins/phonegap-nfc/www/phonegap-nfc.js",
         "id": "phonegap-nfc.NFC",
         "runs": true
@@ -77,7 +70,6 @@ module.exports.metadata =
     "cordova-plugin-inappbrowser": "1.4.0",
     "cordova-plugin-vibration": "2.1.1",
     "cordova-plugin-SDKvsJDK": "0.0.2",
-    "com.ab.cordovafloatingactivity": "0.7.0",
     "phonegap-nfc": "0.6.6"
 };
 // BOTTOM OF METADATA

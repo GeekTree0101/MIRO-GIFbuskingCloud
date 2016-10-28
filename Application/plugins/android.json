@@ -34,9 +34,6 @@
         "cordova-plugin-SDKvsJDK": {
             "PACKAGE_NAME": "com.ionicframework.run847874"
         },
-        "com.ab.cordovafloatingactivity": {
-            "PACKAGE_NAME": "com.miro.InteractionLab"
-        },
         "phonegap-nfc": {
             "PACKAGE_NAME": "com.miro.InteractionLab"
         }

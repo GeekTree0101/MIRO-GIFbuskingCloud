@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="com.miro.InteractionLab" version="0.0.1" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+<widget id="com.miro.BuskingCloud" version="0.0.1" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
     <preference name="loglevel" value="DEBUG" />
     <feature name="Device">
         <param name="android-package" value="org.apache.cordova.device.Device" />
@@ -29,17 +29,14 @@
     <feature name="SDKvsJDK">
         <param name="android-package" value="org.apache.cordova.SDKvsJDK.SDKvsJDK" />
     </feature>
-    <feature name="cordovafloatingactivity">
-        <param name="android-package" value="com.ab.cordovafloatingactivityPack.cordovafloatingactivity" />
-    </feature>
     <feature name="NfcPlugin">
         <param name="android-package" value="com.chariotsolutions.nfc.plugin.NfcPlugin" />
         <param name="onload" value="true" />
     </feature>
     <allow-intent href="market:*" />
-    <name>MILab</name>
-    <description>An Ionic Framework and Cordova project.</description>
-    <author email="hi@ionicframework" href="http://ionicframework.com/">Ionic Framework Team</author>
+    <name>버스킹구름</name>
+    <description>2016 GIF Internet of Thing Chellenge</description>
+    <author email="h2s1880@gmail.com" href="http://cafe.naver.com/knumiro">KNU MIRO</author>
     <content src="index.html" />
     <access origin="*" />
     <allow-intent href="http://*/*" />
@@ -53,6 +50,6 @@
     <preference name="DisallowOverscroll" value="true" />
     <preference name="android-minSdkVersion" value="16" />
     <preference name="BackupWebStorage" value="none" />
-    <preference name="SplashScreenDelay" value="6000" />
+    <preference name="SplashScreenDelay" value="5000" />
     <preference name="FadeSplashScreenDuration" value="1000" />
 </widget>

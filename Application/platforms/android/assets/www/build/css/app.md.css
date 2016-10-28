@@ -9415,306 +9415,121 @@ body {
   font-size: 1.4rem;
   background-color: #fff; }
 
-.home hello-miro ion-list .item {
-  border-top: 0px;
-  border-bottom: 0px; }
-
-.home hello-miro ion-list ion-item {
-  background-color: #D6E6F2;
-  -webkit-animation-duration: 3s;
-  animation-duration: 3s;
-  -webkit-animation-name: output;
-  animation-name: output; }
-  .home hello-miro ion-list ion-item p {
-    font-size: 1em;
-    position: relative;
+.Main {
+  overflow: hidden; }
+  .Main footer {
     text-align: center;
-    white-space: pre-line;
-    font-weight: 700;
-    margin-bottom: 50%; }
-  .home hello-miro ion-list ion-item img {
-    width: 60%;
-    height: 60%;
-    margin-bottom: 10%;
-    margin-top: 30%; }
-
-.home hello-miro ion-list:nth-child(1) ion-item {
-  -webkit-animation-duration: 2.5s;
-  animation-duration: 2.5s;
-  -webkit-animation-name: output;
-  animation-name: output; }
-  .home hello-miro ion-list:nth-child(1) ion-item img {
-    margin-top: 10%;
-    width: 120%; }
-  .home hello-miro ion-list:nth-child(1) ion-item p {
-    font-size: 1.5em; }
-
-.home hello-miro ion-list:nth-child(4) ion-item img {
-  width: 30%; }
-
-@-webkit-keyframes output {
-  0% {
-    opacity: 0; }
-  30% {
-    opacity: 0; }
-  100% {
-    opacity: 1; } }
-
-@keyframes output {
-  0% {
-    opacity: 0; }
-  30% {
-    opacity: 0; }
-  100% {
-    opacity: 1; } }
-
-.list ion-card {
-  margin-top: 10%; }
-
-.list ion-item {
-  background-color: #f8f8f8; }
-
-.list button {
-  margin-top: 5%;
-  padding: 5%; }
-
-.application {
-  background-color: #f8f8f8; }
-
-.floatingStyle {
-  background-color: #f8f8f8; }
-  .floatingStyle button:nth-child(1) {
-    background-color: #23aa45;
-    position: fixed;
-    width: 30%;
-    height: 20%;
-    border-radius: 50%;
-    font-size: 400%;
-    margin-top: 30%;
-    margin-left: 30%; }
-  .floatingStyle button:nth-child(2) {
-    background-color: #bb3344;
-    position: fixed;
-    width: 30%;
-    height: 20%;
-    border-radius: 50%;
-    font-size: 400%;
-    margin-top: 70%;
-    margin-left: 30%; }
-
-.pixiApplication {
-  background-color: #f8f8f8; }
-
-.nfc {
-  background-color: #f8f8f8; }
-  .nfc .fadeIn {
-    -webkit-animation-duration: 1s;
-    animation-duration: 1s;
-    -webkit-animation-name: nfcCard;
-    animation-name: nfcCard; }
-  .nfc .button-GET {
-    background-color: #23aa45;
-    font-size: 200%;
-    height: 100%;
-    width: 50%;
-    border-radius: 10%; }
-  .nfc ion-item {
-    background: #f8f8f8; }
-  .nfc ion-list .item {
-    border-top: 0px;
-    border-bottom: 0px; }
-
-.webGLApplication #animation canvas {
-  width: 50%;
-  height: 50%;
-  opacity: 1;
-  z-index: 1;
-  margin-top: -20%;
-  margin-left: -5%; }
-
-@-webkit-keyframes nfcCard {
-  0% {
-    opacity: 0;
-    margin-left: 200%; }
-  100% {
-    opacity: 1;
-    margin-left: 0px; } }
-
-@keyframes nfcCard {
-  0% {
-    opacity: 0;
-    margin-left: 200%; }
-  100% {
-    opacity: 1;
-    margin-left: 0px; } }
-
-.aniUI {
-  -webkit-animation-duration: 1s;
-  animation-duration: 1s;
-  -webkit-animation-name: commit;
-  animation-name: commit;
-  -webkit-animation-fill-mode: backwards;
-  animation-fill-mode: backwards;
-  background-color: #00B8A9; }
-  .aniUI .candyBar {
+    color: #ddd;
+    font-size: 3vmax; }
+  .Main .Coin-button {
     position: relative;
-    margin: -50% auto;
-    z-index: -3;
-    height: 40%;
-    width: 2em;
-    background-color: #F8F3D4; }
-  .aniUI .circle {
+    z-index: -1;
+    margin: 30vmax auto;
+    border-radius: 100%;
+    width: 30vmax;
+    height: 30vmax;
+    background: #F6F39F;
+    -webkit-animation-duration: 5s;
+    animation-duration: 5s;
+    -webkit-animation-name: rolling;
+    animation-name: rolling;
+    -webkit-animation-iteration-count: infinite;
+    animation-iteration-count: infinite; }
+  .Main .Coin-text {
     position: relative;
-    margin: 50% auto;
-    width: 12em;
-    height: 12em;
-    background-color: #F6416C;
-    border-radius: 100%;
-    overflow: hidden; }
-    .aniUI .circle h3 {
-      position: relative;
-      font-size: 2em;
-      top: 60px;
-      text-align: center;
-      opacity: 1;
-      color: #F8F3D4; }
-  .aniUI .exit {
-    position: fixed;
-    bottom: 5%;
-    right: 10%;
-    border-radius: 100%;
-    font-size: 300%;
-    background-color: #F6416C;
-    width: 2em;
-    height: 2em;
-    opacity: 0;
-    color: #F8F3D4; }
-    .aniUI .exit ion-icon {
-      position: absolute;
-      top: 15px;
-      right: 26px; }
-
-@-webkit-keyframes commit {
-  0% {
-    opacity: 0;
-    margin-top: 200%; }
-  100% {
-    opacity: 1;
-    margin-top: 0%; } }
-
-@keyframes commit {
-  0% {
-    opacity: 0;
-    margin-top: 200%; }
-  100% {
-    opacity: 1;
-    margin-top: 0%; } }
-
-.css3dProject {
-  background-color: #2E94B9;
-  -webkit-animation-duration: 1s;
-  animation-duration: 1s;
-  -webkit-animation-name: show-up;
-  animation-name: show-up;
-  -webkit-animation-fill-mode: backwards;
-  animation-fill-mode: backwards; }
-  .css3dProject .exit-button {
-    position: fixed;
-    bottom: 5%;
-    right: 10%;
-    border-radius: 100%;
-    font-size: 300%;
-    z-index: 99;
-    background-color: #D25565;
-    width: 2em;
-    height: 2em;
-    opacity: 0;
-    -webkit-transform: scale(0);
-    transform: scale(0);
-    color: #FFFDC1;
-    overflow: hidden; }
-    .css3dProject .exit-button ion-icon {
-      position: absolute;
-      top: 15px;
-      right: 26px; }
-  .css3dProject .animation-object {
-    max-width: 100px;
-    height: 100px;
-    background-color: #FFFDC1;
-    margin: 20% auto; }
-    .css3dProject .animation-object ion-icon {
-      position: absolute;
-      left: 28%;
-      top: 25%;
-      color: #2E94B9;
-      font-size: 400%; }
-
-@-webkit-keyframes show-up {
-  0% {
-    opacity: 0;
-    margin-left: 100%;
-    -webkit-transform: rotateY(360deg);
-    transform: rotateY(360deg); }
-  100% {
-    opacity: 1;
-    margin-left: 0;
-    -webkit-transform: rotateY(0deg);
-    transform: rotateY(0deg); } }
-
-@keyframes show-up {
-  0% {
-    opacity: 0;
-    margin-left: 100%;
-    -webkit-transform: rotateY(360deg);
-    transform: rotateY(360deg); }
-  100% {
-    opacity: 1;
-    margin-left: 0;
-    -webkit-transform: rotateY(0deg);
-    transform: rotateY(0deg); } }
-
-.svgApplication svg path {
-  stroke-dasharray: 1000;
-  stroke-width: 10px;
-  fill: none; }
-
-.about button {
-  text-transform: capitalize;
-  font-size: 1.6rem;
-  padding: 1.5rem; }
-
-.about ion-avatar {
-  padding-top: 5%;
-  padding-bottom: 5%; }
-  .about ion-avatar img {
-    max-width: 16rem;
-    max-height: 16rem; }
-
-.about h2 {
-  padding-bottom: 5%; }
-
-.about ion-item {
-  background-color: #F8F8F8; }
-  .about ion-item p {
-    white-space: pre-line;
-    text-align: justify; }
-  .about ion-item h1 {
-    margin-bottom: 5%;
-    color: #222; }
-  .about ion-item h3 {
-    margin-bottom: 5%;
+    z-index: 0;
+    margin: 38vmax auto;
+    text-align: center;
     color: #555;
-    font-weight: 700; }
+    font-size: 7vmax; }
+  .Main .Coin-howl {
+    position: relative;
+    margin: -54vmax auto;
+    z-index: -2;
+    border: 10px solid #fff;
+    border-radius: 100%;
+    width: 20vmax;
+    height: 20vmax;
+    -webkit-animation-duration: 5s;
+    animation-duration: 5s;
+    -webkit-animation-name: howling;
+    animation-name: howling;
+    -webkit-animation-iteration-count: infinite;
+    animation-iteration-count: infinite; }
 
-.toolbar-background {
-  background-color: #769FCD; }
+@-webkit-keyframes rolling {
+  0% {
+    -webkit-transform: rotateZ(0deg);
+    transform: rotateZ(0deg);
+    border-radius: 0%; }
+  25% {
+    -webkit-transform: rotateZ(90deg);
+    transform: rotateZ(90deg);
+    border-radius: 20%; }
+  50% {
+    -webkit-transform: rotateZ(180deg);
+    transform: rotateZ(180deg);
+    border-radius: 30%; }
+  75% {
+    -webkit-transform: rotateZ(270deg);
+    transform: rotateZ(270deg);
+    border-radius: 100%; }
+  100% {
+    -webkit-transform: rotateZ(360deg);
+    transform: rotateZ(360deg);
+    border-radius: 0%; } }
 
-.toolbar-title {
-  color: #fff; }
+@keyframes rolling {
+  0% {
+    -webkit-transform: rotateZ(0deg);
+    transform: rotateZ(0deg);
+    border-radius: 0%; }
+  25% {
+    -webkit-transform: rotateZ(90deg);
+    transform: rotateZ(90deg);
+    border-radius: 20%; }
+  50% {
+    -webkit-transform: rotateZ(180deg);
+    transform: rotateZ(180deg);
+    border-radius: 30%; }
+  75% {
+    -webkit-transform: rotateZ(270deg);
+    transform: rotateZ(270deg);
+    border-radius: 100%; }
+  100% {
+    -webkit-transform: rotateZ(360deg);
+    transform: rotateZ(360deg);
+    border-radius: 0%; } }
+
+@-webkit-keyframes howling {
+  0% {
+    -webkit-transform: scale(0) rotateZ(0deg);
+    transform: scale(0) rotateZ(0deg);
+    border: 30px solid #fff;
+    opacity: 0.5; }
+  10% {
+    border-radius: 0%; }
+  100% {
+    -webkit-transform: scale(3) rotateZ(360deg);
+    transform: scale(3) rotateZ(360deg);
+    border: 0px dotted #fff;
+    opacity: 0;
+    border-radius: 100%; } }
+
+@keyframes howling {
+  0% {
+    -webkit-transform: scale(0) rotateZ(0deg);
+    transform: scale(0) rotateZ(0deg);
+    border: 30px solid #fff;
+    opacity: 0.5; }
+  10% {
+    border-radius: 0%; }
+  100% {
+    -webkit-transform: scale(3) rotateZ(360deg);
+    transform: scale(3) rotateZ(360deg);
+    border: 0px dotted #fff;
+    opacity: 0;
+    border-radius: 100%; } }
 
 ion-content {
-  background-color: #D6E6F2; }
-
-.button {
-  color: #fff;
-  background-color: #769FCD; }
+  background-color: #B062EA; }
