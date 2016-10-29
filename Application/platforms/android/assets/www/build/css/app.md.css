@@ -9419,117 +9419,44 @@ body {
   overflow: hidden; }
   .Main footer {
     text-align: center;
-    color: #ddd;
+    color: #aaa;
     font-size: 3vmax; }
-  .Main .Coin-button {
+  .Main .Coin_button {
     position: relative;
     z-index: -1;
     margin: 30vmax auto;
     border-radius: 100%;
     width: 30vmax;
     height: 30vmax;
-    background: #F6F39F;
-    -webkit-animation-duration: 5s;
-    animation-duration: 5s;
-    -webkit-animation-name: rolling;
-    animation-name: rolling;
-    -webkit-animation-iteration-count: infinite;
-    animation-iteration-count: infinite; }
-  .Main .Coin-text {
+    background: #539DDB; }
+  .Main .Coin_text {
     position: relative;
     z-index: 0;
     margin: 38vmax auto;
     text-align: center;
-    color: #555;
+    color: #fff;
     font-size: 7vmax; }
-  .Main .Coin-howl {
+  .Main .Coin_howl {
     position: relative;
     margin: -54vmax auto;
     z-index: -2;
-    border: 10px solid #fff;
+    border: 10px solid #539DDB;
     border-radius: 100%;
     width: 20vmax;
-    height: 20vmax;
-    -webkit-animation-duration: 5s;
-    animation-duration: 5s;
-    -webkit-animation-name: howling;
-    animation-name: howling;
-    -webkit-animation-iteration-count: infinite;
-    animation-iteration-count: infinite; }
-
-@-webkit-keyframes rolling {
-  0% {
-    -webkit-transform: rotateZ(0deg);
-    transform: rotateZ(0deg);
-    border-radius: 0%; }
-  25% {
-    -webkit-transform: rotateZ(90deg);
-    transform: rotateZ(90deg);
-    border-radius: 20%; }
-  50% {
-    -webkit-transform: rotateZ(180deg);
-    transform: rotateZ(180deg);
-    border-radius: 30%; }
-  75% {
-    -webkit-transform: rotateZ(270deg);
-    transform: rotateZ(270deg);
-    border-radius: 100%; }
-  100% {
-    -webkit-transform: rotateZ(360deg);
-    transform: rotateZ(360deg);
-    border-radius: 0%; } }
-
-@keyframes rolling {
-  0% {
-    -webkit-transform: rotateZ(0deg);
-    transform: rotateZ(0deg);
-    border-radius: 0%; }
-  25% {
-    -webkit-transform: rotateZ(90deg);
-    transform: rotateZ(90deg);
-    border-radius: 20%; }
-  50% {
-    -webkit-transform: rotateZ(180deg);
-    transform: rotateZ(180deg);
-    border-radius: 30%; }
-  75% {
-    -webkit-transform: rotateZ(270deg);
-    transform: rotateZ(270deg);
-    border-radius: 100%; }
-  100% {
-    -webkit-transform: rotateZ(360deg);
-    transform: rotateZ(360deg);
-    border-radius: 0%; } }
-
-@-webkit-keyframes howling {
-  0% {
-    -webkit-transform: scale(0) rotateZ(0deg);
-    transform: scale(0) rotateZ(0deg);
-    border: 30px solid #fff;
-    opacity: 0.5; }
-  10% {
-    border-radius: 0%; }
-  100% {
-    -webkit-transform: scale(3) rotateZ(360deg);
-    transform: scale(3) rotateZ(360deg);
-    border: 0px dotted #fff;
-    opacity: 0;
-    border-radius: 100%; } }
-
-@keyframes howling {
-  0% {
-    -webkit-transform: scale(0) rotateZ(0deg);
-    transform: scale(0) rotateZ(0deg);
-    border: 30px solid #fff;
-    opacity: 0.5; }
-  10% {
-    border-radius: 0%; }
-  100% {
-    -webkit-transform: scale(3) rotateZ(360deg);
-    transform: scale(3) rotateZ(360deg);
-    border: 0px dotted #fff;
-    opacity: 0;
-    border-radius: 100%; } }
+    height: 20vmax; }
+  .Main .Coin_side_menu {
+    position: fixed;
+    width: 100%;
+    margin-top: 6vmax; }
+    .Main .Coin_side_menu button {
+      width: 8vmax;
+      height: 8vmax;
+      margin: auto 5%;
+      border-radius: 100%;
+      opacity: 0.8; }
+      .Main .Coin_side_menu button ion-icon {
+        color: #fff;
+        font-size: 5vmax; }
 
 ion-content {
-  background-color: #B062EA; }
+  background-color: #F9FCFD; }

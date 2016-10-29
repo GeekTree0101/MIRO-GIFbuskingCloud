@@ -6,8 +6,9 @@
 // App Shared Sass variables belong in app.variables.scss.
 @import "../pages/Main/Main";
 @import "../pages/Busker/Busker";
+@import "../pages/BuskerList/BuskerList";
 @import "../pages/Login/Login";
 @import "../pages/User/User";
 ion-content {
-    background-color: #B062EA;
+    background-color: #F9FCFD;
 }

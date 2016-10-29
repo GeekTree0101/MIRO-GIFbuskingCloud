@@ -174,10 +174,152 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 var core_1 = require('@angular/core');
 var ionic_angular_1 = require('ionic-angular');
+var core_2 = require('@angular/core');
 var MainPage = (function () {
     function MainPage(nav) {
         this.nav = nav;
+        this.animation_object_queue = []; //animation object queue
+        this.dynamic = {
+            Coin_button: {
+                "motion": [
+                    { transform: 'scale(1)', borderRadius: "100%" },
+                    { transform: 'scale(1.2)', borderRadius: "100%" },
+                    { transform: 'scale(1)', borderRadius: "100%" }
+                ],
+                "option": {
+                    duration: 3000,
+                    easing: 'linear',
+                    delay: 10,
+                    iterations: Infinity,
+                    direction: 'normal',
+                    fill: 'forwards' //'backwards', 'both', 'none', 'auto'                  
+                }
+            },
+            Coin_howl: {
+                "motion": [
+                    { transform: 'scale(1) rotateZ(0deg)', opacity: 0.5 },
+                    { transform: 'scale(2) rotateZ(180deg)', opacity: 0.2 },
+                    { transform: 'scale(3) rotateZ(360deg)', opacity: 0 }
+                ],
+                "option": {
+                    duration: 2000,
+                    easing: 'cubic-bezier(0,0.9,0.38,0.42)',
+                    delay: 20,
+                    iterations: Infinity,
+                    direction: 'normal',
+                    fill: 'forwards'
+                }
+            },
+            Coin_touch_motion: {
+                "motion": [
+                    { transform: 'rotateY(0deg)' },
+                    { transform: 'rotateY(180deg)' }
+                ],
+                "option": {
+                    duration: 800,
+                    easing: 'linear',
+                    delay: 20,
+                    iterations: 1,
+                    direction: 'normal',
+                    fill: 'forwards'
+                }
+            },
+            Coin_side_menu: {
+                "motion": [
+                    { marginLeft: "200%" },
+                    { marginLeft: "0%" }
+                ],
+                "option": {
+                    duration: 2000,
+                    easing: 'cubic-bezier(0,0.5,0.3,1)',
+                    delay: 20,
+                    iterations: 1,
+                    direction: 'normal',
+                    fill: 'forwards'
+                }
+            }
+        };
+        this.menu_hide_flag = true;
     }
+    MainPage.prototype.ngAfterContentInit = function () {
+        this.UI_component(".Coin_button", "Coin_button", true, 0);
+        this.UI_component(".Coin_howl", "Coin_howl", true, 0);
+        this.UI_component(".Coin_side_menu", "Coin_side_menu", false, 0);
+    };
+    MainPage.prototype.mode_change = function () {
+        var click = this.dynamic["Coin_touch_motion"];
+        var button_effect = this.dynamic["Coin_button"];
+        var target_dom = this.animation_object_queue[0]; //button DOM
+        console.log("target_dom", target_dom);
+        target_dom.DOM.animate(click.motion, click.option);
+        target_dom.Ctrl.play();
+        setTimeout(function () {
+            target_dom.DOM.animate(button_effect.motion, button_effect.option);
+            target_dom.Ctrl.play();
+        }, 800);
+    };
+    MainPage.prototype.open_menu = function () {
+        var _this = this;
+        var target_dom = this.animation_object_queue[2];
+        if (this.menu_hide_flag) {
+            this.dynamic.Coin_side_menu.option.direction = 'normal';
+        }
+        else {
+            this.dynamic.Coin_side_menu.option.direction = 'reverse';
+        }
+        setTimeout(function () {
+            if (_this.menu_hide_flag) {
+                _this.menu_hide_flag = false;
+            }
+            else {
+                setTimeout(function () { _this.menu_hide_flag = true; }, 2000);
+            }
+        }, 200);
+        var option_output = this.dynamic["Coin_side_menu"];
+        target_dom.DOM.animate(option_output.motion, option_output.option);
+        target_dom.Ctrl.play();
+    };
+    /**
+     *  UI_component
+     *  : make UI animated component
+     *  @parameter
+     *  : element_class_name [string] : DOM tag name or class name
+     *  : new_object_name [string] : Animati
+    
+    constructor(private nav :NavController){
+        
+    }on option name
+     *  : control_flag [boolean] : Animation state control value
+     */
+    MainPage.prototype.UI_component = function (element_class_name, new_object_name, control_flag, index) {
+        var dom_elements = window.document.querySelectorAll(element_class_name);
+        var animation_object = this.dynamic[new_object_name];
+        console.log("dom", dom_elements);
+        var ctrl = dom_elements[index].animate(animation_object.motion, animation_object.option);
+        if (control_flag) {
+            ctrl.play(); // animation paly
+        }
+        else {
+            ctrl.pause(); // animation pause
+        }
+        var object_value = {
+            DOM: dom_elements[index],
+            Ctrl: ctrl
+        };
+        this.animation_object_queue.push(object_value); // push on animation object queue
+    };
+    __decorate([
+        core_2.Output(), 
+        __metadata('design:type', Function), 
+        __metadata('design:paramtypes', []), 
+        __metadata('design:returntype', void 0)
+    ], MainPage.prototype, "mode_change", null);
+    __decorate([
+        core_1.HostListener('press', ['$event']), 
+        __metadata('design:type', Function), 
+        __metadata('design:paramtypes', []), 
+        __metadata('design:returntype', void 0)
+    ], MainPage.prototype, "open_menu", null);
     MainPage = __decorate([
         core_1.Component({
             templateUrl: 'build/pages/Main/Main.html'

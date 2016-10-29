@@ -9419,117 +9419,287 @@ body {
   overflow: hidden; }
   .Main footer {
     text-align: center;
-    color: #ddd;
-    font-size: 3vmax; }
-  .Main .Coin-button {
+    color: #888;
+    font-size: 3vmax;
+    font-weight: 600; }
+  .Main .Coin_button {
     position: relative;
     z-index: -1;
     margin: 30vmax auto;
     border-radius: 100%;
     width: 30vmax;
     height: 30vmax;
-    background: #F6F39F;
-    -webkit-animation-duration: 5s;
-    animation-duration: 5s;
-    -webkit-animation-name: rolling;
-    animation-name: rolling;
-    -webkit-animation-iteration-count: infinite;
-    animation-iteration-count: infinite; }
-  .Main .Coin-text {
+    background: #539DDB; }
+  .Main .Coin_text {
     position: relative;
     z-index: 0;
     margin: 38vmax auto;
     text-align: center;
-    color: #555;
+    color: #fff;
     font-size: 7vmax; }
-  .Main .Coin-howl {
+  .Main .Coin_howl {
     position: relative;
     margin: -54vmax auto;
     z-index: -2;
-    border: 10px solid #fff;
+    border: 10px solid #539DDB;
     border-radius: 100%;
     width: 20vmax;
-    height: 20vmax;
-    -webkit-animation-duration: 5s;
-    animation-duration: 5s;
-    -webkit-animation-name: howling;
-    animation-name: howling;
+    height: 20vmax; }
+  .Main .Coin_side_menu {
+    position: fixed;
+    width: 100%;
+    margin-top: 70vmax; }
+    .Main .Coin_side_menu button {
+      width: 8vmax;
+      height: 8vmax;
+      margin: auto 5%;
+      border-radius: 100%;
+      opacity: 0.8; }
+      .Main .Coin_side_menu button ion-icon {
+        color: #fff;
+        font-size: 5vmax; }
+
+.bitcoin {
+  -webkit-animation-duration: 1s;
+  animation-duration: 1s;
+  -webkit-animation-iteration-count: 1;
+  animation-iteration-count: 1;
+  -webkit-animation-name: show-up;
+  animation-name: show-up;
+  opacity: 1;
+  background-color: #00AD7C; }
+  .bitcoin ion-icon {
+    position: fixed;
+    left: 80%;
+    top: 5%;
+    color: #fff;
+    font-size: 8vmax;
+    -webkit-animation-name: close_motion;
+    animation-name: close_motion;
     -webkit-animation-iteration-count: infinite;
-    animation-iteration-count: infinite; }
-
-@-webkit-keyframes rolling {
-  0% {
-    -webkit-transform: rotateZ(0deg);
-    transform: rotateZ(0deg);
-    border-radius: 0%; }
-  25% {
-    -webkit-transform: rotateZ(90deg);
-    transform: rotateZ(90deg);
-    border-radius: 20%; }
-  50% {
-    -webkit-transform: rotateZ(180deg);
-    transform: rotateZ(180deg);
-    border-radius: 30%; }
-  75% {
-    -webkit-transform: rotateZ(270deg);
-    transform: rotateZ(270deg);
-    border-radius: 100%; }
-  100% {
-    -webkit-transform: rotateZ(360deg);
-    transform: rotateZ(360deg);
-    border-radius: 0%; } }
-
-@keyframes rolling {
-  0% {
-    -webkit-transform: rotateZ(0deg);
-    transform: rotateZ(0deg);
-    border-radius: 0%; }
-  25% {
-    -webkit-transform: rotateZ(90deg);
-    transform: rotateZ(90deg);
-    border-radius: 20%; }
-  50% {
-    -webkit-transform: rotateZ(180deg);
-    transform: rotateZ(180deg);
-    border-radius: 30%; }
-  75% {
-    -webkit-transform: rotateZ(270deg);
-    transform: rotateZ(270deg);
-    border-radius: 100%; }
-  100% {
-    -webkit-transform: rotateZ(360deg);
-    transform: rotateZ(360deg);
-    border-radius: 0%; } }
-
-@-webkit-keyframes howling {
-  0% {
-    -webkit-transform: scale(0) rotateZ(0deg);
-    transform: scale(0) rotateZ(0deg);
-    border: 30px solid #fff;
+    animation-iteration-count: infinite;
+    -webkit-animation-duration: 2s;
+    animation-duration: 2s; }
+  .bitcoin .Count {
+    position: relative;
+    margin-top: 60%; }
+    .bitcoin .Count h1 {
+      font-weight: 700;
+      color: #fff;
+      font-size: 10vmax;
+      -webkit-animation-name: close_motion;
+      animation-name: close_motion;
+      -webkit-animation-iteration-count: 1;
+      animation-iteration-count: 1;
+      -webkit-animation-duration: 2s;
+      animation-duration: 2s; }
+    .bitcoin .Count h2 {
+      font-weight: 600;
+      color: #ddd;
+      font-size: 5vmax; }
+  .bitcoin .button_class {
+    position: fixed;
+    top: 78%;
+    height: 10%;
+    width: 100%;
+    font-weight: 700;
+    background-color: #E87811;
+    font-size: 3vmax; }
+  .bitcoin .button_class:active {
+    background-color: #FFa851;
     opacity: 0.5; }
-  10% {
-    border-radius: 0%; }
-  100% {
-    -webkit-transform: scale(3) rotateZ(360deg);
-    transform: scale(3) rotateZ(360deg);
-    border: 0px dotted #fff;
-    opacity: 0;
-    border-radius: 100%; } }
 
-@keyframes howling {
-  0% {
-    -webkit-transform: scale(0) rotateZ(0deg);
-    transform: scale(0) rotateZ(0deg);
-    border: 30px solid #fff;
+.heart {
+  -webkit-animation-duration: 1s;
+  animation-duration: 1s;
+  -webkit-animation-iteration-count: 1;
+  animation-iteration-count: 1;
+  -webkit-animation-name: show-up;
+  animation-name: show-up;
+  opacity: 1;
+  background-color: #FF88FC; }
+  .heart ion-icon {
+    position: fixed;
+    left: 80%;
+    top: 5%;
+    color: #fff;
+    font-size: 8vmax;
+    -webkit-animation-name: close_motion;
+    animation-name: close_motion;
+    -webkit-animation-iteration-count: infinite;
+    animation-iteration-count: infinite;
+    -webkit-animation-duration: 2s;
+    animation-duration: 2s; }
+
+.user {
+  -webkit-animation-duration: 1s;
+  animation-duration: 1s;
+  -webkit-animation-iteration-count: 1;
+  animation-iteration-count: 1;
+  -webkit-animation-name: show-up;
+  animation-name: show-up;
+  opacity: 1;
+  background-color: #aaa; }
+  .user ion-icon {
+    position: fixed;
+    left: 80%;
+    top: 5%;
+    color: #fff;
+    font-size: 8vmax;
+    -webkit-animation-name: close_motion;
+    animation-name: close_motion;
+    -webkit-animation-iteration-count: infinite;
+    animation-iteration-count: infinite;
+    -webkit-animation-duration: 2s;
+    animation-duration: 2s; }
+  .user .person {
+    position: fixed;
+    top: 20%;
+    left: 18%;
+    font-size: 30vmax;
+    -webkit-animation-name: null;
+    animation-name: null; }
+    .user .person h1 {
+      font-weight: 700;
+      font-size: 5vmax;
+      color: #fff; }
+    .user .person h2 {
+      font-weight: 600;
+      margin-top: 5%;
+      font-size: 4vmax;
+      color: #eee; }
+  .user .button_class {
+    position: fixed;
+    top: 78%;
+    height: 10%;
+    width: 100%;
+    font-weight: 700;
+    background-color: #a83322;
+    font-size: 3vmax; }
+  .user .button_class:active {
+    background-color: #ff0000;
     opacity: 0.5; }
-  10% {
-    border-radius: 0%; }
+
+@-webkit-keyframes show-up {
+  0% {
+    margin-top: 300%; }
   100% {
-    -webkit-transform: scale(3) rotateZ(360deg);
-    transform: scale(3) rotateZ(360deg);
-    border: 0px dotted #fff;
-    opacity: 0;
-    border-radius: 100%; } }
+    margin-top: 0%; } }
+
+@keyframes show-up {
+  0% {
+    margin-top: 300%; }
+  100% {
+    margin-top: 0%; } }
+
+@-webkit-keyframes close_motion {
+  0% {
+    -webkit-transform: scale(1);
+    transform: scale(1); }
+  50% {
+    -webkit-transform: scale(1.5);
+    transform: scale(1.5); }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1); } }
+
+@keyframes close_motion {
+  0% {
+    -webkit-transform: scale(1);
+    transform: scale(1); }
+  50% {
+    -webkit-transform: scale(1.5);
+    transform: scale(1.5); }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1); } }
+
+.toast-container {
+  background-color: #00AD7C; }
+  .toast-container div {
+    color: #fff;
+    font-weight: 700; }
+  .toast-container button {
+    color: #fcfcff;
+    font-weight: 500; }
+
+.Busker {
+  -webkit-animation-duration: 1s;
+  animation-duration: 1s;
+  -webkit-animation-iteration-count: 1;
+  animation-iteration-count: 1;
+  -webkit-animation-name: show-up;
+  animation-name: show-up;
+  opacity: 1;
+  background-color: #FDA856; }
+  .Busker ion-icon {
+    position: fixed;
+    left: 80%;
+    top: 5%;
+    color: #fff;
+    font-size: 8vmax;
+    -webkit-animation-name: close_motion;
+    animation-name: close_motion;
+    -webkit-animation-iteration-count: infinite;
+    animation-iteration-count: infinite;
+    -webkit-animation-duration: 2s;
+    animation-duration: 2s; }
+
+@keyframes show-up {
+  0% {
+    margin-top: 300%; }
+  100% {
+    margin-top: 0%; } }
+
+@keyframes close_motion {
+  0% {
+    -webkit-transform: scale(1);
+    transform: scale(1); }
+  50% {
+    -webkit-transform: scale(1.5);
+    transform: scale(1.5); }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1); } }
+
+.BuskerList {
+  -webkit-animation-duration: 1s;
+  animation-duration: 1s;
+  -webkit-animation-iteration-count: 1;
+  animation-iteration-count: 1;
+  -webkit-animation-name: show-up;
+  animation-name: show-up;
+  opacity: 1;
+  background-color: #FDA856; }
+  .BuskerList ion-icon {
+    position: fixed;
+    left: 80%;
+    top: 5%;
+    color: #fff;
+    font-size: 8vmax;
+    -webkit-animation-name: close_motion;
+    animation-name: close_motion;
+    -webkit-animation-iteration-count: infinite;
+    animation-iteration-count: infinite;
+    -webkit-animation-duration: 2s;
+    animation-duration: 2s; }
+
+@keyframes show-up {
+  0% {
+    margin-top: 300%; }
+  100% {
+    margin-top: 0%; } }
+
+@keyframes close_motion {
+  0% {
+    -webkit-transform: scale(1);
+    transform: scale(1); }
+  50% {
+    -webkit-transform: scale(1.5);
+    transform: scale(1.5); }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1); } }
 
 ion-content {
-  background-color: #B062EA; }
+  background-color: #F9FCFD; }

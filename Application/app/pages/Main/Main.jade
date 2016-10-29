@@ -1,6 +1,15 @@
-ion-content(class="Main" scroll="false")
+ion-content(class="Main")
 
-    div(class="Coin-button")
-    div(class="Coin-howl")
-    h3(class="Coin-text") Click
+    ion-list([hidden]="menu_hide_flag" class="Coin_side_menu")
+        button((click)="menu_controller(view_list.A)" style="background-color : #aaa")
+            ion-icon(name="md-person")
+        button((click)="menu_controller(view_list.B)" style="background-color : #00AD7C")
+            ion-icon(name="logo-bitcoin")    
+        button((click)="menu_controller(view_list.C)" style="background-color : #FF88FC")
+            ion-icon(name="heart")   
+        button((click)="menu_controller(view_list.D)" style="background-color : #FDA856")
+            ion-icon(name="md-star")   
+    div((click)="mode_change()"  class="Coin_button")
+    div((press)="open_menu()" class="Coin_howl")
+    h3(class="Coin_text") Touch
     footer Copyright(C) 2016 MIRO
