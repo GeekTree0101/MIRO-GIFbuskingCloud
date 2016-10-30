@@ -88,13 +88,16 @@ var BuskerPage = (function () {
         this.bluetooth_state_check();
     };
     BuskerPage.prototype.ngAfterContentInit = function () {
-        this.bluetooth_state_check();
+        var _this = this;
+        setTimeout(function () {
+            _this.bluetooth_state_check();
+        }, 2000);
     };
     BuskerPage.prototype.bluetooth_state_check = function () {
         var _this = this;
         navigator.vibrate(200);
         var bluetooth = window.bluetoothSerial;
-        bluetooth.isConnected(function (success) { _this.feel_the_toast(); }, function (err) {
+        bluetooth.isConnected(function (success) { _this.feel_the_toast("이미 사물과 연결이 되어 있습니다."); }, function (err) {
             bluetooth.isEnabled(function (success) {
                 _this.bluetooth_connection();
             }, function (err) {
@@ -125,7 +128,7 @@ var BuskerPage = (function () {
                 bluetooth.connect(mac_address, //bluetooth mac address
                 function () {
                     _this.write("*"); //send device connection
-                    _this.feel_the_toast();
+                    _this.feel_the_toast("사물과 연결이 되었습니다.");
                     _this.state_flag = true;
                 }, function () {
                     _this.informationAlert("fail");
@@ -175,8 +178,8 @@ var BuskerPage = (function () {
         console.log("Coin", this.real_time_bitcoin);
         this.write("*"); //disconnect
         window.bluetoothSerial.disconnect(function () {
-            _this.informationAlert("cut");
             _this.state_flag = false;
+            _this.ctrl.dismiss();
         }, function () { });
     };
     BuskerPage.prototype.informationAlert = function (target) {
@@ -191,11 +194,6 @@ var BuskerPage = (function () {
             message: "설정으로가서 페이링을 해주세요.",
             buttons: ["OK"]
         });
-        var cut = ionic_angular_1.Alert.create({
-            title: "연결이 헤제되었습니다.",
-            message: "디바이스와 사물간의 연결이 정상적으로 헤제 되었습니다.",
-            buttons: ["OK"]
-        });
         navigator.vibrate(200);
         if (target == "fail") {
             this.nav.present(fail);
@@ -203,13 +201,10 @@ var BuskerPage = (function () {
         else if (target == "pair") {
             this.nav.present(pair);
         }
-        else if (target == "cut") {
-            this.nav.present(cut);
-        }
     };
-    BuskerPage.prototype.feel_the_toast = function () {
+    BuskerPage.prototype.feel_the_toast = function (message_value) {
         var obj = ionic_angular_1.Toast.create({
-            message: "사물과 연결이 되었습니다.",
+            message: message_value,
             duration: 3000,
             position: 'bottom',
             showCloseButton: true,
@@ -858,6 +853,7 @@ var heart_page = (function () {
         };
         this.custom_coin = 888; //User Want to send money
         this.user_coin = JSON.parse(localStorage.getItem("userdata")).Coin; //user money
+        this.show_state = true;
         this.donation_method = [
             {
                 image: "image/ionic.png",
@@ -896,6 +892,7 @@ var heart_page = (function () {
             this.custom_coin++;
         }
         else {
+            this.show_state = false;
             this.custom_coin = index;
         }
     };
@@ -904,6 +901,13 @@ var heart_page = (function () {
         if (event.target.className == "resize_coin") {
             this.coin_size_up(true, 0);
         }
+        else {
+            this.show_state = true;
+        }
+    };
+    heart_page.prototype.press_coin_size_up2 = function (event) {
+        navigator.vibrate(50);
+        this.show_state = true;
     };
     heart_page.prototype.NFCrun = function () {
         var _this = this;
@@ -1036,6 +1040,12 @@ var heart_page = (function () {
         __metadata('design:paramtypes', [Object]), 
         __metadata('design:returntype', void 0)
     ], heart_page.prototype, "press_coin_size_up", null);
+    __decorate([
+        core_1.HostListener('swipe', ['$event']), 
+        __metadata('design:type', Function), 
+        __metadata('design:paramtypes', [Object]), 
+        __metadata('design:returntype', void 0)
+    ], heart_page.prototype, "press_coin_size_up2", null);
     __decorate([
         core_1.Output(), 
         __metadata('design:type', Function), 

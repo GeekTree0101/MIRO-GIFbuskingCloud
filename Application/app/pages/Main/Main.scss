@@ -155,6 +155,20 @@
             font-weight: 700;
         }
     }
+    .selection {
+        position: fixed;
+        animation-name: show-up;
+        animation-duration: 1s;
+        animation-direction: forward;
+        animation-iteration-count: 1;
+        font-size: 4vmax;
+        font-weight: 700;
+        color: #22aa22;
+        max-width: 100%;
+        min-width: 100%;
+        top: 72vmax;
+        left: 0px;
+    }
 }
 
 .user {

@@ -20,6 +20,7 @@ export class heart_page{
     private custom_coin = 888;           //User Want to send money
     private user_coin = JSON.parse(localStorage.getItem("userdata")).Coin;           //user money
 
+    private show_state = true;
     private donation_method = [
         {
             image : "image/ionic.png",
@@ -68,6 +69,7 @@ export class heart_page{
             this.custom_coin++;
         }
         else{
+            this.show_state = false;
             this.custom_coin = index;
         }
     }
@@ -78,7 +80,15 @@ export class heart_page{
 
             this.coin_size_up(true,0);
         }
+        else{
+            this.show_state = true;
+        }
     }
+
+    @HostListener('swipe',['$event']) press_coin_size_up2(event){
+        navigator.vibrate(50);
+        this.show_state = true;
+    }    
 
     @Output() NFCrun(){
          

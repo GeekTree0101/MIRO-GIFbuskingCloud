@@ -8843,6 +8843,23 @@ body {
     color: #888;
     font-size: 6vmax;
     font-weight: 700; }
+  .heart .selection {
+    position: fixed;
+    -webkit-animation-name: show-up;
+    animation-name: show-up;
+    -webkit-animation-duration: 1s;
+    animation-duration: 1s;
+    -webkit-animation-direction: forward;
+    animation-direction: forward;
+    -webkit-animation-iteration-count: 1;
+    animation-iteration-count: 1;
+    font-size: 4vmax;
+    font-weight: 700;
+    color: #22aa22;
+    max-width: 100%;
+    min-width: 100%;
+    top: 72vmax;
+    left: 0px; }
 
 .user {
   -webkit-animation-duration: 1s;

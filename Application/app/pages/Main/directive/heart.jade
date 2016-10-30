@@ -20,4 +20,6 @@ ion-content(class="heart")
             h2 {{donation_method[3].name}}
         ion-slide
             img((click)="coin_size_up(true,0)"  class="resize_coin"  src="{{donation_method[4].image}}")
-            h2 {{custom_coin}} {{donation_method[4].name}}                                                
+            h2 {{custom_coin}} {{donation_method[4].name}}    
+    center                     
+        ion-icon([hidden]="show_state" class="selection" name = "md-checkmark") <br/>체크되었습니다.                                          

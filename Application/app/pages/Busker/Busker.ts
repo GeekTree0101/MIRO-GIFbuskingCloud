@@ -30,8 +30,9 @@ export class BuskerPage{
     }
 
     ngAfterContentInit(){
-
-        this.bluetooth_state_check();
+        setTimeout(()=>{
+            this.bluetooth_state_check();
+        },2000);
      }
 
     bluetooth_state_check(){
@@ -40,7 +41,7 @@ export class BuskerPage{
 
         let bluetooth = (<any>window).bluetoothSerial;
         bluetooth.isConnected(
-            (success)=>{ this.feel_the_toast()},
+            (success)=>{ this.feel_the_toast("이미 사물과 연결이 되어 있습니다.")},
             (err)=>{
                 bluetooth.isEnabled(
                     (success) => {
@@ -85,7 +86,7 @@ export class BuskerPage{
                         mac_address,                  //bluetooth mac address
                         () => {
                             this.write("*");          //send device connection
-                            this.feel_the_toast();
+                            this.feel_the_toast("사물과 연결이 되었습니다.");
                             this.state_flag = true;
                         },                    
                         () => {
@@ -154,8 +155,8 @@ export class BuskerPage{
         this.write("*"); //disconnect
         (<any>window).bluetoothSerial.disconnect(
             () => {
-                this.informationAlert("cut");
                 this.state_flag = false;
+                this.ctrl.dismiss();
             },
             () => {}
         )
@@ -176,12 +177,6 @@ export class BuskerPage{
             message :"설정으로가서 페이링을 해주세요.",
             buttons :["OK"]
         })
-
-        let cut = Alert.create({
-            title : "연결이 헤제되었습니다.",
-            message :"디바이스와 사물간의 연결이 정상적으로 헤제 되었습니다.",
-            buttons :["OK"]
-        })
         
         navigator.vibrate(200);
         if(target == "fail"){        
@@ -190,17 +185,15 @@ export class BuskerPage{
         else if(target == "pair"){           
             this.nav.present(pair);
         }
-        else if(target == "cut"){
-            this.nav.present(cut);
-        }
+    
         
     }
 
 
-    feel_the_toast(){
+    feel_the_toast(message_value : string){
 
         let obj = Toast.create({
-            message : "사물과 연결이 되었습니다.",
+            message : message_value,
             duration : 3000,
             position : 'bottom',
             showCloseButton : true,
