@@ -13,12 +13,12 @@ export class user_page{
     }
 
     @Input() close(){
-
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     }
 
     @Output() logout(){
-
+        navigator.vibrate(200);
         console.log("[-] User Logout");
     }
 }

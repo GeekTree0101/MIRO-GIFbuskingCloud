@@ -24,7 +24,7 @@ export class bitcoin_page{
     }
 
     @Input() close(){
-
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     }
 

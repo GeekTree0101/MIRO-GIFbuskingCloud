@@ -56,6 +56,13 @@ module.exports = [
         "file": "plugins/phonegap-nfc/www/phonegap-nfc.js",
         "id": "phonegap-nfc.NFC",
         "runs": true
+    },
+    {
+        "file": "plugins/cordova-plugin-bluetooth-serial/www/bluetoothSerial.js",
+        "id": "cordova-plugin-bluetooth-serial.bluetoothSerial",
+        "clobbers": [
+            "window.bluetoothSerial"
+        ]
     }
 ];
 module.exports.metadata = 
@@ -70,7 +77,8 @@ module.exports.metadata =
     "cordova-plugin-inappbrowser": "1.4.0",
     "cordova-plugin-vibration": "2.1.1",
     "cordova-plugin-SDKvsJDK": "0.0.2",
-    "phonegap-nfc": "0.6.6"
+    "phonegap-nfc": "0.6.6",
+    "cordova-plugin-bluetooth-serial": "0.4.6"
 };
 // BOTTOM OF METADATA
 });

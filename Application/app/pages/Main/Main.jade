@@ -1,15 +1,15 @@
 ion-content(class="Main")
 
-    ion-list([hidden]="menu_hide_flag" class="Coin_side_menu")
+    ion-list(class="Coin_side_menu")
         button((click)="menu_controller(view_list.A)" style="background-color : #aaa")
             ion-icon(name="md-person")
         button((click)="menu_controller(view_list.B)" style="background-color : #00AD7C")
             ion-icon(name="logo-bitcoin")    
-        button((click)="menu_controller(view_list.C)" style="background-color : #FF88FC")
+        button((click)="menu_controller(view_list.C.name)" style="background-color : #FF88FC")
             ion-icon(name="heart")   
-        button((click)="menu_controller(view_list.D)" style="background-color : #FDA856")
-            ion-icon(name="md-star")   
+        button((click)="menu_controller(view_list.D.name)" style="background-color : #FDA856")
+            ion-icon(name="{{view_list.D.icon}}")   
     div((click)="mode_change()"  class="Coin_button")
     div((press)="open_menu()" class="Coin_howl")
-    h3(class="Coin_text") Touch
+    h3(class="Coin_text") {{toggle_state.name}}
     footer Copyright(C) 2016 MIRO

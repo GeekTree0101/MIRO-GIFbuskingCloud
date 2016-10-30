@@ -9446,15 +9446,16 @@ body {
     width: 20vmax;
     height: 20vmax; }
   .Main .Coin_side_menu {
+    opacity: 0;
     position: fixed;
+    margin-left: 100%;
     width: 100%;
     margin-top: 70vmax; }
     .Main .Coin_side_menu button {
       width: 8vmax;
       height: 8vmax;
       margin: auto 5%;
-      border-radius: 100%;
-      opacity: 0.8; }
+      border-radius: 100%; }
       .Main .Coin_side_menu button ion-icon {
         color: #fff;
         font-size: 5vmax; }
@@ -9517,12 +9518,12 @@ body {
   -webkit-animation-name: show-up;
   animation-name: show-up;
   opacity: 1;
-  background-color: #FF88FC; }
+  background-color: #FCE7EB; }
   .heart ion-icon {
     position: fixed;
     left: 80%;
     top: 5%;
-    color: #fff;
+    color: #FF88FC;
     font-size: 8vmax;
     -webkit-animation-name: close_motion;
     animation-name: close_motion;
@@ -9530,6 +9531,42 @@ body {
     animation-iteration-count: infinite;
     -webkit-animation-duration: 2s;
     animation-duration: 2s; }
+  .heart .Count {
+    position: fixed;
+    margin: 5% 5%; }
+    .heart .Count h1 {
+      font-weight: 800;
+      color: #53DBD5;
+      font-size: 5vmax;
+      margin-top: -3%;
+      -webkit-animation-name: close_motion;
+      animation-name: close_motion;
+      -webkit-animation-iteration-count: 1;
+      animation-iteration-count: 1;
+      -webkit-animation-duration: 2s;
+      animation-duration: 2s; }
+    .heart .Count h2 {
+      font-weight: 600;
+      color: #888;
+      font-size: 3vmax; }
+  .heart ion-slides {
+    -webkit-animation-fill-mode: forwards;
+    animation-fill-mode: forwards;
+    -webkit-animation-name: show-up-opacity;
+    animation-name: show-up-opacity;
+    -webkit-animation-iteration-count: 1;
+    animation-iteration-count: 1;
+    -webkit-animation-duration: 1s;
+    animation-duration: 1s;
+    -webkit-animation-delay: 1s;
+    animation-delay: 1s;
+    -webkit-animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    opacity: 0; }
+  .heart ion-slide h2 {
+    color: #888;
+    font-size: 6vmax;
+    font-weight: 700; }
 
 .user {
   -webkit-animation-duration: 1s;
@@ -9577,8 +9614,8 @@ body {
     background-color: #a83322;
     font-size: 3vmax; }
   .user .button_class:active {
-    background-color: #ff0000;
-    opacity: 0.5; }
+    background-color: #d83322;
+    opacity: 0.2; }
 
 @-webkit-keyframes show-up {
   0% {
@@ -9614,6 +9651,30 @@ body {
     -webkit-transform: scale(1);
     transform: scale(1); } }
 
+@-webkit-keyframes show-up-opacity {
+  0% {
+    margin-top: 300%;
+    opacity: 0; }
+  25% {
+    margin-top: 30%; }
+  75% {
+    margin-top: 60%; }
+  100% {
+    margin-top: 0%;
+    opacity: 1; } }
+
+@keyframes show-up-opacity {
+  0% {
+    margin-top: 300%;
+    opacity: 0; }
+  25% {
+    margin-top: 30%; }
+  75% {
+    margin-top: 60%; }
+  100% {
+    margin-top: 0%;
+    opacity: 1; } }
+
 .toast-container {
   background-color: #00AD7C; }
   .toast-container div {
@@ -9644,6 +9705,79 @@ body {
     animation-iteration-count: infinite;
     -webkit-animation-duration: 2s;
     animation-duration: 2s; }
+  .Busker .connection {
+    margin: 65% auto; }
+    .Busker .connection h1 {
+      text-align: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 7vmax; }
+    .Busker .connection h2 {
+      text-align: center;
+      color: #888;
+      font-weight: 700;
+      font-size: 3vmax; }
+  .Busker .panel .Count {
+    position: fixed;
+    text-align: center;
+    margin: 40% 30%; }
+    .Busker .panel .Count h1 {
+      font-weight: 800;
+      color: #53DBD5;
+      font-size: 7vmax;
+      margin-top: 2%;
+      -webkit-animation-name: close_motion;
+      animation-name: close_motion;
+      -webkit-animation-iteration-count: infinite;
+      animation-iteration-count: infinite;
+      -webkit-animation-duration: 2s;
+      animation-duration: 2s; }
+    .Busker .panel .Count h2 {
+      margin-top: 30%;
+      font-weight: 700;
+      color: #fff;
+      font-size: 3.5vmax; }
+
+.BuskerHeart {
+  -webkit-animation-duration: 1s;
+  animation-duration: 1s;
+  -webkit-animation-iteration-count: 1;
+  animation-iteration-count: 1;
+  -webkit-animation-name: show-up;
+  animation-name: show-up;
+  opacity: 1;
+  background-color: #FCE7EB; }
+  .BuskerHeart ion-icon {
+    position: fixed;
+    left: 80%;
+    top: 5%;
+    color: #FF88FC;
+    font-size: 8vmax;
+    -webkit-animation-name: close_motion;
+    animation-name: close_motion;
+    -webkit-animation-iteration-count: infinite;
+    animation-iteration-count: infinite;
+    -webkit-animation-duration: 2s;
+    animation-duration: 2s; }
+  .BuskerHeart .Count {
+    position: fixed;
+    margin: 40% 30%; }
+    .BuskerHeart .Count h1 {
+      font-weight: 800;
+      color: #53DBD5;
+      font-size: 7vmax;
+      margin-top: -3%;
+      -webkit-animation-name: close_motion;
+      animation-name: close_motion;
+      -webkit-animation-iteration-count: 1;
+      animation-iteration-count: 1;
+      -webkit-animation-duration: 2s;
+      animation-duration: 2s; }
+    .BuskerHeart .Count h2 {
+      margin-top: 20%;
+      font-weight: 600;
+      color: #888;
+      font-size: 4vmax; }
 
 @keyframes show-up {
   0% {
@@ -9670,19 +9804,48 @@ body {
   -webkit-animation-name: show-up;
   animation-name: show-up;
   opacity: 1;
-  background-color: #FDA856; }
+  background-color: #fff; }
   .BuskerList ion-icon {
     position: fixed;
     left: 80%;
     top: 5%;
-    color: #fff;
+    color: #FDA856;
     font-size: 8vmax;
+    z-index: 99;
     -webkit-animation-name: close_motion;
     animation-name: close_motion;
     -webkit-animation-iteration-count: infinite;
     animation-iteration-count: infinite;
     -webkit-animation-duration: 2s;
     animation-duration: 2s; }
+  .BuskerList .title {
+    position: fixed;
+    color: #888;
+    font-size: 6vmax;
+    margin-top: 8%;
+    opacity: 0.4;
+    font-weight: 900; }
+  .BuskerList .busker_list_offset {
+    margin-top: 20vmax; }
+    .BuskerList .busker_list_offset .BuskerPanel h2 {
+      color: #fff;
+      font-weight: 600;
+      font-size: 3vmax;
+      margin-bottom: 5%; }
+    .BuskerList .busker_list_offset .BuskerPanel p {
+      color: #eee;
+      font-weight: 600; }
+    .BuskerList .busker_list_offset .BuskerPanel ion-item {
+      background-color: #00AD7C;
+      border-width: 0px;
+      border-radius: 10%; }
+    .BuskerList .busker_list_offset .BuskerPanel ion-icon {
+      position: static;
+      -webkit-animation-name: null;
+      animation-name: null;
+      font-weight: 800;
+      font-size: 2.4vmax;
+      color: #ccccff; }
 
 @keyframes show-up {
   0% {

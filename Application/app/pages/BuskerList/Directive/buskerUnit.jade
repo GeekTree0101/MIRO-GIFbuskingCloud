@@ -1,0 +1,8 @@
+ion-list(*ngFor ="let index of data")
+    ion-item(*ngIf = "index.state")
+        ion-avatar(item-left)
+            img(src="{{index.image}}")
+        h2 {{index.name}}
+        p {{index.infomation}}
+        p
+            ion-icon(name="md-pin" item-left) 장소 : {{index.location}}    

@@ -5,17 +5,24 @@ import {Input, Output} from '@angular/core';
 import {bitcoin_page} from './service/bitcoin';
 import {heart_page} from './service/heart';
 import {user_page} from './service/user';
-import {BuskerPage} from './../Busker/Busker';
+import {BuskerPage, BuskerHeartPage} from './../Busker/Busker';
 import {BuskerListPage} from './../BuskerList/BuskerList';
+
 
 @Component({
   templateUrl: 'build/pages/Main/Main.html',
-  directives : [bitcoin_page, heart_page, user_page, BuskerPage, BuskerListPage]
+  directives : [bitcoin_page, heart_page, user_page, BuskerPage, BuskerListPage, BuskerHeartPage]
 })
 export class MainPage{
 
     private animation_object_queue = [];                    //animation object queue
 
+    private toggle_state = {
+      name : "Audience",
+      color_before : "#539DDB",
+      color_after : "#F35B25"
+    }
+    
     private dynamic = {
 
       Coin_button : {
@@ -58,8 +65,8 @@ export class MainPage{
       Coin_touch_motion : {
         "motion" :
         [
-          {transform : 'rotateY(0deg)'},
-          {transform : 'rotateY(180deg)'}
+          {transform : 'rotateY(0deg)', backgroundColor : "#539DDB"},
+          {transform : 'rotateY(180deg)', backgroundColor : "#F35B25"}
         ],
         "option" :
         {
@@ -71,16 +78,32 @@ export class MainPage{
           fill : 'forwards'
         }
       },
-
+      
+      Coin_touch_motion2 : {
+        "motion" :
+        [
+          {transform : 'rotateY(0deg)', backgroundColor : "#F35B25"},
+          {transform : 'rotateY(180deg)', backgroundColor : "#539DDB"}
+        ],
+        "option" :
+        {
+          duration : 800,
+          easing : 'linear',
+          delay : 20,
+          iterations : 1,
+          direction : 'normal',
+          fill : 'forwards'
+        }
+      },
       Coin_side_menu : {
         "motion" :
         [
-          {marginLeft : "200%"},
-          {marginLeft : "0%"}
+          {marginLeft : "100%", opacity : 0},
+          {marginLeft : "0%", opacity : 0.8}
         ],
         "option":
         {
-          duration : 2000,
+          duration : 800,
           easing : 'cubic-bezier(0,0.5,0.3,1)',
           delay : 20,
           iterations : 1,
@@ -97,8 +120,14 @@ export class MainPage{
 
       A : "user_page",
       B : "bitcoin_page",
-      C : "heart_page",
-      D : "BuskerListPage"      // If state is Busking mode -> BuskerPage
+      C : {
+        name : "heart_page" // BuskerHeartPage
+      },
+      D : 
+      {
+        name : "BuskerListPage",    //Busker
+        icon : "md-star"        //md-musical-notes
+      }
     }
 
 
@@ -117,15 +146,48 @@ export class MainPage{
     }
 
     @Output() mode_change(){
+      
+      navigator.vibrate(200);
+      if(!this.menu_hide_flag){
+          console.log("Yes",this.menu_hide_flag);
+          this.open_menu();
+      }
+      else{
+          console.log("No", this.menu_hide_flag);
+      }
 
-      let click = this.dynamic["Coin_touch_motion"];
+      let click : any;
       let button_effect = this.dynamic["Coin_button"];
+      
+
+      if(this.toggle_state.name == "Audience"){
+        
+        click = this.dynamic["Coin_touch_motion"];
+        setTimeout(() => {
+          this.view_list.C.name = "BuskerHeartPage";
+          this.view_list.D.name = "BuskerPage";
+          this.view_list.D.icon = "md-musical-notes";
+          this.toggle_state.name = "Busking";
+        },800);
+      }
+      else{
+
+        click = this.dynamic["Coin_touch_motion2"];
+        setTimeout(()=>{
+          this.view_list.C.name = "heart_page";
+          this.view_list.D.name = "BuskerListPage";
+          this.view_list.D.icon = "md-star";          
+          this.toggle_state.name = "Audience";
+        },800);        
+      }
+
 
       let target_dom = this.animation_object_queue[0];               //button DOM
-      console.log("target_dom",target_dom);
       target_dom.DOM.animate(click.motion, click.option);
       target_dom.Ctrl.play();
-      
+
+
+
       setTimeout(() => {
 
         target_dom.DOM.animate(button_effect.motion, button_effect.option);
@@ -136,24 +198,18 @@ export class MainPage{
     }
 
     @HostListener('press',['$event']) open_menu(){
-
+      
+      navigator.vibrate(200);
       let target_dom = this.animation_object_queue[2];
       
       if(this.menu_hide_flag){
         this.dynamic.Coin_side_menu.option.direction = 'normal';
+        this.menu_hide_flag = false;
       }
       else{
         this.dynamic.Coin_side_menu.option.direction = 'reverse';
+        this.menu_hide_flag = true;
       }
-      
-      setTimeout(() => { 
-        if(this.menu_hide_flag){
-          this.menu_hide_flag = false;
-        }
-        else{
-          setTimeout(() => {this.menu_hide_flag = true;}, 2000);
-        }
-      }, 200);
 
       let option_output = this.dynamic["Coin_side_menu"];
       target_dom.DOM.animate(option_output.motion, option_output.option);      
@@ -176,7 +232,6 @@ export class MainPage{
 
         let dom_elements = (<any>window).document.querySelectorAll(element_class_name);
         let animation_object = this.dynamic[new_object_name];
-        console.log("dom",dom_elements);
         
         let ctrl = dom_elements[index].animate(animation_object.motion, animation_object.option);
 
@@ -216,9 +271,11 @@ export class MainPage{
         break;
         case "BuskerListPage": target = Modal.create(BuskerListPage);
         break;
+        case "BuskerHeartPage" : target = Modal.create(BuskerHeartPage);
+        break;
 
       }
-
+      navigator.vibrate(200);
       this.nav.present(target);
 
     }
@@ -234,7 +291,7 @@ export class MainPage{
           closeButtonText : "OK"
       });
 
-      
+      navigator.vibrate(200);      
       this.nav.present(make);
     }
 

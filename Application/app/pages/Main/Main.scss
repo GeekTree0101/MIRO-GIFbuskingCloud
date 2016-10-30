@@ -34,7 +34,9 @@
         height: 20vmax;
     }
     .Coin_side_menu {
+        opacity: 0;
         position: fixed;
+        margin-left: 100%;
         width: 100%;
         margin-top: 70vmax;
         button {
@@ -42,7 +44,6 @@
             height: 8vmax;
             margin: auto 5%;
             border-radius: 100%;
-            opacity: 0.8;
             ion-icon {
                 color: #fff;
                 font-size: 5vmax;
@@ -104,16 +105,50 @@
     animation-iteration-count: 1;
     animation-name: show-up;
     opacity: 1;
-    background-color: #FF88FC;
+    background-color: #FCE7EB;
     ion-icon {
         position: fixed;
         left: 80%;
         top: 5%;
-        color: #fff;
+        color: #FF88FC;
         font-size: 8vmax;
         animation-name: close_motion;
         animation-iteration-count: infinite;
         animation-duration: 2s;
+    }
+    .Count {
+        position: fixed;
+        margin: 5% 5%;
+        h1 {
+            font-weight: 800;
+            color: #53DBD5;
+            font-size: 5vmax;
+            margin-top: -3%;
+            animation-name: close_motion;
+            animation-iteration-count: 1;
+            animation-duration: 2s;
+        }
+        h2 {
+            font-weight: 600;
+            color: #888;
+            font-size: 3vmax;
+        }
+    }
+    ion-slides {
+        animation-fill-mode: forwards;
+        animation-name: show-up-opacity;
+        animation-iteration-count: 1;
+        animation-duration: 1s;
+        animation-delay: 1s;
+        animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+        opacity: 0;
+    }
+    ion-slide {
+        h2 {
+            color: #888;
+            font-size: 6vmax;
+            font-weight: 700;
+        }
     }
 }
 
@@ -161,8 +196,8 @@
         font-size: 3vmax;
     }
     .button_class:active {
-        background-color: #ff0000;
-        opacity: 0.5;
+        background-color: #d83322;
+        opacity: 0.2;
     }
 }
 
@@ -184,6 +219,23 @@
     }
     100% {
         transform: scale(1);
+    }
+}
+
+@keyframes show-up-opacity {
+    0% {
+        margin-top: 300%;
+        opacity: 0;
+    }
+    25% {
+        margin-top: 30%;
+    }
+    75% {
+        margin-top: 60%;
+    }
+    100% {
+        margin-top: 0%;
+        opacity: 1;
     }
 }
 

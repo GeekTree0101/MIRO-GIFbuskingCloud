@@ -36,6 +36,9 @@
         },
         "phonegap-nfc": {
             "PACKAGE_NAME": "com.miro.InteractionLab"
+        },
+        "cordova-plugin-bluetooth-serial": {
+            "PACKAGE_NAME": "com.miro.BuskingCloud"
         }
     },
     "dependent_plugins": {}

@@ -14,6 +14,80 @@
         animation-iteration-count: infinite;
         animation-duration: 2s;
     }
+    .connection {
+        margin: 65% auto;
+        h1 {
+            text-align: center;
+            color: #fff;
+            font-weight: 700;
+            font-size: 7vmax;
+        }
+        h2 {
+            text-align: center;
+            color: #888;
+            font-weight: 700;
+            font-size: 3vmax;
+        }
+    }
+    .panel {
+        .Count {
+            position: fixed;
+            text-align: center;
+            margin: 40% 30%;
+            h1 {
+                font-weight: 800;
+                color: #53DBD5;
+                font-size: 7vmax;
+                margin-top: 2%;
+                animation-name: close_motion;
+                animation-iteration-count: infinite;
+                animation-duration: 2s;
+            }
+            h2 {
+                margin-top: 30%;
+                font-weight: 700;
+                color: #fff;
+                font-size: 3.5vmax;
+            }
+        }
+    }
+}
+
+.BuskerHeart {
+    animation-duration: 1s;
+    animation-iteration-count: 1;
+    animation-name: show-up;
+    opacity: 1;
+    background-color: #FCE7EB;
+    ion-icon {
+        position: fixed;
+        left: 80%;
+        top: 5%;
+        color: #FF88FC;
+        font-size: 8vmax;
+        animation-name: close_motion;
+        animation-iteration-count: infinite;
+        animation-duration: 2s;
+    }
+    .Count {
+        position: fixed;
+        margin: 40% 30%;
+        h1 {
+            font-weight: 800;
+            color: #53DBD5;
+            font-size: 7vmax;
+            margin-top: -3%;
+            animation-name: close_motion;
+            animation-iteration-count: 1;
+            animation-duration: 2s;
+        }
+        h2 {
+            margin-top: 20%;
+            font-weight: 600;
+            color: #888;
+            font-size: 4vmax;
+        }
+    }
 }
 
 @keyframes show-up {

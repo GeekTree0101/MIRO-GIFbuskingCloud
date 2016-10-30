@@ -3,16 +3,52 @@
     animation-iteration-count: 1;
     animation-name: show-up;
     opacity: 1;
-    background-color: #FDA856;
+    background-color: #fff;
     ion-icon {
         position: fixed;
         left: 80%;
         top: 5%;
-        color: #fff;
+        color: #FDA856;
         font-size: 8vmax;
+        z-index: 99;
         animation-name: close_motion;
         animation-iteration-count: infinite;
         animation-duration: 2s;
+    }
+    .title {
+        position: fixed;
+        color: #888;
+        font-size: 6vmax;
+        margin-top: 8%;
+        opacity: 0.4;
+        font-weight: 900;
+    }
+    .busker_list_offset {
+        margin-top: 20vmax;
+        .BuskerPanel {
+            h2 {
+                color: #fff;
+                font-weight: 600;
+                font-size: 3vmax;
+                margin-bottom: 5%;
+            }
+            p {
+                color: #eee;
+                font-weight: 600;
+            }
+            ion-item {
+                background-color: #00AD7C;
+                border-width: 0px;
+                border-radius: 10%;
+            }
+            ion-icon {
+                position: static;
+                animation-name: null;
+                font-weight: 800;
+                font-size: 2.4vmax;
+                color: #ccccff;
+            }
+        }
     }
 }
 

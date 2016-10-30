@@ -1,1 +1,1 @@
-<ion-content class="Busker"><ion-icon (click)="close()" name="md-close"></ion-icon></ion-content>
+<ion-content class="Busker"><ion-icon (click)="close()" name="md-close"></ion-icon><div [hidden]="!state_flag" class="connection"><h1>wait</h1><h2>사물과 연결을 시도합니다.</h2></div><div [hidden]="state_flag" class="panel"><center></center><div class="Count"><h2>실시간 호감도</h2><h1 style="color : #F85F73">{{real_time_heart}}</h1><h2>실시간 비트코인</h2><h1>{{real_time_bitcoin}}    </h1></div></div></ion-content>
