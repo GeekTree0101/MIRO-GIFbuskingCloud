@@ -29,19 +29,15 @@
                             "count": 1
                         },
                         {
-                            "xml": "<feature name=\"InAppBrowser\"><param name=\"android-package\" value=\"org.apache.cordova.inappbrowser.InAppBrowser\" /></feature>",
-                            "count": 1
-                        },
-                        {
                             "xml": "<feature name=\"Vibration\"><param name=\"android-package\" value=\"org.apache.cordova.vibration.Vibration\" /></feature>",
                             "count": 1
                         },
                         {
-                            "xml": "<feature name=\"SDKvsJDK\"><param name=\"android-package\" value=\"org.apache.cordova.SDKvsJDK.SDKvsJDK\" /></feature>",
+                            "xml": "<feature name=\"NfcPlugin\"><param name=\"android-package\" value=\"com.chariotsolutions.nfc.plugin.NfcPlugin\" /><param name=\"onload\" value=\"true\" /></feature>",
                             "count": 1
                         },
                         {
-                            "xml": "<feature name=\"NfcPlugin\"><param name=\"android-package\" value=\"com.chariotsolutions.nfc.plugin.NfcPlugin\" /><param name=\"onload\" value=\"true\" /></feature>",
+                            "xml": "<feature name=\"NativeAudio\"><param name=\"android-package\" value=\"com.rjfun.cordova.plugin.nativeaudio.NativeAudio\" /></feature>",
                             "count": 1
                         }
                     ],
@@ -81,7 +77,21 @@
                             "count": 1
                         }
                     ],
-                    "/manifest/application": []
+                    "/manifest/application": [],
+                    "/*": [
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.MODIFY_AUDIO_SETTINGS\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\" />",
+                            "count": 1
+                        },
+                        {
+                            "xml": "<uses-permission android:name=\"android.permission.READ_PHONE_STATE\" />",
+                            "count": 1
+                        }
+                    ]
                 }
             }
         }
@@ -105,19 +115,16 @@
         "ionic-plugin-keyboard": {
             "PACKAGE_NAME": "com.ionicframework.run847874"
         },
-        "cordova-plugin-inappbrowser": {
-            "PACKAGE_NAME": "com.ionicframework.run847874"
-        },
         "cordova-plugin-vibration": {
-            "PACKAGE_NAME": "com.ionicframework.run847874"
-        },
-        "cordova-plugin-SDKvsJDK": {
             "PACKAGE_NAME": "com.ionicframework.run847874"
         },
         "phonegap-nfc": {
             "PACKAGE_NAME": "com.miro.InteractionLab"
         },
         "cordova-plugin-bluetooth-serial": {
+            "PACKAGE_NAME": "com.miro.BuskingCloud"
+        },
+        "cordova-plugin-nativeaudio": {
             "PACKAGE_NAME": "com.miro.BuskingCloud"
         }
     },
@@ -153,26 +160,11 @@
             "runs": true
         },
         {
-            "file": "plugins/cordova-plugin-inappbrowser/www/inappbrowser.js",
-            "id": "cordova-plugin-inappbrowser.inappbrowser",
-            "clobbers": [
-                "cordova.InAppBrowser.open",
-                "window.open"
-            ]
-        },
-        {
             "file": "plugins/cordova-plugin-vibration/www/vibration.js",
             "id": "cordova-plugin-vibration.notification",
             "merges": [
                 "navigator.notification",
                 "navigator"
-            ]
-        },
-        {
-            "file": "plugins/cordova-plugin-SDKvsJDK/www/nativeCall.js",
-            "id": "cordova-plugin-SDKvsJDK.nativeCall",
-            "clobbers": [
-                "nativeCall"
             ]
         },
         {
@@ -186,6 +178,13 @@
             "clobbers": [
                 "window.bluetoothSerial"
             ]
+        },
+        {
+            "file": "plugins/cordova-plugin-nativeaudio/www/nativeaudio.js",
+            "id": "cordova-plugin-nativeaudio.nativeaudio",
+            "clobbers": [
+                "window.plugins.NativeAudio"
+            ]
         }
     ],
     "plugin_metadata": {
@@ -195,10 +194,9 @@
         "cordova-plugin-statusbar": "2.1.3",
         "cordova-plugin-whitelist": "1.2.2",
         "ionic-plugin-keyboard": "2.2.1",
-        "cordova-plugin-inappbrowser": "1.4.0",
         "cordova-plugin-vibration": "2.1.1",
-        "cordova-plugin-SDKvsJDK": "0.0.2",
         "phonegap-nfc": "0.6.6",
-        "cordova-plugin-bluetooth-serial": "0.4.6"
+        "cordova-plugin-bluetooth-serial": "0.4.6",
+        "cordova-plugin-nativeaudio": "3.0.7"
     }
 }

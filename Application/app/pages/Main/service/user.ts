@@ -6,7 +6,7 @@ import {Input, Output, Component} from '@angular/core';
 })
 export class user_page{
 
-    private user_name = "GeekTree0101"
+    private user_name = JSON.parse(localStorage.getItem("userdata")).ID
 
     constructor(private ctrl :ViewController){
         

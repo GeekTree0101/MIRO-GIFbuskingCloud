@@ -17,6 +17,20 @@ export class MyApp {
 
     this.rootPage = this.Auth();
 
+    if(!localStorage.hasOwnProperty("userdata")){
+
+      let data = {
+        ID : "GeekTree",
+        Coin : 15700,
+        Heart : 350,
+        busker_coin : 223345,
+        busker_heart : 12405
+      }
+
+      localStorage.setItem("userdata",JSON.stringify(data));
+    }
+
+
     platform.ready().then(() => {
 
       StatusBar.styleDefault();

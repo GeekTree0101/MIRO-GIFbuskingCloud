@@ -19,6 +19,16 @@ var MyApp = (function () {
     function MyApp(platform) {
         this.platform = platform;
         this.rootPage = this.Auth();
+        if (!localStorage.hasOwnProperty("userdata")) {
+            var data = {
+                ID: "GeekTree",
+                Coin: 15700,
+                Heart: 350,
+                busker_coin: 223345,
+                busker_heart: 12405
+            };
+            localStorage.setItem("userdata", JSON.stringify(data));
+        }
         platform.ready().then(function () {
             ionic_native_1.StatusBar.styleDefault();
         });
@@ -233,8 +243,8 @@ var BuskerHeartPage = (function () {
     function BuskerHeartPage(ctrl) {
         var _this = this;
         this.ctrl = ctrl;
-        this.Like_count = 122;
-        this.Coin_count = 130300;
+        this.Like_count = JSON.parse(localStorage.getItem("userdata")).busker_heart;
+        this.Coin_count = JSON.parse(localStorage.getItem("userdata")).busker_coin;
         var max = this.Like_count;
         this.Like_count = this.Like_count - 100;
         this.Coin_count = this.Coin_count - 100;
@@ -783,13 +793,13 @@ var bitcoin_page = (function () {
         var _this = this;
         this.ctrl = ctrl;
         this.Bit_Coin = 0;
-        this.Accept_Coin = 13700;
+        this.Accept_Coin = JSON.parse(localStorage.getItem("userdata")).Coin;
         this.Bit_Coin = this.Accept_Coin - 100;
         var sizeUp = setInterval(function () {
+            _this.Bit_Coin++;
             if (_this.Bit_Coin == _this.Accept_Coin) {
                 clearInterval(sizeUp);
             }
-            _this.Bit_Coin++;
         }, 10);
     }
     bitcoin_page.prototype.close = function () {
@@ -847,7 +857,7 @@ var heart_page = (function () {
             data: null //Server Infomation
         };
         this.custom_coin = 888; //User Want to send money
-        this.user_coin = 13701; //user money
+        this.user_coin = JSON.parse(localStorage.getItem("userdata")).Coin; //user money
         this.donation_method = [
             {
                 image: "image/ionic.png",
@@ -874,7 +884,7 @@ var heart_page = (function () {
     heart_page.prototype.ngAfterContentInit = function () {
         var _this = this;
         this.NFC_ID = "Please pus [PUSH] button!";
-        setTimeout(function () { _this.NFCrun(); }, 2000);
+        setTimeout(function () { _this.NFCrun(); }, 3000);
     };
     heart_page.prototype.close = function () {
         navigator.vibrate(200);
@@ -1065,7 +1075,7 @@ var core_1 = require('@angular/core');
 var user_page = (function () {
     function user_page(ctrl) {
         this.ctrl = ctrl;
-        this.user_name = "GeekTree0101";
+        this.user_name = JSON.parse(localStorage.getItem("userdata")).ID;
     }
     user_page.prototype.close = function () {
         navigator.vibrate(200);

@@ -11,14 +11,14 @@ import {HttpProtocalService} from '../../../service/HttpProtocol';
 export class heart_page{
 
     private NFC_ID : any;
-
+    
     private GET_DATA = {
         flag : false,                    //Bit coin I/O controll
         data : null                      //Server Infomation
     }
 
     private custom_coin = 888;           //User Want to send money
-    private user_coin = 13701;           //user money
+    private user_coin = JSON.parse(localStorage.getItem("userdata")).Coin;           //user money
 
     private donation_method = [
         {
@@ -46,13 +46,14 @@ export class heart_page{
     constructor(private ctrl :ViewController, 
                 private nav : NavController,
                 private http : HttpProtocalService,
-                public event : Events)
+                public event : Events
+                )
     {}
 
     ngAfterContentInit(){
 
          this.NFC_ID = "Please pus [PUSH] button!";       
-         setTimeout(()=>{this.NFCrun();},2000);
+         setTimeout(()=>{this.NFCrun();},3000);
     }
 
     @Input() close(){

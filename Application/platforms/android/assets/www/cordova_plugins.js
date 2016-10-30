@@ -30,26 +30,11 @@ module.exports = [
         "runs": true
     },
     {
-        "file": "plugins/cordova-plugin-inappbrowser/www/inappbrowser.js",
-        "id": "cordova-plugin-inappbrowser.inappbrowser",
-        "clobbers": [
-            "cordova.InAppBrowser.open",
-            "window.open"
-        ]
-    },
-    {
         "file": "plugins/cordova-plugin-vibration/www/vibration.js",
         "id": "cordova-plugin-vibration.notification",
         "merges": [
             "navigator.notification",
             "navigator"
-        ]
-    },
-    {
-        "file": "plugins/cordova-plugin-SDKvsJDK/www/nativeCall.js",
-        "id": "cordova-plugin-SDKvsJDK.nativeCall",
-        "clobbers": [
-            "nativeCall"
         ]
     },
     {
@@ -63,6 +48,13 @@ module.exports = [
         "clobbers": [
             "window.bluetoothSerial"
         ]
+    },
+    {
+        "file": "plugins/cordova-plugin-nativeaudio/www/nativeaudio.js",
+        "id": "cordova-plugin-nativeaudio.nativeaudio",
+        "clobbers": [
+            "window.plugins.NativeAudio"
+        ]
     }
 ];
 module.exports.metadata = 
@@ -74,11 +66,10 @@ module.exports.metadata =
     "cordova-plugin-statusbar": "2.1.3",
     "cordova-plugin-whitelist": "1.2.2",
     "ionic-plugin-keyboard": "2.2.1",
-    "cordova-plugin-inappbrowser": "1.4.0",
     "cordova-plugin-vibration": "2.1.1",
-    "cordova-plugin-SDKvsJDK": "0.0.2",
     "phonegap-nfc": "0.6.6",
-    "cordova-plugin-bluetooth-serial": "0.4.6"
+    "cordova-plugin-bluetooth-serial": "0.4.6",
+    "cordova-plugin-nativeaudio": "3.0.7"
 };
 // BOTTOM OF METADATA
 });

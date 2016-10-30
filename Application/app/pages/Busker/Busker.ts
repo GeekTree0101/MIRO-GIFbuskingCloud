@@ -219,8 +219,8 @@ export class BuskerPage{
 })
 export class BuskerHeartPage{
 
-    private Like_count = 122;
-    private Coin_count = 130300;
+    private Like_count = JSON.parse(localStorage.getItem("userdata")).busker_heart;
+    private Coin_count = JSON.parse(localStorage.getItem("userdata")).busker_coin;
 
     constructor(private ctrl :ViewController){
         

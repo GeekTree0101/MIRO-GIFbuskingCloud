@@ -47,26 +47,10 @@
         "is_top_level": true,
         "variables": {}
     },
-    "cordova-plugin-inappbrowser": {
-        "source": {
-            "type": "registry",
-            "id": "cordova-plugin-inappbrowser"
-        },
-        "is_top_level": true,
-        "variables": {}
-    },
     "cordova-plugin-vibration": {
         "source": {
             "type": "registry",
             "id": "cordova-plugin-vibration"
-        },
-        "is_top_level": true,
-        "variables": {}
-    },
-    "cordova-plugin-SDKvsJDK": {
-        "source": {
-            "type": "local",
-            "path": "../NativeCall"
         },
         "is_top_level": true,
         "variables": {}
@@ -84,6 +68,14 @@
             "type": "git",
             "url": "https://github.com/don/BluetoothSerial.git",
             "subdir": "."
+        },
+        "is_top_level": true,
+        "variables": {}
+    },
+    "cordova-plugin-nativeaudio": {
+        "source": {
+            "type": "registry",
+            "id": "cordova-plugin-nativeaudio"
         },
         "is_top_level": true,
         "variables": {}

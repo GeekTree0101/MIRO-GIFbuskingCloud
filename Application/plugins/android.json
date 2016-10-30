@@ -25,19 +25,16 @@
         "ionic-plugin-keyboard": {
             "PACKAGE_NAME": "com.ionicframework.run847874"
         },
-        "cordova-plugin-inappbrowser": {
-            "PACKAGE_NAME": "com.ionicframework.run847874"
-        },
         "cordova-plugin-vibration": {
-            "PACKAGE_NAME": "com.ionicframework.run847874"
-        },
-        "cordova-plugin-SDKvsJDK": {
             "PACKAGE_NAME": "com.ionicframework.run847874"
         },
         "phonegap-nfc": {
             "PACKAGE_NAME": "com.miro.InteractionLab"
         },
         "cordova-plugin-bluetooth-serial": {
+            "PACKAGE_NAME": "com.miro.BuskingCloud"
+        },
+        "cordova-plugin-nativeaudio": {
             "PACKAGE_NAME": "com.miro.BuskingCloud"
         }
     },

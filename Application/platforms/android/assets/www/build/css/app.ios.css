@@ -8684,7 +8684,13 @@ body {
   background-color: #fff; }
 
 .Main {
-  overflow: hidden; }
+  overflow: hidden;
+  -webkit-animation-name: main-up;
+  animation-name: main-up;
+  -webkit-animation-iteration-count: 1;
+  animation-iteration-count: 1;
+  -webkit-animation-duration: 2s;
+  animation-duration: 2s; }
   .Main footer {
     text-align: center;
     color: #888;
@@ -8709,7 +8715,7 @@ body {
     position: relative;
     margin: -54vmax auto;
     z-index: -2;
-    border: 10px solid #539DDB;
+    border: 10px solid #99FF99;
     border-radius: 100%;
     width: 20vmax;
     height: 20vmax; }
@@ -8896,6 +8902,40 @@ body {
     margin-top: 300%; }
   100% {
     margin-top: 0%; } }
+
+@-webkit-keyframes main-up {
+  0% {
+    -webkit-transform: scale(0);
+    transform: scale(0); }
+  25% {
+    -webkit-transform: scale(1);
+    transform: scale(1); }
+  50% {
+    -webkit-transform: scale(0.6);
+    transform: scale(0.6); }
+  75% {
+    -webkit-transform: scale(1.2);
+    transform: scale(1.2); }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1); } }
+
+@keyframes main-up {
+  0% {
+    -webkit-transform: scale(0);
+    transform: scale(0); }
+  25% {
+    -webkit-transform: scale(1);
+    transform: scale(1); }
+  50% {
+    -webkit-transform: scale(0.6);
+    transform: scale(0.6); }
+  75% {
+    -webkit-transform: scale(1.2);
+    transform: scale(1.2); }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1); } }
 
 @-webkit-keyframes close_motion {
   0% {
@@ -9131,6 +9171,112 @@ body {
   100% {
     -webkit-transform: scale(1);
     transform: scale(1); } }
+
+.Login img {
+  margin-top: 10vmax;
+  -webkit-animation-direction: forward;
+  animation-direction: forward;
+  -webkit-animation-name: img-animation;
+  animation-name: img-animation;
+  -webkit-animation-duration: 5s;
+  animation-duration: 5s;
+  -webkit-animation-iteration-count: infinite;
+  animation-iteration-count: infinite; }
+
+.Login ion-list {
+  margin-top: 6vmax;
+  margin-bottom: 4vmax; }
+  .Login ion-list ion-item {
+    background-color: #F9FCFD; }
+    .Login ion-list ion-item ion-label {
+      color: #888;
+      font-weight: 500;
+      font-size: 2vmax; }
+    .Login ion-list ion-item ion-icon {
+      font-size: 5vmax;
+      margin-right: 0.5vmax; }
+
+.Login ion-list > .item:first-child,
+.Login ion-list > .item-wrapper:first-child .item {
+  border-top: 0px; }
+
+.Login .input-has-focus::after {
+  border-bottom-color: #387ef5;
+  border-bottom-width: 0.5vmax;
+  -webkit-animation-direction: forward;
+  animation-direction: forward;
+  -webkit-animation-name: login-art;
+  animation-name: login-art;
+  -webkit-animation-duration: 1s;
+  animation-duration: 1s;
+  -webkit-animation-iteration-count: 1;
+  animation-iteration-count: 1; }
+
+.Login button {
+  margin-top: 2vmax;
+  width: 80%;
+  height: 6vmax;
+  font-size: 2.3vmax;
+  font-weight: 700; }
+
+.Login .kakao {
+  background-color: #fae100;
+  color: #222; }
+
+.Login .facebook {
+  background-color: #3c5a99; }
+
+@-webkit-keyframes img-animation {
+  0% {
+    -webkit-transform: scale(1);
+    transform: scale(1);
+    opacity: 1; }
+  15% {
+    -webkit-transform: scale(0.7);
+    transform: scale(0.7);
+    opacity: 0.5; }
+  25% {
+    -webkit-transform: scale(1.2);
+    transform: scale(1.2);
+    opacity: 1; }
+  50% {
+    -webkit-transform: scale(1);
+    transform: scale(1); }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1); } }
+
+@keyframes img-animation {
+  0% {
+    -webkit-transform: scale(1);
+    transform: scale(1);
+    opacity: 1; }
+  15% {
+    -webkit-transform: scale(0.7);
+    transform: scale(0.7);
+    opacity: 0.5; }
+  25% {
+    -webkit-transform: scale(1.2);
+    transform: scale(1.2);
+    opacity: 1; }
+  50% {
+    -webkit-transform: scale(1);
+    transform: scale(1); }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1); } }
+
+@-webkit-keyframes login-art {
+  0% {
+    margin-right: 200%; }
+  100% {
+    margin-left: 0%; } }
+
+@keyframes login-art {
+  0% {
+    margin-right: 200%; }
+  100% {
+    margin-left: 0%; } }
 
 ion-content {
   background-color: #F9FCFD; }

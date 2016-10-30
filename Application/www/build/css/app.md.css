@@ -9416,7 +9416,13 @@ body {
   background-color: #fff; }
 
 .Main {
-  overflow: hidden; }
+  overflow: hidden;
+  -webkit-animation-name: main-up;
+  animation-name: main-up;
+  -webkit-animation-iteration-count: 1;
+  animation-iteration-count: 1;
+  -webkit-animation-duration: 2s;
+  animation-duration: 2s; }
   .Main footer {
     text-align: center;
     color: #888;
@@ -9441,20 +9447,22 @@ body {
     position: relative;
     margin: -54vmax auto;
     z-index: -2;
-    border: 10px solid #539DDB;
+    border: 10px solid #99FF99;
     border-radius: 100%;
     width: 20vmax;
     height: 20vmax; }
   .Main .Coin_side_menu {
     opacity: 0;
     position: fixed;
-    margin-left: 100%;
-    width: 100%;
-    margin-top: 70vmax; }
+    max-width: 100%;
+    min-width: 100%;
+    margin-left: auto;
+    margin-top: 70vmax;
+    text-align: center; }
     .Main .Coin_side_menu button {
       width: 8vmax;
       height: 8vmax;
-      margin: auto 5%;
+      margin: 0px 3vmax 0px 3vmax;
       border-radius: 100%; }
       .Main .Coin_side_menu button ion-icon {
         color: #fff;
@@ -9589,22 +9597,16 @@ body {
     animation-iteration-count: infinite;
     -webkit-animation-duration: 2s;
     animation-duration: 2s; }
-  .user .person {
-    position: fixed;
-    top: 20%;
-    left: 18%;
-    font-size: 30vmax;
-    -webkit-animation-name: null;
-    animation-name: null; }
-    .user .person h1 {
-      font-weight: 700;
-      font-size: 5vmax;
-      color: #fff; }
-    .user .person h2 {
-      font-weight: 600;
-      margin-top: 5%;
-      font-size: 4vmax;
-      color: #eee; }
+  .user h1 {
+    margin-top: 60%;
+    font-weight: 700;
+    font-size: 5vmax;
+    color: #fff; }
+  .user h2 {
+    font-weight: 600;
+    margin-top: 5%;
+    font-size: 4vmax;
+    color: #eee; }
   .user .button_class {
     position: fixed;
     top: 78%;
@@ -9628,6 +9630,40 @@ body {
     margin-top: 300%; }
   100% {
     margin-top: 0%; } }
+
+@-webkit-keyframes main-up {
+  0% {
+    -webkit-transform: scale(0);
+    transform: scale(0); }
+  25% {
+    -webkit-transform: scale(1);
+    transform: scale(1); }
+  50% {
+    -webkit-transform: scale(0.6);
+    transform: scale(0.6); }
+  75% {
+    -webkit-transform: scale(1.2);
+    transform: scale(1.2); }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1); } }
+
+@keyframes main-up {
+  0% {
+    -webkit-transform: scale(0);
+    transform: scale(0); }
+  25% {
+    -webkit-transform: scale(1);
+    transform: scale(1); }
+  50% {
+    -webkit-transform: scale(0.6);
+    transform: scale(0.6); }
+  75% {
+    -webkit-transform: scale(1.2);
+    transform: scale(1.2); }
+  100% {
+    -webkit-transform: scale(1);
+    transform: scale(1); } }
 
 @-webkit-keyframes close_motion {
   0% {

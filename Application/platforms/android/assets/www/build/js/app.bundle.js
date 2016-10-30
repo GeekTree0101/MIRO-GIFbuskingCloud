@@ -408,6 +408,10 @@ var LoginPage = (function () {
     LoginPage.prototype.insertPassword = function (event) {
         this.password = event.target.value;
     };
+    LoginPage.prototype.quick_login = function () {
+        localStorage.setItem("Auth", "kakaotalk login");
+        window.location.reload();
+    };
     LoginPage.prototype.Auth_Login = function () {
         var _this = this;
         console.log("[+] user push login");
@@ -474,6 +478,12 @@ var LoginPage = (function () {
         __metadata('design:paramtypes', [Object]), 
         __metadata('design:returntype', void 0)
     ], LoginPage.prototype, "insertPassword", null);
+    __decorate([
+        core_2.Output(), 
+        __metadata('design:type', Function), 
+        __metadata('design:paramtypes', []), 
+        __metadata('design:returntype', void 0)
+    ], LoginPage.prototype, "quick_login", null);
     __decorate([
         core_2.Output(), 
         __metadata('design:type', Function), 
@@ -1064,6 +1074,10 @@ var user_page = (function () {
     user_page.prototype.logout = function () {
         navigator.vibrate(200);
         console.log("[-] User Logout");
+        localStorage.removeItem("Auth");
+        setTimeout(function () {
+            window.location.reload();
+        }, 2000);
     };
     __decorate([
         core_1.Input(), 
