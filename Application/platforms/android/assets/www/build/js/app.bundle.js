@@ -61,11 +61,152 @@ var core_1 = require('@angular/core');
 var ionic_angular_1 = require('ionic-angular');
 var core_2 = require('@angular/core');
 var BuskerPage = (function () {
-    function BuskerPage(ctrl) {
+    function BuskerPage(ctrl, nav) {
         this.ctrl = ctrl;
+        this.nav = nav;
+        this.real_time_heart = 0;
+        this.real_time_bitcoin = 0;
+        this.state_flag = false;
     }
     BuskerPage.prototype.close = function () {
+        this.calculate();
+        navigator.vibrate(200);
         this.ctrl.dismiss();
+    };
+    BuskerPage.prototype.press = function (event) {
+        navigator.vibrate(1000);
+        this.bluetooth_state_check();
+    };
+    BuskerPage.prototype.ngAfterContentInit = function () {
+        this.bluetooth_state_check();
+    };
+    BuskerPage.prototype.bluetooth_state_check = function () {
+        var _this = this;
+        navigator.vibrate(200);
+        var bluetooth = window.bluetoothSerial;
+        bluetooth.isConnected(function (success) { _this.feel_the_toast(); }, function (err) {
+            bluetooth.isEnabled(function (success) {
+                _this.bluetooth_connection();
+            }, function (err) {
+                _this.informationAlert("fail");
+            });
+        });
+    };
+    BuskerPage.prototype.bluetooth_connection = function () {
+        //bluetoothSerial.list(sucess, fail);
+        // [{"class": 276, "address" : "10:BF:,,,", "name" : "itead"}]
+        //bluetoothSerial.connect(macAddress or uuid, success, fail)
+        var _this = this;
+        var bluetooth_list;
+        var mac_address = "";
+        var bluetooth = window.bluetoothSerial;
+        bluetooth.list(function (data) {
+            bluetooth_list = data;
+            for (var i = 0; i < bluetooth_list.length; i++) {
+                if (bluetooth_list[i].name == "itead") {
+                    mac_address = bluetooth_list[i].address;
+                    break;
+                }
+            }
+            if (mac_address.length < 5) {
+                _this.informationAlert("pair");
+            }
+            else {
+                bluetooth.connect(mac_address, //bluetooth mac address
+                function () {
+                    _this.write("*"); //send device connection
+                    _this.feel_the_toast();
+                    _this.state_flag = true;
+                }, function () {
+                    _this.informationAlert("fail");
+                });
+            }
+        }, function (err) { _this.informationAlert("fail"); });
+    };
+    BuskerPage.prototype.read = function () {
+        //bluetoothSerial.read(success, fail) READ DEVICE ID
+        var _this = this;
+        var bluetooth = window.bluetoothSerial;
+        bluetooth.read(function (data) {
+            if (data == "*") {
+                var _loop_1 = function() {
+                    var temp;
+                    bluetooth.read(function (data) {
+                        temp = data;
+                    });
+                    if (temp == "*") {
+                        return "break";
+                    }
+                    else {
+                        _this.NFC_ID = _this.NFC_ID + temp;
+                    }
+                };
+                while (true) {
+                    var state_1 = _loop_1();
+                    if (state_1 === "break") break;
+                }
+            }
+        }, function () { });
+    };
+    // R : red, G : green, B: blue *: connect with device 
+    BuskerPage.prototype.write = function (message) {
+        //bluetoothSerial.write(data, success, fail)
+        var _this = this;
+        var bluetooth = window.bluetoothSerial;
+        bluetooth.write(message, function () { console.log("send", message); }, function () {
+            console.log("failed");
+            _this.informationAlert("fail");
+        });
+    };
+    BuskerPage.prototype.calculate = function () {
+        var _this = this;
+        //before::close
+        console.log("Heart", this.real_time_heart);
+        console.log("Coin", this.real_time_bitcoin);
+        this.write("*"); //disconnect
+        window.bluetoothSerial.disconnect(function () {
+            _this.informationAlert("cut");
+            _this.state_flag = false;
+        }, function () { });
+    };
+    BuskerPage.prototype.informationAlert = function (target) {
+        //TODO : Popup aler
+        var fail = ionic_angular_1.Alert.create({
+            title: '블루투스가 연결되지 않았습니다.',
+            message: '설정으로가서 블루투스를 켜주세요.',
+            buttons: ["OK"]
+        });
+        var pair = ionic_angular_1.Alert.create({
+            title: "페어링이 되어있지않습니다.",
+            message: "설정으로가서 페이링을 해주세요.",
+            buttons: ["OK"]
+        });
+        var cut = ionic_angular_1.Alert.create({
+            title: "연결이 헤제되었습니다.",
+            message: "디바이스와 사물간의 연결이 정상적으로 헤제 되었습니다.",
+            buttons: ["OK"]
+        });
+        navigator.vibrate(200);
+        if (target == "fail") {
+            this.nav.present(fail);
+        }
+        else if (target == "pair") {
+            this.nav.present(pair);
+        }
+        else if (target == "cut") {
+            this.nav.present(cut);
+        }
+    };
+    BuskerPage.prototype.feel_the_toast = function () {
+        var obj = ionic_angular_1.Toast.create({
+            message: "사물과 연결이 되었습니다.",
+            duration: 3000,
+            position: 'bottom',
+            showCloseButton: true,
+            closeButtonText: "OK"
+        });
+        navigator.vibrate(200);
+        this.nav.present(obj);
     };
     __decorate([
         core_2.Input(), 
@@ -73,11 +214,17 @@ var BuskerPage = (function () {
         __metadata('design:paramtypes', []), 
         __metadata('design:returntype', void 0)
     ], BuskerPage.prototype, "close", null);
+    __decorate([
+        core_1.HostListener('press', ['$event']), 
+        __metadata('design:type', Function), 
+        __metadata('design:paramtypes', [Object]), 
+        __metadata('design:returntype', void 0)
+    ], BuskerPage.prototype, "press", null);
     BuskerPage = __decorate([
         core_1.Component({
             templateUrl: 'build/pages/Busker/Busker.html'
         }), 
-        __metadata('design:paramtypes', [ionic_angular_1.ViewController])
+        __metadata('design:paramtypes', [ionic_angular_1.ViewController, ionic_angular_1.NavController])
     ], BuskerPage);
     return BuskerPage;
 }());
@@ -100,6 +247,7 @@ var BuskerHeartPage = (function () {
         }, 10);
     }
     BuskerHeartPage.prototype.close = function () {
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     };
     __decorate([
@@ -138,6 +286,7 @@ var BuskerListPage = (function () {
         this.ctrl = ctrl;
     }
     BuskerListPage.prototype.close = function () {
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     };
     __decorate([
@@ -459,7 +608,7 @@ var MainPage = (function () {
         };
         setInterval(function () {
             _this.Busker_Toast();
-        }, (Math.random() * 20 + 10) * 1000);
+        }, (Math.random() * 100 + 20) * 1000);
     }
     MainPage.prototype.ngAfterContentInit = function () {
         this.UI_component(".Coin_button", "Coin_button", true, 0);
@@ -468,6 +617,7 @@ var MainPage = (function () {
     };
     MainPage.prototype.mode_change = function () {
         var _this = this;
+        navigator.vibrate(200);
         if (!this.menu_hide_flag) {
             console.log("Yes", this.menu_hide_flag);
             this.open_menu();
@@ -504,6 +654,7 @@ var MainPage = (function () {
         }, 800);
     };
     MainPage.prototype.open_menu = function () {
+        navigator.vibrate(200);
         var target_dom = this.animation_object_queue[2];
         if (this.menu_hide_flag) {
             this.dynamic.Coin_side_menu.option.direction = 'normal';
@@ -567,6 +718,7 @@ var MainPage = (function () {
                 target = ionic_angular_1.Modal.create(Busker_1.BuskerHeartPage);
                 break;
         }
+        navigator.vibrate(200);
         this.nav.present(target);
     };
     MainPage.prototype.Busker_Toast = function () {
@@ -577,6 +729,7 @@ var MainPage = (function () {
             showCloseButton: true,
             closeButtonText: "OK"
         });
+        navigator.vibrate(200);
         this.nav.present(make);
     };
     __decorate([
@@ -630,6 +783,7 @@ var bitcoin_page = (function () {
         }, 10);
     }
     bitcoin_page.prototype.close = function () {
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     };
     bitcoin_page.prototype.charge = function () {
@@ -706,13 +860,18 @@ var heart_page = (function () {
                 name: " coin"
             },
         ];
-        this.NFC_ID = "Please pus [PUSH] button!";
     }
+    heart_page.prototype.ngAfterContentInit = function () {
+        var _this = this;
+        this.NFC_ID = "Please pus [PUSH] button!";
+        setTimeout(function () { _this.NFCrun(); }, 2000);
+    };
     heart_page.prototype.close = function () {
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     };
     heart_page.prototype.coin_size_up = function (touch, index) {
-        this.NFCrun();
+        navigator.vibrate(200);
         if (touch) {
             this.custom_coin++;
         }
@@ -721,6 +880,7 @@ var heart_page = (function () {
         }
     };
     heart_page.prototype.press_coin_size_up = function (event) {
+        navigator.vibrate(50);
         if (event.target.className == "resize_coin") {
             this.coin_size_up(true, 0);
         }
@@ -761,10 +921,12 @@ var heart_page = (function () {
             this.http.GET("JSON", "http://192.168.1.13:3000/nfc", token);
             this.event.subscribe("GET", function (data) {
                 console.log("[+] Succes GET data");
+                alert("[DEBUG] Success GET");
                 _this.GET_DATA.data = data;
                 _this.GET_DATA.flag = true; //Show UI
                 _this.Bit_coin_toast(true);
             }, function (err) {
+                alert("[DEBUG] Failed GET");
                 console.log(err);
                 _this.Bit_coin_toast(false);
             });
@@ -833,6 +995,7 @@ var heart_page = (function () {
             showCloseButton: true,
             closeButtonText: "OK"
         });
+        navigator.vibrate(200);
         this.nav.present(make);
     };
     __decorate([
@@ -895,9 +1058,11 @@ var user_page = (function () {
         this.user_name = "GeekTree0101";
     }
     user_page.prototype.close = function () {
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     };
     user_page.prototype.logout = function () {
+        navigator.vibrate(200);
         console.log("[-] User Logout");
     };
     __decorate([

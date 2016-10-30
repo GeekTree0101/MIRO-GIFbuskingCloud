@@ -9459,6 +9459,38 @@ body {
     animation-iteration-count: infinite;
     -webkit-animation-duration: 2s;
     animation-duration: 2s; }
+  .Busker .connection {
+    margin: 65% auto; }
+    .Busker .connection h1 {
+      text-align: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 7vmax; }
+    .Busker .connection h2 {
+      text-align: center;
+      color: #888;
+      font-weight: 700;
+      font-size: 3vmax; }
+  .Busker .panel .Count {
+    position: fixed;
+    text-align: center;
+    margin: 40% 30%; }
+    .Busker .panel .Count h1 {
+      font-weight: 800;
+      color: #53DBD5;
+      font-size: 7vmax;
+      margin-top: 2%;
+      -webkit-animation-name: close_motion;
+      animation-name: close_motion;
+      -webkit-animation-iteration-count: infinite;
+      animation-iteration-count: infinite;
+      -webkit-animation-duration: 2s;
+      animation-duration: 2s; }
+    .Busker .panel .Count h2 {
+      margin-top: 30%;
+      font-weight: 700;
+      color: #fff;
+      font-size: 3.5vmax; }
 
 .BuskerHeart {
   -webkit-animation-duration: 1s;

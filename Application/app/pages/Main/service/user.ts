@@ -20,5 +20,10 @@ export class user_page{
     @Output() logout(){
         navigator.vibrate(200);
         console.log("[-] User Logout");
+        localStorage.removeItem("Auth");
+        
+        setTimeout(()=>{
+            window.location.reload();
+        },2000);
     }
 }

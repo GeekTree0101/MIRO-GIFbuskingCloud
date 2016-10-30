@@ -69,21 +69,23 @@ var BuskerPage = (function () {
         this.state_flag = false;
     }
     BuskerPage.prototype.close = function () {
-        //this.calculate();
+        this.calculate();
         navigator.vibrate(200);
         this.ctrl.dismiss();
     };
+    BuskerPage.prototype.press = function (event) {
+        navigator.vibrate(1000);
+        this.bluetooth_state_check();
+    };
     BuskerPage.prototype.ngAfterContentInit = function () {
-        //this.bluetooth_state_check();
+        this.bluetooth_state_check();
     };
     BuskerPage.prototype.bluetooth_state_check = function () {
         var _this = this;
-        //bluetoothSerial.isEnabled;
-        //bluetoothSerial.isConnected;
         navigator.vibrate(200);
         var bluetooth = window.bluetoothSerial;
         bluetooth.isConnected(function (success) { _this.feel_the_toast(); }, function (err) {
-            bluetooth.isEnable(function (success) {
+            bluetooth.isEnabled(function (success) {
                 _this.bluetooth_connection();
             }, function (err) {
                 _this.informationAlert("fail");
@@ -151,7 +153,7 @@ var BuskerPage = (function () {
         //bluetoothSerial.write(data, success, fail)
         var _this = this;
         var bluetooth = window.bluetoothSerial;
-        bluetooth.wirte(message, function () { console.log("send", message); }, function () {
+        bluetooth.write(message, function () { console.log("send", message); }, function () {
             console.log("failed");
             _this.informationAlert("fail");
         });
@@ -212,6 +214,12 @@ var BuskerPage = (function () {
         __metadata('design:paramtypes', []), 
         __metadata('design:returntype', void 0)
     ], BuskerPage.prototype, "close", null);
+    __decorate([
+        core_1.HostListener('press', ['$event']), 
+        __metadata('design:type', Function), 
+        __metadata('design:paramtypes', [Object]), 
+        __metadata('design:returntype', void 0)
+    ], BuskerPage.prototype, "press", null);
     BuskerPage = __decorate([
         core_1.Component({
             templateUrl: 'build/pages/Busker/Busker.html'
@@ -239,6 +247,7 @@ var BuskerHeartPage = (function () {
         }, 10);
     }
     BuskerHeartPage.prototype.close = function () {
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     };
     __decorate([
@@ -399,6 +408,10 @@ var LoginPage = (function () {
     LoginPage.prototype.insertPassword = function (event) {
         this.password = event.target.value;
     };
+    LoginPage.prototype.quick_login = function () {
+        localStorage.setItem("Auth", "kakaotalk login");
+        window.location.reload();
+    };
     LoginPage.prototype.Auth_Login = function () {
         var _this = this;
         console.log("[+] user push login");
@@ -465,6 +478,12 @@ var LoginPage = (function () {
         __metadata('design:paramtypes', [Object]), 
         __metadata('design:returntype', void 0)
     ], LoginPage.prototype, "insertPassword", null);
+    __decorate([
+        core_2.Output(), 
+        __metadata('design:type', Function), 
+        __metadata('design:paramtypes', []), 
+        __metadata('design:returntype', void 0)
+    ], LoginPage.prototype, "quick_login", null);
     __decorate([
         core_2.Output(), 
         __metadata('design:type', Function), 
@@ -599,7 +618,7 @@ var MainPage = (function () {
         };
         setInterval(function () {
             _this.Busker_Toast();
-        }, (Math.random() * 20 + 10) * 1000);
+        }, (Math.random() * 100 + 20) * 1000);
     }
     MainPage.prototype.ngAfterContentInit = function () {
         this.UI_component(".Coin_button", "Coin_button", true, 0);
@@ -608,6 +627,7 @@ var MainPage = (function () {
     };
     MainPage.prototype.mode_change = function () {
         var _this = this;
+        navigator.vibrate(200);
         if (!this.menu_hide_flag) {
             console.log("Yes", this.menu_hide_flag);
             this.open_menu();
@@ -644,6 +664,7 @@ var MainPage = (function () {
         }, 800);
     };
     MainPage.prototype.open_menu = function () {
+        navigator.vibrate(200);
         var target_dom = this.animation_object_queue[2];
         if (this.menu_hide_flag) {
             this.dynamic.Coin_side_menu.option.direction = 'normal';
@@ -707,6 +728,7 @@ var MainPage = (function () {
                 target = ionic_angular_1.Modal.create(Busker_1.BuskerHeartPage);
                 break;
         }
+        navigator.vibrate(200);
         this.nav.present(target);
     };
     MainPage.prototype.Busker_Toast = function () {
@@ -717,6 +739,7 @@ var MainPage = (function () {
             showCloseButton: true,
             closeButtonText: "OK"
         });
+        navigator.vibrate(200);
         this.nav.present(make);
     };
     __decorate([
@@ -770,6 +793,7 @@ var bitcoin_page = (function () {
         }, 10);
     }
     bitcoin_page.prototype.close = function () {
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     };
     bitcoin_page.prototype.charge = function () {
@@ -846,13 +870,18 @@ var heart_page = (function () {
                 name: " coin"
             },
         ];
-        this.NFC_ID = "Please pus [PUSH] button!";
     }
+    heart_page.prototype.ngAfterContentInit = function () {
+        var _this = this;
+        this.NFC_ID = "Please pus [PUSH] button!";
+        setTimeout(function () { _this.NFCrun(); }, 2000);
+    };
     heart_page.prototype.close = function () {
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     };
     heart_page.prototype.coin_size_up = function (touch, index) {
-        this.NFCrun();
+        navigator.vibrate(200);
         if (touch) {
             this.custom_coin++;
         }
@@ -861,6 +890,7 @@ var heart_page = (function () {
         }
     };
     heart_page.prototype.press_coin_size_up = function (event) {
+        navigator.vibrate(50);
         if (event.target.className == "resize_coin") {
             this.coin_size_up(true, 0);
         }
@@ -901,10 +931,12 @@ var heart_page = (function () {
             this.http.GET("JSON", "http://192.168.1.13:3000/nfc", token);
             this.event.subscribe("GET", function (data) {
                 console.log("[+] Succes GET data");
+                alert("[DEBUG] Success GET");
                 _this.GET_DATA.data = data;
                 _this.GET_DATA.flag = true; //Show UI
                 _this.Bit_coin_toast(true);
             }, function (err) {
+                alert("[DEBUG] Failed GET");
                 console.log(err);
                 _this.Bit_coin_toast(false);
             });
@@ -973,6 +1005,7 @@ var heart_page = (function () {
             showCloseButton: true,
             closeButtonText: "OK"
         });
+        navigator.vibrate(200);
         this.nav.present(make);
     };
     __decorate([
@@ -1035,10 +1068,16 @@ var user_page = (function () {
         this.user_name = "GeekTree0101";
     }
     user_page.prototype.close = function () {
+        navigator.vibrate(200);
         this.ctrl.dismiss();
     };
     user_page.prototype.logout = function () {
+        navigator.vibrate(200);
         console.log("[-] User Logout");
+        localStorage.removeItem("Auth");
+        setTimeout(function () {
+            window.location.reload();
+        }, 2000);
     };
     __decorate([
         core_1.Input(), 

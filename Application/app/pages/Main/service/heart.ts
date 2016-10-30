@@ -1,5 +1,5 @@
 import {ViewController, NavController, Alert, Events, Toast} from 'ionic-angular';
-import {Input, Output, Component, HostListener} from '@angular/core'; 
+import {Input, Output,  AfterContentInit, Component, HostListener} from '@angular/core'; 
 
 //HTTP protocol
 import {HttpProtocalService} from '../../../service/HttpProtocol';
@@ -47,11 +47,13 @@ export class heart_page{
                 private nav : NavController,
                 private http : HttpProtocalService,
                 public event : Events)
-    {
+    {}
+
+    ngAfterContentInit(){
+
          this.NFC_ID = "Please pus [PUSH] button!";       
-
+         setTimeout(()=>{this.NFCrun();},2000);
     }
-
 
     @Input() close(){
         navigator.vibrate(200);
@@ -127,11 +129,13 @@ export class heart_page{
             
             (data) => { //Async Event
                 console.log("[+] Succes GET data");
+                alert("[DEBUG] Success GET");
                 this.GET_DATA.data = data;
                 this.GET_DATA.flag = true; //Show UI
                 this.Bit_coin_toast(true);
             },
             (err) => {
+                alert("[DEBUG] Failed GET");
                 console.log(err);
                 this.Bit_coin_toast(false);
             }

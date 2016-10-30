@@ -1,0 +1,81 @@
+.Login {
+    img {
+        margin-top: 10vmax;
+        animation-direction: forward;
+        animation-name: img-animation;
+        animation-duration: 5s;
+        animation-iteration-count: infinite;
+    }
+    ion-list {
+        margin-top: 6vmax;
+        margin-bottom: 4vmax;
+        ion-item {
+            background-color: #F9FCFD;
+            ion-label {
+                color: #888;
+                font-weight: 500;
+                font-size: 2vmax;
+            }
+            ion-icon {
+                font-size: 5vmax;
+                margin-right: 0.5vmax;
+            }
+        }
+    }
+    ion-list>.item:first-child,
+    ion-list>.item-wrapper:first-child .item {
+        border-top: 0px;
+    }
+    .input-has-focus::after {
+        border-bottom-color: #387ef5;
+        border-bottom-width: 0.5vmax;
+        animation-direction: forward;
+        animation-name: login-art;
+        animation-duration: 1s;
+        animation-iteration-count: 1;
+    }
+    button {
+        margin-top: 2vmax;
+        width: 80%;
+        height: 6vmax;
+        font-size: 2.3vmax;
+        font-weight: 700;
+    }
+    .kakao {
+        background-color: #fae100;
+        color: #222;
+    }
+    .facebook {
+        background-color: #3c5a99;
+    }
+}
+
+@keyframes img-animation {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    15% {
+        transform: scale(0.7);
+        opacity: 0.5;
+    }
+    25% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes login-art {
+    0% {
+        margin-right: 200%;
+    }
+    100% {
+        margin-left: 0%;
+    }
+}

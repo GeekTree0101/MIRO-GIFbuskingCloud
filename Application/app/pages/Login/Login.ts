@@ -36,6 +36,11 @@ export class LoginPage {
     this.password = event.target.value;
   }
 
+  @Output() quick_login(){
+        localStorage.setItem("Auth","kakaotalk login");
+        window.location.reload();
+  }
+
   @Output() Auth_Login(){
 
       console.log("[+] user push login");

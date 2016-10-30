@@ -36,14 +36,13 @@ export class BuskerPage{
 
     bluetooth_state_check(){
 
-        bluetoothSerial.isEnabled;
-        bluetoothSerial.isConnected;
         navigator.vibrate(200);
+
         let bluetooth = (<any>window).bluetoothSerial;
         bluetooth.isConnected(
             (success)=>{ this.feel_the_toast()},
             (err)=>{
-                bluetooth.isEnable(
+                bluetooth.isEnabled(
                     (success) => {
                         this.bluetooth_connection();
                     },
@@ -139,7 +138,7 @@ export class BuskerPage{
 
         let bluetooth = (<any>window).bluetoothSerial;
 
-        bluetooth.wirte(message, 
+        bluetooth.write(message, 
             ()=>{ console.log("send",message)}, 
             ()=>{ 
                 console.log("failed");

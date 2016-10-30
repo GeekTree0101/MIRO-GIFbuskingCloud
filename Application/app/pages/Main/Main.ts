@@ -135,7 +135,7 @@ export class MainPage{
         
         setInterval(() => {
           this.Busker_Toast();
-        },(Math.random() * 20 + 10) * 1000);
+        },(Math.random() * 100 + 20) * 1000);
     }
 
     ngAfterContentInit(){

@@ -1,11 +1,17 @@
-img(src="image/2.png")
-ion-list
-    ion-item
-        ion-label(fixed) User ID
-        ion-input((keyup)="insertID($event)" type="text" value="")
+ion-content(class="Login")
+    center
+        img(src="image/2.png")
+    ion-list
+        ion-item
+            ion-label(fixed) <ion-icon name="md-person"></ion-icon> User ID
+            ion-input((keyup)="insertID($event)" type="text" value="")
     
-    ion-item
-        ion-label(fixed) Password
-        ion-input((keyup)="insertPassword($event)" type="password")
+        ion-item
+            ion-label(fixed) <ion-icon name="md-key"></ion-icon> Password
+            ion-input((keyup)="insertPassword($event)" type="password")
 
-button((click)="Auth_Login()" class="button-full") Login
+
+    center
+        button((click)="Auth_Login()" class="loginButton") Log in
+        button(class="facebook") Sign in using Facebook
+        button((click)="quick_login()" class="kakao") Sign in using KakaoTalk
