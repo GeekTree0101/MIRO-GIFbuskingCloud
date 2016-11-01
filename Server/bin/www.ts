@@ -9,13 +9,14 @@ import app = require('../app');
 import debugModule = require('debug');
 import http = require('http');
 
+
 var debug = debugModule('Busking-Could:server');
 
 /**
  * Get port from environment and store in Express.
  */
 
-var port = normalizePort(process.env.PORT || '3000');
+var port = normalizePort(process.env.PORT || '7778');
 app.set('port', port);
 
 /**
@@ -31,6 +32,7 @@ var server = http.createServer(app);
 server.listen(port);
 server.on('error', onError);
 server.on('listening', onListening);
+
 
 /**
  * Normalize a port into a number, string, or false.

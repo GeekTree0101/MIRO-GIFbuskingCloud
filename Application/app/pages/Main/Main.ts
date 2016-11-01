@@ -8,12 +8,14 @@ import {user_page} from './service/user';
 import {BuskerPage, BuskerHeartPage} from './../Busker/Busker';
 import {BuskerListPage} from './../BuskerList/BuskerList';
 
+import {Socket_service} from './../../service/socket';
 
 @Component({
   templateUrl: 'build/pages/Main/Main.html',
-  directives : [bitcoin_page, heart_page, user_page, BuskerPage, BuskerListPage, BuskerHeartPage]
+  directives : [bitcoin_page, heart_page, user_page, BuskerPage, BuskerListPage, BuskerHeartPage, Socket_service]
 })
 export class MainPage{
+
 
     private animation_object_queue = [];                    //animation object queue
 
@@ -131,11 +133,14 @@ export class MainPage{
     }
 
 
-    constructor(private nav :NavController){
+    constructor(private nav :NavController, private IO : Socket_service){
         
-        setInterval(() => {
-          this.Busker_Toast();
-        },(Math.random() * 100 + 20) * 1000);
+        this.IO.socket.on('start', (data) => {
+
+            let temp_data = JSON.parse(data);
+            this.Busker_Toast(temp_data.ID, temp_data.Location);
+
+        });
     }
 
     ngAfterContentInit(){
@@ -280,11 +285,11 @@ export class MainPage{
 
     }
 
-    Busker_Toast(){
+    Busker_Toast(who : string, location : string){
 
       let make = Toast.create({
 
-          message : "버스커버스커 : 대학로 60길 공연중",
+          message : who + " : " +  location,
           duration : 3000,
           position : 'top',
           showCloseButton : true,

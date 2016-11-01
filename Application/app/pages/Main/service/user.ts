@@ -21,6 +21,7 @@ export class user_page{
         navigator.vibrate(200);
         console.log("[-] User Logout");
         localStorage.removeItem("Auth");
+        localStorage.removeItem("userdata");
         
         setTimeout(()=>{
             window.location.reload();

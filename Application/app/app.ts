@@ -5,29 +5,31 @@ import {HTTP_PROVIDERS} from '@angular/http';
 
 import {LoginPage} from './pages/Login/Login';
 import {MainPage} from './pages/Main/Main';
+import {localStorage_service} from './service/localStorage';
 
 @Component({
-  template: '<ion-nav [root]="rootPage"></ion-nav>'
+  template: '<ion-nav [root]="rootPage"></ion-nav>',
+  providers : [localStorage_service]
 })
 export class MyApp {
 
   private rootPage : any;
 
-  constructor(private platform:Platform) {
+  constructor(private platform:Platform, private DB : localStorage_service) {
 
     this.rootPage = this.Auth();
 
-    if(!localStorage.hasOwnProperty("userdata")){
+    if(!this.DB.check("userdata")){
 
       let data = {
-        ID : "GeekTree",
-        Coin : 15700,
-        Heart : 350,
-        busker_coin : 223345,
-        busker_heart : 12405
+        ID : 0,
+        user_coin : 0,
+        busker_coin : 0,
+        busker_heart : 0
       }
 
-      localStorage.setItem("userdata",JSON.stringify(data));
+      DB.create(data,"userdata");
+
     }
 
 
@@ -42,8 +44,9 @@ export class MyApp {
 
     let flag : boolean = false;
 
-    if(localStorage.getItem("Auth")){
-      
+    let id = this.DB.load("ID","userdata");
+
+    if(typeof(id) != "number"){
       flag = true;
     }
 

@@ -437,19 +437,27 @@ var LoginPage = (function () {
                 "ID": this.ID,
                 "Password": this.password
             };
-            this.http.GET("JSON", "http://192.168.1.13:8000/Login", token);
+            this.http.GET("JSON", "http://192.168.1.3:7777/Auth", token);
             this.event.subscribe("GET", function (data) {
                 console.log("[+] Succes GET data", data);
-                var recv = JSON.parse(data);
-                if (recv.check == true) {
-                    _this.Auth_alert(true);
-                    localStorage.setItem("Auth", data.token);
-                    window.location.reload();
-                }
-                else {
-                    _this.Auth_alert(false);
-                    console.log("[-] Auth Failed");
-                }
+                var recv = JSON.parse(data[0]);
+                var set = JSON.parse(localStorage.getItem("userdata"));
+                console.log("data", recv);
+                //if(true){
+                _this.Auth_alert(true);
+                localStorage.setItem("Auth", recv.ID);
+                set.ID = recv.ID;
+                set.Coin = recv.Coin;
+                set.Heart = recv.Heart;
+                set.busker_coin = recv.busker_coin;
+                set.busker_heart = recv.busker_heart;
+                localStorage.setItem("userdata", JSON.stringify(set));
+                window.location.reload();
+                // }
+                // else{
+                // this.Auth_alert(false);
+                // console.log("[-] Auth Failed");
+                // }
             });
         }
     };

@@ -78,7 +78,7 @@ export class HttpProtocalService{
 
     
     
-    POST(userData : string, type: string, url :string){
+    POST(userData : any, type: string, url :string){
         
         //TODO: Http Protocal POST Task 
         let header = new Headers();
@@ -87,7 +87,7 @@ export class HttpProtocalService{
         //Header append
         header.append('Content-Type',type);
   
-        this.http.post(url,userData,{
+        this.http.post(url,JSON.stringify(userData),{
             headers: header
         })
         .map(res => res.json())

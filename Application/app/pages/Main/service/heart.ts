@@ -1,12 +1,13 @@
 import {ViewController, NavController, Alert, Events, Toast} from 'ionic-angular';
 import {Input, Output,  AfterContentInit, Component, HostListener} from '@angular/core'; 
+import {localStorage_service} from "../../../service/localStorage";
 
 //HTTP protocol
 import {HttpProtocalService} from '../../../service/HttpProtocol';
 
 @Component({
     templateUrl : 'build/pages/Main/directive/heart.html',
-    providers : [HttpProtocalService]
+    providers : [HttpProtocalService, localStorage_service]
 })
 export class heart_page{
 
@@ -14,11 +15,10 @@ export class heart_page{
     
     private GET_DATA = {
         flag : false,                    //Bit coin I/O controll
-        data : null                      //Server Infomation
     }
 
     private custom_coin = 888;           //User Want to send money
-    private user_coin = JSON.parse(localStorage.getItem("userdata")).Coin;           //user money
+    private user_coin = this.DB.load("user_coin", "userdata")           //user money
 
     private show_state = true;
     private donation_method = [
@@ -47,14 +47,19 @@ export class heart_page{
     constructor(private ctrl :ViewController, 
                 private nav : NavController,
                 private http : HttpProtocalService,
-                public event : Events
+                public event : Events,
+                private DB : localStorage_service
                 )
     {}
 
     ngAfterContentInit(){
 
          this.NFC_ID = "Please pus [PUSH] button!";       
-         setTimeout(()=>{this.NFCrun();},3000);
+         this.NFCrun();
+
+         setTimeout(()=>{
+             this.informationAlert("closeYourCard");
+         },3000);
     }
 
     @Input() close(){
@@ -85,7 +90,7 @@ export class heart_page{
         }
     }
 
-    @HostListener('swipe',['$event']) press_coin_size_up2(event){
+    @HostListener('swipe',['$event']) delete_press_event(event){
         navigator.vibrate(50);
         this.show_state = true;
     }    
@@ -94,6 +99,7 @@ export class heart_page{
          
         //TODO : start NFC activity
         navigator.vibrate(200);
+
         (<any>window).nfc.addTagDiscoveredListener(
             (data) =>{
               //callback data -> nfc infomation
@@ -112,13 +118,12 @@ export class heart_page{
               
               //return nfc id to VIEW component
               this.NFC_ID = ID_value;
-              this.Get();
               
             },
             (sucess) => {
                 // nfc listenner commit!
                 console.log(sucess);
-                this.informationAlert("closeYourCard");
+                this.Get();
             },
             (err) => {
                 // Must Check NFC activatied!
@@ -133,20 +138,38 @@ export class heart_page{
         
         if(this.NFC_ID != null){
             
-            let token = this.NFC_ID;
-            this.http.GET("JSON","http://192.168.1.13:3000/nfc", token);   
+            let token = {
+              NFC_ID : this.NFC_ID,
+              ID : this.DB.load("ID","userdata"),
+              send_coin : this.custom_coin
+            }
+
+            this.http.POST(token, "application/json", "http://192.168.1.9:7777/Donation");   
             
-            this.event.subscribe("GET",
+            this.event.subscribe("POST",
             
-            (data) => { //Async Event
-                console.log("[+] Succes GET data");
-                alert("[DEBUG] Success GET");
-                this.GET_DATA.data = data;
+            (event : any) => { //Async Event
+                console.log("[+] Succes POST data");
+
+                //coin or heart --
+                let data = {
+                    user_coin : this.user_coin - this.custom_coin
+                }
+
+                let check = this.DB.save(data, "userdata", ["user_coin"]);
+
+                if(check){
+                    this.user_coin = this.DB.load("user_coin", "userdata");
+                }
+
+                //flag setting
+
                 this.GET_DATA.flag = true; //Show UI
+
                 this.Bit_coin_toast(true);
             },
             (err) => {
-                alert("[DEBUG] Failed GET");
+                
                 console.log(err);
                 this.Bit_coin_toast(false);
             }

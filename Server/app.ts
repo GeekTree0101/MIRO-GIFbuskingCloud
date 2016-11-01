@@ -9,8 +9,13 @@ import logger = require('morgan');
 import cookieParser = require('cookie-parser');
 import bodyParser = require('body-parser');
 
-import routes = require('./routes/index');
-import users = require('./routes/users');
+import Auth = require('./routes/Auth');
+import CashSystem = require('./routes/CashSystem');
+import Donation = require('./routes/Donation');
+import Start = require('./routes/Start');
+import Update = require('./routes/Update');
+
+
 
 var app = express();
 
@@ -26,8 +31,16 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use('/', routes);
-app.use('/users', users);
+
+//Router
+
+app.use('/Auth', Auth);
+app.use('/CashSystem', CashSystem );
+app.use('/Donation', Donation);
+app.use('/Start', Start);
+app.use('/Update', Update);
+
+
 
 //catch 404 and forward to error handler
 app.use((req, res, next) => {

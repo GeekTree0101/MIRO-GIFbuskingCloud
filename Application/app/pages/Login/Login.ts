@@ -5,10 +5,11 @@ import {Input, Output} from '@angular/core';
 
 //HTTP protocol
 import {HttpProtocalService} from '../../service/HttpProtocol';
+import {localStorage_service} from '../../service/localStorage';
 
 @Component({
   templateUrl: 'build/pages/Login/Login.html',
-  providers : [HttpProtocalService]
+  providers : [HttpProtocalService, localStorage_service]
 })
 export class LoginPage {
 
@@ -17,7 +18,7 @@ export class LoginPage {
   private password : string;
 
 
-  constructor(private nav : NavController, private http : HttpProtocalService, public event : Events) 
+  constructor(private nav : NavController, private http : HttpProtocalService, public event : Events, private DB : localStorage_service) 
   {
     // this tells the tabs component which Pages
     // should be each tab's root Page
@@ -37,7 +38,7 @@ export class LoginPage {
   }
 
   @Output() quick_login(){
-        localStorage.setItem("Auth","kakaotalk login");
+        
         window.location.reload();
   }
 
@@ -66,48 +67,85 @@ export class LoginPage {
               "Password" : this.password
             }
             
-            this.http.GET("JSON","http://192.168.1.13:8000/Login", token);   
+            this.http.GET("JSON","http://192.168.1.9:7777/Auth", token);   
             
-            this.event.subscribe("GET",(data) => { //Async Event
+            this.event.subscribe("GET",
             
-                console.log("[+] Succes GET data", data);
+              (data) => { //Async Event
+            
+                          console.log("[+] Succes GET data", data);
+                          if(data[0].ID == "error"){
+                            
+                            this.Auth_alert(4);
+                          }
+                          else{
 
-                let recv = JSON.parse(data);
-
-                if(recv.check == true){
+                            if(data != null){
+                                
+                                  let auth = this.DB.save(data,"userdata",["ID","user_coin","busker_coin","busker_heart"]);
                   
-                  this.Auth_alert(true);
-                  localStorage.setItem("Auth",data.token);
-                  window.location.reload();
-                }
-                else{
+                                  if(auth){
 
-                  this.Auth_alert(false);
-                  console.log("[-] Auth Failed");
-                }
-            });          
+                                      this.Auth_alert(1);       
+                                  }
+                                 else{
+                    
+                                      this.Auth_alert(2);
+                                  }
+
+                            }
+                            else{
+                              
+                                  this.Auth_alert(3);
+                            }
+                          }
+              },
+              
+              (err) => {
+                        
+                        this.Auth_alert(3);
+              }
+          );
       }
 
-  }
+}
 
-  Auth_alert(select : boolean){
+  Auth_alert(select : number){
 
         let title_value : string;
         let message_content : string;
 
-        if(select){
+        if(select == 1){
           title_value = "Success";
           message_content = "로그인에 성공하셨습니다.";  
         }
-        else{
+        else if(select == 2){
           title_value = "Failed";
-          message_content = "로그인에 실패하셨습니다.";
+          message_content = "로그인에 실패하셨습니다. 다시 시도해 주십시오";
+        }
+        else if(select == 3){
+          title_value = "Failed";
+          message_content = "서버상태가 원활하지 않습니다.";
+        }
+        else if(select == 4){
+          title_value = "Failed";
+          message_content = "아이디 또는 비밀번호가 틀렸습니다."
         }
 
         let alert_frame = Alert.create({
               title : title_value,
               message : message_content,
-              buttons : ["OK"]
+              buttons : [{
+                text : "OK",
+                handler : (data) => {
+                  
+                  console.log("[+] button evented");
+                  if(select == 1){
+
+                      window.location.reload();
+                  }
+               } 
+              }]
         });
 
         this.nav.present(alert_frame);

@@ -1,9 +1,15 @@
 import {Component,  AfterContentInit, HostListener} from '@angular/core'
 import {ViewController, NavController, Alert, Events, Toast} from 'ionic-angular';
 import {Input, Output} from '@angular/core'; 
+import {localStorage_service} from "../../service/localStorage";
+
+//HTTP protocol
+import {HttpProtocalService} from './../../service/HttpProtocol';
+import {Socket_service_donation} from './../../service/socket';
 
 @Component({
-  templateUrl: 'build/pages/Busker/Busker.html'
+  templateUrl: 'build/pages/Busker/Busker.html',
+  providers : [localStorage_service, HttpProtocalService, Socket_service_donation]
 })
 export class BuskerPage{
 
@@ -13,15 +19,32 @@ export class BuskerPage{
     private NFC_ID : any;
     private state_flag = false;
 
-    constructor(private ctrl :ViewController, private nav :NavController){
+    constructor(private ctrl :ViewController, 
+                private nav :NavController,
+                private http : HttpProtocalService,
+                private DB : localStorage_service,
+                public event : Events,
+                private IO : Socket_service_donation
+                )
+    {
         
+        this.IO.socket.on('heart', (data) => {
+
+            let temp = JSON.parse(data);
+            
+            if(temp.NFC_ID == this.NFC_ID){ // user recognization
+
+                this.real_time_heart += 1;
+                this.real_time_bitcoin += temp.send_coin;
+
+                this.IO.socket.emit('heart', localStorage.getItem("userdata"));
+            }
+
+        })
     }
 
     @Input() close(){
-
         this.calculate();
-        navigator.vibrate(200);
-        this.ctrl.dismiss();
     }
 
     @HostListener('press',['$event']) press(event){
@@ -86,8 +109,6 @@ export class BuskerPage{
                         mac_address,                  //bluetooth mac address
                         () => {
                             this.write("*");          //send device connection
-                            this.feel_the_toast("사물과 연결이 되었습니다.");
-                            this.state_flag = true;
                         },                    
                         () => {
                             this.informationAlert("fail");
@@ -130,7 +151,32 @@ export class BuskerPage{
                 }
             }
 
-        },()=>{})
+            let send_token = {
+                ID : this.DB.load("ID","userdata"),
+                NFC_ID : this.NFC_ID,
+                Location : "대구광역시 북구 대학로 60 경북대학교 IT2-244"
+            }        
+
+            this.http.GET("JSON", "https://192.168.1.9:7777/Start", send_token);
+
+            this.event.subscribe("GET", 
+                (data) => {
+
+                    this.feel_the_toast("사물과 연결이 되었습니다.");
+                    this.state_flag = true;                        
+                    
+                },
+                (err) => {
+
+                    this.feel_the_toast("서버와의 연결이 원활하지 않습니다. 다시 시도해주세요");
+                }
+            );
+
+
+        },
+        (err)=>{
+            console.log("bluetooth connection error");
+        })
     }
 
     // R : red, G : green, B: blue *: connect with device 
@@ -154,9 +200,45 @@ export class BuskerPage{
         console.log("Coin", this.real_time_bitcoin);
         this.write("*"); //disconnect
         (<any>window).bluetoothSerial.disconnect(
-            () => {
-                this.state_flag = false;
-                this.ctrl.dismiss();
+            (event) => {
+
+                let user_ID = this.DB.load("ID", "userdata");
+                let temp_user_coin = this.DB.load("user_coin", "userdata");
+                let temp_busker_coin = this.DB.load("busker_coin", "userdata");
+                let temp_busker_heart = this.DB.load("busker_heart", "userdata");
+
+                let data = {
+                    ID : user_ID,
+                    user_coin : temp_user_coin + this.real_time_bitcoin,
+                    busker_coin : temp_busker_coin + this.real_time_bitcoin,
+                    busker_heart : temp_busker_heart + this.real_time_heart
+                }
+
+                this.http.GET("JSON", "https://192.168.1.9:7777/Update", data);
+
+                this.event.subscribe("GET",
+                
+                    (data) => {
+
+                        let check = this.DB.save(data, "userdata", ["ID", "user_coin", "busker_coin", "busker_heart"]);
+                        if(check){
+                            navigator.vibrate(200);
+                            this.state_flag = false;
+                            this.ctrl.dismiss();
+                        }
+                        else{
+
+                            console.log("[-] DB error");
+                        }
+                    },
+
+                    (err) => {
+
+                        console.log("GET Error", data);
+                    }
+
+                )
+
             },
             () => {}
         )
@@ -212,12 +294,13 @@ export class BuskerPage{
 })
 export class BuskerHeartPage{
 
-    private Like_count = JSON.parse(localStorage.getItem("userdata")).busker_heart;
-    private Coin_count = JSON.parse(localStorage.getItem("userdata")).busker_coin;
+    private Like_count = this.DB.load("busker_heart", "userdata");
+    private Coin_count = this.DB.load("busker_coin", "userdata");
 
-    constructor(private ctrl :ViewController){
+    constructor(private ctrl :ViewController, private DB : localStorage_service){
         
         let max = this.Like_count;
+
         this.Like_count = this.Like_count - 100;
         this.Coin_count = this.Coin_count - 100;
 
@@ -228,12 +311,18 @@ export class BuskerHeartPage{
             
             if(this.Like_count == max){
                 clearInterval(sizeUp);
+                max = null;
             }
 
         }, 10);        
     }
 
     @Input() close(){
+
+        this.Like_count = null;
+        this.Coin_count = null;
+        this.DB  = null;
+
         navigator.vibrate(200);
         this.ctrl.dismiss();
     }
