@@ -5,9 +5,9 @@ import DB = require('./DB');
 var router = express.Router();
 
 /* 버스커 결산 업데이트 라우터 */
-router.get('/', function(req, res, next) {
+router.get('/', function(req : any, res, next) {
   
-    let data = JSON.parse(req.headers['authorization']);
+    let data = JSON.parse(req.headers.authorization);
 
     console.log( data.ID + " 님 버스킹 종료 : 결산 요청");
 
@@ -37,11 +37,14 @@ router.get('/', function(req, res, next) {
                     DB[index].busker_coin = temp.busker_coin;
                     DB[index].busker_heart = temp.busker_heart;  
                     
+                    res.set('Content-Type','application/json');
                     res.send(JSON.stringify(temp));
 
                     DB[index].busking_state = false;
                 }
                 else{
+
+                    res.set('Content-Type','text/plain');
                     res.send("HACKER 인게 확실함");
                 }
 

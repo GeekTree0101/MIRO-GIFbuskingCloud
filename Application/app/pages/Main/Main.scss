@@ -225,16 +225,13 @@
 
 @keyframes main-up {
     0% {
-        transform: scale(0);
+        transform: scale(2);
     }
     25% {
-        transform: scale(1);
+        transform: scale(1.2);
     }
     50% {
-        transform: scale(0.6);
-    }
-    75% {
-        transform: scale(1.2);
+        transform: scale(1.4);
     }
     100% {
         transform: scale(1);

@@ -33,7 +33,7 @@ export class HttpProtocalService{
     }
     
   
-    GET(type : string, url :string, userToken :Object){
+    GET(type : string, url :string, userToken :Object, event_type : string){
         
         //TODO: Http Protocol GET Task
             
@@ -58,7 +58,7 @@ export class HttpProtocalService{
                 .subscribe(
                          data => this.returnData = data,
                          err => this.returnData = err ,
-                         () => this.event.publish("GET",this.returnData)
+                         () => this.event.publish(event_type,this.returnData)
                 );
         }
         else{
@@ -78,7 +78,7 @@ export class HttpProtocalService{
 
     
     
-    POST(userData : any, type: string, url :string){
+    POST(userData : any, type: string, url :string, event_type : string){
         
         //TODO: Http Protocal POST Task 
         let header = new Headers();
@@ -94,7 +94,7 @@ export class HttpProtocalService{
         .subscribe(
             data => this.returnData = data,
             err => this.returnData = err ,
-            () => this.event.publish("POST",this.returnData)
+            () => this.event.publish(event_type,this.returnData)
         )
         
   

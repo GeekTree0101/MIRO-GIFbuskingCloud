@@ -16,34 +16,43 @@ export class localStorage_service{
     save(data : any, target : string, select : any){
 
         try{
-            let temp : any;
+            let temp = data[0];
 
-            if(typeof(data) == "string"){
+            if(typeof(temp) == "string"){
                 temp = JSON.parse(data[0]);
             }
-            else{
+            else if(typeof(temp) == "undefined"){
                 temp = data;
             }
-            
+
+         
+            console.log("[+] GET data :", temp);
+
             let set = JSON.parse(localStorage.getItem(target));
+
+            //console.log("[+] DB data : ", set);
 
             for(var i = 0; i < select.length; i++){
 
-                try{
                     set[select[i]] = temp[select[i]];
-                }
-                catch(e){
-                    console.log("Invaild data");
-                    continue;
-                }
+//                    console.log("[+] check state" , set[select[i]]);
+//                    console.log("[+] check state", temp[select[i]]);   
             }
 
-            localStorage.setItem(target,JSON.stringify(set));
+            //console.log("[+] after set value",set);
+
+            localStorage.setItem(target , JSON.stringify(set));
+ 
+            //console.log("json stringify", JSON.stringify(set));
+//            console.log("[+] set itemed", localStorage.getItem("userdata"));
+
         }
         catch(e){
 
+            console.log("[-] Error ", e);
             return false;
         }
+        
         return true;
     }
 

@@ -1,13 +1,13 @@
 import * as io from 'socket.io-client';                        //SOCKET.IO - CLINENT
 
 
-export class Socket_service{
+export class Socket_service_busking{
 
     public socket : any;
     constructor(){
         
         console.log("socket init");
-        this.socket = io("https://192.168.1.9:8000");
+        this.socket = io.connect("http://192.168.1.9:8000",{transports:['websocket','poling','flashsocket']});
 
     }
 
@@ -19,7 +19,7 @@ export class Socket_service_donation{
     constructor(){
         
         console.log("socket init");
-        this.socket = io("https://192.168.1.9:9000");
+        this.socket = io("http://192.168.1.9:9000",{transports:['websocket','poling','flashsocket']});
 
     }   
 }

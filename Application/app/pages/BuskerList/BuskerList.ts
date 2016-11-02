@@ -15,6 +15,7 @@ export class BuskerListPage{
 
     @Input() close(){
         navigator.vibrate(200);
+
         this.ctrl.dismiss();
     }
 }

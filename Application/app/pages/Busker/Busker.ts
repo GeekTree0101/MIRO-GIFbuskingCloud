@@ -151,17 +151,21 @@ export class BuskerPage{
                 }
             }
 
+            console.log("[+] from bluetooh", this.NFC_ID);
+
             let send_token = {
                 ID : this.DB.load("ID","userdata"),
                 NFC_ID : this.NFC_ID,
                 Location : "대구광역시 북구 대학로 60 경북대학교 IT2-244"
             }        
 
-            this.http.GET("JSON", "https://192.168.1.9:7777/Start", send_token);
+            console.log("[+] Busking 요청");
+            this.http.GET("JSON", "http://192.168.1.9:7777/Start", send_token, "busker");
 
-            this.event.subscribe("GET", 
+            this.event.subscribe("busker", 
                 (data) => {
 
+                    console.log("[+] busking 성공");
                     this.feel_the_toast("사물과 연결이 되었습니다.");
                     this.state_flag = true;                        
                     
@@ -214,9 +218,9 @@ export class BuskerPage{
                     busker_heart : temp_busker_heart + this.real_time_heart
                 }
 
-                this.http.GET("JSON", "https://192.168.1.9:7777/Update", data);
+                this.http.GET("JSON", "http://192.168.1.9:7777/Update", data, "update");
 
-                this.event.subscribe("GET",
+                this.event.subscribe("update",
                 
                     (data) => {
 
@@ -301,20 +305,23 @@ export class BuskerHeartPage{
         
         let max = this.Like_count;
 
-        this.Like_count = this.Like_count - 100;
-        this.Coin_count = this.Coin_count - 100;
-
-        let sizeUp = setInterval(() => {
+        if(this.Like_count - 100 > 100){
             
-            this.Like_count++;
-            this.Coin_count++;
+            this.Like_count = this.Like_count - 100;
+            this.Coin_count = this.Coin_count - 100;        
+            let sizeUp = setInterval(() => {
             
-            if(this.Like_count == max){
-                clearInterval(sizeUp);
-                max = null;
-            }
+                this.Like_count++;
+                this.Coin_count++;
+            
+                if(this.Like_count == max){
+                    clearInterval(sizeUp);
+                    max = null;
+                }
 
-        }, 10);        
+            }, 10);
+        }
+
     }
 
     @Input() close(){

@@ -11,31 +11,43 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 var core_1 = require('@angular/core');
 var ionic_angular_1 = require('ionic-angular');
-var ionic_native_1 = require('ionic-native');
 var http_1 = require('@angular/http');
 var Login_1 = require('./pages/Login/Login');
 var Main_1 = require('./pages/Main/Main');
+var localStorage_1 = require('./service/localStorage');
 var MyApp = (function () {
-    function MyApp(platform) {
+    function MyApp(platform, DB) {
         this.platform = platform;
-        this.rootPage = this.Auth();
-        if (!localStorage.hasOwnProperty("userdata")) {
+        this.DB = DB;
+        if (!this.DB.check("userdata")) {
+            console.log("[+] Create userdata");
             var data = {
-                ID: "GeekTree",
-                Coin: 15700,
-                Heart: 350,
-                busker_coin: 223345,
-                busker_heart: 12405
+                ID: "test",
+                user_coin: 0,
+                busker_coin: 0,
+                busker_heart: 0
             };
-            localStorage.setItem("userdata", JSON.stringify(data));
+            DB.create(data, "userdata");
+            this.rootPage = Login_1.LoginPage;
         }
-        platform.ready().then(function () {
-            ionic_native_1.StatusBar.styleDefault();
+        else {
+            this.rootPage = this.Auth();
+        }
+        /*
+        platform.ready().then(() => {
+    
+          StatusBar.styleDefault();
         });
+        */
     }
     MyApp.prototype.Auth = function () {
         var flag = false;
-        if (localStorage.getItem("Auth")) {
+        var id = this.DB.load("ID", "userdata");
+        console.log("[+] check userdata", id);
+        if (id == "test" || id == undefined) {
+            flag = false;
+        }
+        else {
             flag = true;
         }
         if (flag) {
@@ -47,16 +59,17 @@ var MyApp = (function () {
     };
     MyApp = __decorate([
         core_1.Component({
-            template: '<ion-nav [root]="rootPage"></ion-nav>'
+            template: '<ion-nav [root]="rootPage"></ion-nav>',
+            providers: [localStorage_1.localStorage_service]
         }), 
-        __metadata('design:paramtypes', [ionic_angular_1.Platform])
+        __metadata('design:paramtypes', [ionic_angular_1.Platform, localStorage_1.localStorage_service])
     ], MyApp);
     return MyApp;
 }());
 exports.MyApp = MyApp;
 ionic_angular_1.ionicBootstrap(MyApp, [http_1.HTTP_PROVIDERS]);
 
-},{"./pages/Login/Login":5,"./pages/Main/Main":6,"@angular/core":157,"@angular/http":245,"ionic-angular":421,"ionic-native":448}],2:[function(require,module,exports){
+},{"./pages/Login/Login":5,"./pages/Main/Main":6,"./service/localStorage":11,"@angular/core":159,"@angular/http":247,"ionic-angular":451}],2:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -70,18 +83,33 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var core_1 = require('@angular/core');
 var ionic_angular_1 = require('ionic-angular');
 var core_2 = require('@angular/core');
+var localStorage_1 = require("../../service/localStorage");
+//HTTP protocol
+var HttpProtocol_1 = require('./../../service/HttpProtocol');
+var socket_1 = require('./../../service/socket');
 var BuskerPage = (function () {
-    function BuskerPage(ctrl, nav) {
+    function BuskerPage(ctrl, nav, http, DB, event, IO) {
+        var _this = this;
         this.ctrl = ctrl;
         this.nav = nav;
+        this.http = http;
+        this.DB = DB;
+        this.event = event;
+        this.IO = IO;
         this.real_time_heart = 0;
         this.real_time_bitcoin = 0;
         this.state_flag = false;
+        this.IO.socket.on('heart', function (data) {
+            var temp = JSON.parse(data);
+            if (temp.NFC_ID == _this.NFC_ID) {
+                _this.real_time_heart += 1;
+                _this.real_time_bitcoin += temp.send_coin;
+                _this.IO.socket.emit('heart', localStorage.getItem("userdata"));
+            }
+        });
     }
     BuskerPage.prototype.close = function () {
         this.calculate();
-        navigator.vibrate(200);
-        this.ctrl.dismiss();
     };
     BuskerPage.prototype.press = function (event) {
         navigator.vibrate(1000);
@@ -128,8 +156,6 @@ var BuskerPage = (function () {
                 bluetooth.connect(mac_address, //bluetooth mac address
                 function () {
                     _this.write("*"); //send device connection
-                    _this.feel_the_toast("사물과 연결이 되었습니다.");
-                    _this.state_flag = true;
                 }, function () {
                     _this.informationAlert("fail");
                 });
@@ -159,7 +185,24 @@ var BuskerPage = (function () {
                     if (state_1 === "break") break;
                 }
             }
-        }, function () { });
+            console.log("[+] from bluetooh", _this.NFC_ID);
+            var send_token = {
+                ID: _this.DB.load("ID", "userdata"),
+                NFC_ID: _this.NFC_ID,
+                Location: "대구광역시 북구 대학로 60 경북대학교 IT2-244"
+            };
+            console.log("[+] Busking 요청");
+            _this.http.GET("JSON", "http://192.168.1.9:7777/Start", send_token, "busker");
+            _this.event.subscribe("busker", function (data) {
+                console.log("[+] busking 성공");
+                _this.feel_the_toast("사물과 연결이 되었습니다.");
+                _this.state_flag = true;
+            }, function (err) {
+                _this.feel_the_toast("서버와의 연결이 원활하지 않습니다. 다시 시도해주세요");
+            });
+        }, function (err) {
+            console.log("bluetooth connection error");
+        });
     };
     // R : red, G : green, B: blue *: connect with device 
     BuskerPage.prototype.write = function (message) {
@@ -177,9 +220,31 @@ var BuskerPage = (function () {
         console.log("Heart", this.real_time_heart);
         console.log("Coin", this.real_time_bitcoin);
         this.write("*"); //disconnect
-        window.bluetoothSerial.disconnect(function () {
-            _this.state_flag = false;
-            _this.ctrl.dismiss();
+        window.bluetoothSerial.disconnect(function (event) {
+            var user_ID = _this.DB.load("ID", "userdata");
+            var temp_user_coin = _this.DB.load("user_coin", "userdata");
+            var temp_busker_coin = _this.DB.load("busker_coin", "userdata");
+            var temp_busker_heart = _this.DB.load("busker_heart", "userdata");
+            var data = {
+                ID: user_ID,
+                user_coin: temp_user_coin + _this.real_time_bitcoin,
+                busker_coin: temp_busker_coin + _this.real_time_bitcoin,
+                busker_heart: temp_busker_heart + _this.real_time_heart
+            };
+            _this.http.GET("JSON", "http://192.168.1.9:7777/Update", data, "update");
+            _this.event.subscribe("update", function (data) {
+                var check = _this.DB.save(data, "userdata", ["ID", "user_coin", "busker_coin", "busker_heart"]);
+                if (check) {
+                    navigator.vibrate(200);
+                    _this.state_flag = false;
+                    _this.ctrl.dismiss();
+                }
+                else {
+                    console.log("[-] DB error");
+                }
+            }, function (err) {
+                console.log("GET Error", data);
+            });
         }, function () { });
     };
     BuskerPage.prototype.informationAlert = function (target) {
@@ -227,31 +292,39 @@ var BuskerPage = (function () {
     ], BuskerPage.prototype, "press", null);
     BuskerPage = __decorate([
         core_1.Component({
-            templateUrl: 'build/pages/Busker/Busker.html'
+            templateUrl: 'build/pages/Busker/Busker.html',
+            providers: [localStorage_1.localStorage_service, HttpProtocol_1.HttpProtocalService, socket_1.Socket_service_donation]
         }), 
-        __metadata('design:paramtypes', [ionic_angular_1.ViewController, ionic_angular_1.NavController])
+        __metadata('design:paramtypes', [ionic_angular_1.ViewController, ionic_angular_1.NavController, HttpProtocol_1.HttpProtocalService, localStorage_1.localStorage_service, ionic_angular_1.Events, socket_1.Socket_service_donation])
     ], BuskerPage);
     return BuskerPage;
 }());
 exports.BuskerPage = BuskerPage;
 var BuskerHeartPage = (function () {
-    function BuskerHeartPage(ctrl) {
+    function BuskerHeartPage(ctrl, DB) {
         var _this = this;
         this.ctrl = ctrl;
-        this.Like_count = JSON.parse(localStorage.getItem("userdata")).busker_heart;
-        this.Coin_count = JSON.parse(localStorage.getItem("userdata")).busker_coin;
+        this.DB = DB;
+        this.Like_count = this.DB.load("busker_heart", "userdata");
+        this.Coin_count = this.DB.load("busker_coin", "userdata");
         var max = this.Like_count;
-        this.Like_count = this.Like_count - 100;
-        this.Coin_count = this.Coin_count - 100;
-        var sizeUp = setInterval(function () {
-            _this.Like_count++;
-            _this.Coin_count++;
-            if (_this.Like_count == max) {
-                clearInterval(sizeUp);
-            }
-        }, 10);
+        if (this.Like_count - 100 > 100) {
+            this.Like_count = this.Like_count - 100;
+            this.Coin_count = this.Coin_count - 100;
+            var sizeUp_1 = setInterval(function () {
+                _this.Like_count++;
+                _this.Coin_count++;
+                if (_this.Like_count == max) {
+                    clearInterval(sizeUp_1);
+                    max = null;
+                }
+            }, 10);
+        }
     }
     BuskerHeartPage.prototype.close = function () {
+        this.Like_count = null;
+        this.Coin_count = null;
+        this.DB = null;
         navigator.vibrate(200);
         this.ctrl.dismiss();
     };
@@ -265,13 +338,13 @@ var BuskerHeartPage = (function () {
         core_1.Component({
             templateUrl: 'build/pages/Busker/BuskerHeart.html'
         }), 
-        __metadata('design:paramtypes', [ionic_angular_1.ViewController])
+        __metadata('design:paramtypes', [ionic_angular_1.ViewController, localStorage_1.localStorage_service])
     ], BuskerHeartPage);
     return BuskerHeartPage;
 }());
 exports.BuskerHeartPage = BuskerHeartPage;
 
-},{"@angular/core":157,"ionic-angular":421}],3:[function(require,module,exports){
+},{"../../service/localStorage":11,"./../../service/HttpProtocol":10,"./../../service/socket":12,"@angular/core":159,"ionic-angular":451}],3:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -311,7 +384,7 @@ var BuskerListPage = (function () {
 }());
 exports.BuskerListPage = BuskerListPage;
 
-},{"./Directive/buskerUnit":4,"@angular/core":157,"ionic-angular":421}],4:[function(require,module,exports){
+},{"./Directive/buskerUnit":4,"@angular/core":159,"ionic-angular":451}],4:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -381,7 +454,7 @@ var busker_unit_list = (function () {
 }());
 exports.busker_unit_list = busker_unit_list;
 
-},{"@angular/core":157}],5:[function(require,module,exports){
+},{"@angular/core":159}],5:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -393,17 +466,20 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 var core_1 = require('@angular/core');
+var Main_1 = require('../Main/Main');
 var ionic_angular_1 = require('ionic-angular');
 var core_2 = require('@angular/core');
 //HTTP protocol
 var HttpProtocol_1 = require('../../service/HttpProtocol');
+var localStorage_1 = require('../../service/localStorage');
 var LoginPage = (function () {
-    function LoginPage(nav, http, event) {
+    function LoginPage(nav, http, event, DB) {
         // this tells the tabs component which Pages
         // should be each tab's root Page
         this.nav = nav;
         this.http = http;
         this.event = event;
+        this.DB = DB;
         this.ID = "";
         this.password = "";
     }
@@ -414,8 +490,16 @@ var LoginPage = (function () {
         this.password = event.target.value;
     };
     LoginPage.prototype.quick_login = function () {
-        localStorage.setItem("Auth", "kakaotalk login");
-        window.location.reload();
+        var data = {
+            ID: "miro_master",
+            user_coin: 1000,
+            busker_coin: 1000,
+            busker_heart: 1000
+        };
+        var auth = this.DB.save(data, "userdata", ["ID", "user_coin", "busker_coin", "busker_heart"]);
+        if (auth) {
+            this.nav.setRoot(Main_1.MainPage);
+        }
     };
     LoginPage.prototype.Auth_Login = function () {
         var _this = this;
@@ -437,45 +521,59 @@ var LoginPage = (function () {
                 "ID": this.ID,
                 "Password": this.password
             };
-            this.http.GET("JSON", "http://192.168.1.3:7777/Auth", token);
-            this.event.subscribe("GET", function (data) {
+            this.http.GET("JSON", "http://192.168.1.9:7777/Auth", token, "login");
+            this.event.subscribe("login", function (data) {
                 console.log("[+] Succes GET data", data);
-                var recv = JSON.parse(data[0]);
-                var set = JSON.parse(localStorage.getItem("userdata"));
-                console.log("data", recv);
-                //if(true){
-                _this.Auth_alert(true);
-                localStorage.setItem("Auth", recv.ID);
-                set.ID = recv.ID;
-                set.Coin = recv.Coin;
-                set.Heart = recv.Heart;
-                set.busker_coin = recv.busker_coin;
-                set.busker_heart = recv.busker_heart;
-                localStorage.setItem("userdata", JSON.stringify(set));
-                window.location.reload();
-                // }
-                // else{
-                // this.Auth_alert(false);
-                // console.log("[-] Auth Failed");
-                // }
+                if (data[0].ID == "error") {
+                    console.log("[-] error", data[0].ID);
+                    _this.Auth_alert(4);
+                }
+                else {
+                    var auth = _this.DB.save(data, "userdata", ["ID", "user_coin", "busker_coin", "busker_heart"]);
+                    console.log("[+] auth data state", auth);
+                    if (auth) {
+                        _this.Auth_alert(1);
+                    }
+                    else {
+                        _this.Auth_alert(2);
+                    }
+                }
+            }, function (err) {
+                // this.Auth_alert(3);
             });
         }
     };
     LoginPage.prototype.Auth_alert = function (select) {
         var title_value;
         var message_content;
-        if (select) {
+        if (select == 1) {
             title_value = "Success";
             message_content = "로그인에 성공하셨습니다.";
         }
-        else {
+        else if (select == 2) {
             title_value = "Failed";
-            message_content = "로그인에 실패하셨습니다.";
+            message_content = "로그인에 실패하셨습니다. 다시 시도해 주십시오";
+        }
+        else if (select == 3) {
+            title_value = "Failed";
+            message_content = "서버상태가 원활하지 않습니다.";
+        }
+        else if (select == 4) {
+            title_value = "Failed";
+            message_content = "아이디 또는 비밀번호가 틀렸습니다.";
         }
         var alert_frame = ionic_angular_1.Alert.create({
             title: title_value,
             message: message_content,
-            buttons: ["OK"]
+            buttons: [{
+                    text: "OK",
+                    handler: function (data) {
+                        console.log("[+] button evented");
+                        if (select == 1) {
+                            window.location.reload();
+                        }
+                    }
+                }]
         });
         this.nav.present(alert_frame);
     };
@@ -506,15 +604,15 @@ var LoginPage = (function () {
     LoginPage = __decorate([
         core_1.Component({
             templateUrl: 'build/pages/Login/Login.html',
-            providers: [HttpProtocol_1.HttpProtocalService]
+            providers: [HttpProtocol_1.HttpProtocalService, localStorage_1.localStorage_service]
         }), 
-        __metadata('design:paramtypes', [ionic_angular_1.NavController, HttpProtocol_1.HttpProtocalService, ionic_angular_1.Events])
+        __metadata('design:paramtypes', [ionic_angular_1.NavController, HttpProtocol_1.HttpProtocalService, ionic_angular_1.Events, localStorage_1.localStorage_service])
     ], LoginPage);
     return LoginPage;
 }());
 exports.LoginPage = LoginPage;
 
-},{"../../service/HttpProtocol":10,"@angular/core":157,"ionic-angular":421}],6:[function(require,module,exports){
+},{"../../service/HttpProtocol":10,"../../service/localStorage":11,"../Main/Main":6,"@angular/core":159,"ionic-angular":451}],6:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -533,10 +631,13 @@ var heart_1 = require('./service/heart');
 var user_1 = require('./service/user');
 var Busker_1 = require('./../Busker/Busker');
 var BuskerList_1 = require('./../BuskerList/BuskerList');
+var socket_1 = require('./../../service/socket');
 var MainPage = (function () {
-    function MainPage(nav) {
+    function MainPage(nav, view, IO) {
         var _this = this;
         this.nav = nav;
+        this.view = view;
+        this.IO = IO;
         this.animation_object_queue = []; //animation object queue
         this.toggle_state = {
             name: "Audience",
@@ -629,9 +730,13 @@ var MainPage = (function () {
                 icon: "md-star" //md-musical-notes
             }
         };
-        setInterval(function () {
-            _this.Busker_Toast();
-        }, (Math.random() * 100 + 20) * 1000);
+        this.IO.socket.on('start', function (data) {
+            var temp_data = JSON.parse(data);
+            _this.Busker_Toast(temp_data.ID, temp_data.Location);
+        });
+        setTimeout(function () {
+            _this.Busker_Toast("버스킹 클라우드에 오신것을 환영합니다.", "from MIRO internet of things team");
+        }, 3000);
     }
     MainPage.prototype.ngAfterContentInit = function () {
         this.UI_component(".Coin_button", "Coin_button", true, 0);
@@ -720,6 +825,7 @@ var MainPage = (function () {
         this.animation_object_queue.push(object_value); // push on animation object queue
     };
     MainPage.prototype.menu_controller = function (index) {
+        console.log("[+] view change");
         var target;
         switch (index) {
             case "bitcoin_page":
@@ -744,9 +850,9 @@ var MainPage = (function () {
         navigator.vibrate(200);
         this.nav.present(target);
     };
-    MainPage.prototype.Busker_Toast = function () {
+    MainPage.prototype.Busker_Toast = function (who, location) {
         var make = ionic_angular_1.Toast.create({
-            message: "버스커버스커 : 대학로 60길 공연중",
+            message: who + " : " + location,
             duration: 3000,
             position: 'top',
             showCloseButton: true,
@@ -770,15 +876,16 @@ var MainPage = (function () {
     MainPage = __decorate([
         core_1.Component({
             templateUrl: 'build/pages/Main/Main.html',
-            directives: [bitcoin_1.bitcoin_page, heart_1.heart_page, user_1.user_page, Busker_1.BuskerPage, BuskerList_1.BuskerListPage, Busker_1.BuskerHeartPage]
+            directives: [bitcoin_1.bitcoin_page, heart_1.heart_page, user_1.user_page, Busker_1.BuskerPage, BuskerList_1.BuskerListPage, Busker_1.BuskerHeartPage],
+            providers: [socket_1.Socket_service_busking]
         }), 
-        __metadata('design:paramtypes', [ionic_angular_1.NavController])
+        __metadata('design:paramtypes', [ionic_angular_1.NavController, ionic_angular_1.ViewController, socket_1.Socket_service_busking])
     ], MainPage);
     return MainPage;
 }());
 exports.MainPage = MainPage;
 
-},{"./../Busker/Busker":2,"./../BuskerList/BuskerList":3,"./service/bitcoin":7,"./service/heart":8,"./service/user":9,"@angular/core":157,"ionic-angular":421}],7:[function(require,module,exports){
+},{"./../../service/socket":12,"./../Busker/Busker":2,"./../BuskerList/BuskerList":3,"./service/bitcoin":7,"./service/heart":8,"./service/user":9,"@angular/core":159,"ionic-angular":451}],7:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -789,28 +896,98 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-var ionic_angular_1 = require('ionic-angular');
 var core_1 = require('@angular/core');
+var ionic_angular_1 = require('ionic-angular');
+var localStorage_1 = require("../../../service/localStorage");
+//HTTP protocol
+var HttpProtocol_1 = require('../../../service/HttpProtocol');
 var bitcoin_page = (function () {
-    function bitcoin_page(ctrl) {
+    function bitcoin_page(view, nav, DB, http, event) {
         var _this = this;
-        this.ctrl = ctrl;
+        this.view = view;
+        this.nav = nav;
+        this.DB = DB;
+        this.http = http;
+        this.event = event;
         this.Bit_Coin = 0;
-        this.Accept_Coin = JSON.parse(localStorage.getItem("userdata")).Coin;
+        this.Accept_Coin = this.DB.load("user_coin", "userdata");
+        this.user_charge_coin = 100;
         this.Bit_Coin = this.Accept_Coin - 100;
-        var sizeUp = setInterval(function () {
-            _this.Bit_Coin++;
-            if (_this.Bit_Coin == _this.Accept_Coin) {
-                clearInterval(sizeUp);
-            }
-        }, 10);
+        if (this.Accept_Coin > 100) {
+            var sizeUp_1 = setInterval(function () {
+                _this.Bit_Coin++;
+                if (_this.Bit_Coin == _this.Accept_Coin) {
+                    clearInterval(sizeUp_1);
+                }
+            }, 10);
+        }
+        else {
+            this.Bit_Coin = this.Accept_Coin;
+        }
     }
     bitcoin_page.prototype.close = function () {
+        console.log("coin page close");
         navigator.vibrate(200);
-        this.ctrl.dismiss();
+        this.view.dismiss();
     };
     bitcoin_page.prototype.charge = function () {
+        var _this = this;
         console.log("[+] User charging bit coin");
+        this.button_box = ionic_angular_1.Alert.create({
+            title: "비트코인 충전",
+            message: "충전하실 비트코인을 입력하세요",
+            inputs: [
+                {
+                    name: 'coin',
+                    placeholder: 'coin'
+                }
+            ],
+            buttons: [{
+                    text: "OK",
+                    handler: function (money) {
+                        console.log("button");
+                        _this.user_charge_coin = parseInt(money.coin);
+                        console.log("입력하신금액", money.coin);
+                        if (isNaN(_this.user_charge_coin)) {
+                            _this.feel_the_toast("금액을 잘못된 값으로 입력하셨습니다.");
+                        }
+                        else {
+                            _this.button_box.dismiss();
+                            var charge_money_data = {
+                                ID: _this.DB.load("ID", "userdata"),
+                                charge_coin: _this.user_charge_coin
+                            };
+                            _this.http.POST(charge_money_data, "application/json", "http://192.168.1.9:7777/CashSystem", "bitcoin");
+                            _this.event.subscribe("bitcoin", function (data) {
+                                console.log("[+] Succes POST data");
+                                var check = _this.DB.save(data[0], "userdata", ["user_coin"]);
+                                if (check) {
+                                    _this.Bit_Coin = _this.DB.load("user_coin", "userdata");
+                                }
+                                _this.feel_the_toast("+ " + _this.user_charge_coin + " 만큼 충전되었습니다.");
+                            }, function (err) {
+                                console.log("[+] Bitcoin error", err);
+                                //           this.feel_the_toast("서버의 상태가 원활하지 않습니다.");
+                            }); //event end
+                        }
+                    }
+                }]
+        }); // prompt end        
+        if (this.nav.length() > 1) {
+            this.nav.last().dismiss();
+        }
+        this.nav.present(this.button_box);
+    };
+    bitcoin_page.prototype.feel_the_toast = function (message_value) {
+        this.popup = ionic_angular_1.Toast.create({
+            message: message_value,
+            duration: 2000,
+            position: 'top',
+            showCloseButton: true,
+            closeButtonText: "OK"
+        });
+        navigator.vibrate(200);
+        this.nav.present(this.popup);
     };
     __decorate([
         core_1.Input(), 
@@ -826,15 +1003,16 @@ var bitcoin_page = (function () {
     ], bitcoin_page.prototype, "charge", null);
     bitcoin_page = __decorate([
         core_1.Component({
-            templateUrl: 'build/pages/Main/directive/bitcoin.html'
+            templateUrl: 'build/pages/Main/directive/bitcoin.html',
+            providers: [localStorage_1.localStorage_service, HttpProtocol_1.HttpProtocalService]
         }), 
-        __metadata('design:paramtypes', [ionic_angular_1.ViewController])
+        __metadata('design:paramtypes', [ionic_angular_1.ViewController, ionic_angular_1.NavController, localStorage_1.localStorage_service, HttpProtocol_1.HttpProtocalService, ionic_angular_1.Events])
     ], bitcoin_page);
     return bitcoin_page;
 }());
 exports.bitcoin_page = bitcoin_page;
 
-},{"@angular/core":157,"ionic-angular":421}],8:[function(require,module,exports){
+},{"../../../service/HttpProtocol":10,"../../../service/localStorage":11,"@angular/core":159,"ionic-angular":451}],8:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -847,20 +1025,23 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 };
 var ionic_angular_1 = require('ionic-angular');
 var core_1 = require('@angular/core');
+var localStorage_1 = require("../../../service/localStorage");
 //HTTP protocol
 var HttpProtocol_1 = require('../../../service/HttpProtocol');
 var heart_page = (function () {
-    function heart_page(ctrl, nav, http, event) {
-        this.ctrl = ctrl;
+    function heart_page(view, nav, http, event, DB) {
+        this.view = view;
         this.nav = nav;
         this.http = http;
         this.event = event;
+        this.DB = DB;
+        this.NFC_ID = null;
+        this.NFC_FLAG = true;
         this.GET_DATA = {
             flag: false,
-            data: null //Server Infomation
         };
-        this.custom_coin = 888; //User Want to send money
-        this.user_coin = JSON.parse(localStorage.getItem("userdata")).Coin; //user money
+        this.custom_coin = 1000; //User Want to send money
+        this.user_coin = this.DB.load("user_coin", "userdata"); //user money
         this.show_state = true;
         this.donation_method = [
             {
@@ -887,33 +1068,34 @@ var heart_page = (function () {
     }
     heart_page.prototype.ngAfterContentInit = function () {
         var _this = this;
-        this.NFC_ID = "Please pus [PUSH] button!";
-        setTimeout(function () { _this.NFCrun(); }, 3000);
+        this.NFCrun();
+        setTimeout(function () {
+            _this.informationAlert("closeYourCard");
+        }, 3000);
     };
     heart_page.prototype.close = function () {
         navigator.vibrate(200);
-        this.ctrl.dismiss();
+        this.view.dismiss();
     };
     heart_page.prototype.coin_size_up = function (touch, index) {
         navigator.vibrate(200);
+        this.show_state = false;
         if (touch) {
             this.custom_coin++;
         }
         else {
-            this.show_state = false;
-            this.custom_coin = index;
+            if (index == 0) {
+                this.custom_coin = 0;
+                this.message = "좋아요를 기부하셨습니다.";
+            }
+            else {
+                this.custom_coin = 0;
+                this.custom_coin = index;
+                this.message = "비트코인을 " + this.custom_coin + " 만큼 기부하였습니다.";
+            }
         }
     };
-    heart_page.prototype.press_coin_size_up = function (event) {
-        navigator.vibrate(50);
-        if (event.target.className == "resize_coin") {
-            this.coin_size_up(true, 0);
-        }
-        else {
-            this.show_state = true;
-        }
-    };
-    heart_page.prototype.press_coin_size_up2 = function (event) {
+    heart_page.prototype.delete_press_event = function (event) {
         navigator.vibrate(50);
         this.show_state = true;
     };
@@ -923,6 +1105,7 @@ var heart_page = (function () {
         navigator.vibrate(200);
         window.nfc.addTagDiscoveredListener(function (data) {
             //callback data -> nfc infomation
+            console.log("[+] nfc tag start");
             var ID_array = data.tag.id;
             var ID_value = "";
             for (var i = 0; i < ID_array.length; i++) {
@@ -935,32 +1118,50 @@ var heart_page = (function () {
             }
             //return nfc id to VIEW component
             _this.NFC_ID = ID_value;
-            _this.Get();
+            if (_this.NFC_FLAG && _this.show_state == false) {
+                //console.log("[+] nfc post start");
+                _this.NFC_FLAG = false;
+                _this.POST();
+            }
+            else {
+                _this.Bit_coin_toast(false);
+            }
         }, function (sucess) {
             // nfc listenner commit!
-            console.log(sucess);
-            _this.informationAlert("closeYourCard");
+            //  console.log("[+] nfc tag addeventlistner success", sucess);
         }, function (err) {
             // Must Check NFC activatied!
-            console.log(err);
+            console.log("[-] nfc tag error", err);
             _this.informationAlert("failed");
         });
     };
-    heart_page.prototype.Get = function () {
+    heart_page.prototype.POST = function () {
         var _this = this;
-        if (this.NFC_ID != null) {
-            var token = this.NFC_ID;
-            this.http.GET("JSON", "http://192.168.1.13:3000/nfc", token);
-            this.event.subscribe("GET", function (data) {
-                console.log("[+] Succes GET data");
-                alert("[DEBUG] Success GET");
-                _this.GET_DATA.data = data;
+        if (this.NFC_ID != null && this.NFC_FLAG == false) {
+            var token = {
+                NFC_ID: this.NFC_ID,
+                ID: this.DB.load("ID", "userdata"),
+                send_coin: this.custom_coin
+            };
+            //console.log("[+] post donation");
+            this.http.POST(token, "application/json", "http://192.168.1.9:7777/Donation", "heart");
+            this.event.subscribe("heart", function (data) {
+                if (_this.show_state == false) {
+                    console.log("[+] update coin");
+                    var check = _this.DB.save(data[0], "userdata", ["user_coin"]);
+                    if (check) {
+                        _this.user_coin = _this.DB.load("user_coin", "userdata");
+                    }
+                }
+                //flag setting
                 _this.GET_DATA.flag = true; //Show UI
                 _this.Bit_coin_toast(true);
+                _this.NFC_FLAG = true;
+                _this.NFC_ID = null;
+                _this.show_state = true;
             }, function (err) {
-                alert("[DEBUG] Failed GET");
-                console.log(err);
-                _this.Bit_coin_toast(false);
+                console.log("NFC", err);
+                //this.Bit_coin_toast(false);
             });
         }
         else {
@@ -1011,17 +1212,12 @@ var heart_page = (function () {
         }
     };
     heart_page.prototype.Bit_coin_toast = function (flag) {
-        var message_value = "비트코인을 " + this.custom_coin + " 만큼 기부하였습니다.";
-        if (flag) {
-            if (this.custom_coin == 0) {
-                message_value = "좋아요를 기부하셨습니다.";
-            }
-        }
-        else {
-            message_value = "서버상태가 원활하지 않습니다.";
+        if (!flag) {
+            this.message = "원하시는 코인을 터치해주세요";
+            this.custom_coin = 0;
         }
         var make = ionic_angular_1.Toast.create({
-            message: message_value,
+            message: this.message,
             duration: 3000,
             position: 'top',
             showCloseButton: true,
@@ -1043,17 +1239,11 @@ var heart_page = (function () {
         __metadata('design:returntype', void 0)
     ], heart_page.prototype, "coin_size_up", null);
     __decorate([
-        core_1.HostListener('press', ['$event']), 
-        __metadata('design:type', Function), 
-        __metadata('design:paramtypes', [Object]), 
-        __metadata('design:returntype', void 0)
-    ], heart_page.prototype, "press_coin_size_up", null);
-    __decorate([
         core_1.HostListener('swipe', ['$event']), 
         __metadata('design:type', Function), 
         __metadata('design:paramtypes', [Object]), 
         __metadata('design:returntype', void 0)
-    ], heart_page.prototype, "press_coin_size_up2", null);
+    ], heart_page.prototype, "delete_press_event", null);
     __decorate([
         core_1.Output(), 
         __metadata('design:type', Function), 
@@ -1065,19 +1255,19 @@ var heart_page = (function () {
         __metadata('design:type', Function), 
         __metadata('design:paramtypes', []), 
         __metadata('design:returntype', void 0)
-    ], heart_page.prototype, "Get", null);
+    ], heart_page.prototype, "POST", null);
     heart_page = __decorate([
         core_1.Component({
             templateUrl: 'build/pages/Main/directive/heart.html',
-            providers: [HttpProtocol_1.HttpProtocalService]
+            providers: [HttpProtocol_1.HttpProtocalService, localStorage_1.localStorage_service]
         }), 
-        __metadata('design:paramtypes', [ionic_angular_1.ViewController, ionic_angular_1.NavController, HttpProtocol_1.HttpProtocalService, ionic_angular_1.Events])
+        __metadata('design:paramtypes', [ionic_angular_1.ViewController, ionic_angular_1.NavController, HttpProtocol_1.HttpProtocalService, ionic_angular_1.Events, localStorage_1.localStorage_service])
     ], heart_page);
     return heart_page;
 }());
 exports.heart_page = heart_page;
 
-},{"../../../service/HttpProtocol":10,"@angular/core":157,"ionic-angular":421}],9:[function(require,module,exports){
+},{"../../../service/HttpProtocol":10,"../../../service/localStorage":11,"@angular/core":159,"ionic-angular":451}],9:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -1091,18 +1281,18 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var ionic_angular_1 = require('ionic-angular');
 var core_1 = require('@angular/core');
 var user_page = (function () {
-    function user_page(ctrl) {
-        this.ctrl = ctrl;
+    function user_page(view) {
+        this.view = view;
         this.user_name = JSON.parse(localStorage.getItem("userdata")).ID;
     }
     user_page.prototype.close = function () {
         navigator.vibrate(200);
-        this.ctrl.dismiss();
+        this.view.dismiss();
     };
     user_page.prototype.logout = function () {
         navigator.vibrate(200);
         console.log("[-] User Logout");
-        localStorage.removeItem("Auth");
+        localStorage.removeItem("userdata");
         setTimeout(function () {
             window.location.reload();
         }, 2000);
@@ -1129,7 +1319,7 @@ var user_page = (function () {
 }());
 exports.user_page = user_page;
 
-},{"@angular/core":157,"ionic-angular":421}],10:[function(require,module,exports){
+},{"@angular/core":159,"ionic-angular":451}],10:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -1170,7 +1360,7 @@ var HttpProtocalService = (function () {
         this.event = event;
         console.log("[+] Http Protocol service init");
     }
-    HttpProtocalService.prototype.GET = function (type, url, userToken) {
+    HttpProtocalService.prototype.GET = function (type, url, userToken, event_type) {
         //TODO: Http Protocol GET Task
         var _this = this;
         var authHeader = new http_1.Headers();
@@ -1188,7 +1378,7 @@ var HttpProtocalService = (function () {
                 headers: authHeader
             })
                 .map(function (res) { return res.text(); })
-                .subscribe(function (data) { return _this.returnData = data; }, function (err) { return _this.returnData = err; }, function () { return _this.event.publish("GET", _this.returnData); });
+                .subscribe(function (data) { return _this.returnData = data; }, function (err) { return _this.returnData = err; }, function () { return _this.event.publish(event_type, _this.returnData); });
         }
         else {
             this.http.get(url, {
@@ -1198,18 +1388,18 @@ var HttpProtocalService = (function () {
                 .subscribe(function (data) { return _this.returnData = data; }, function (err) { return _this.returnData = err; }, function () { return _this.event.publish("GET", _this.returnData); });
         }
     };
-    HttpProtocalService.prototype.POST = function (userData, type, url) {
+    HttpProtocalService.prototype.POST = function (userData, type, url, event_type) {
         var _this = this;
         //TODO: Http Protocal POST Task 
         var header = new http_1.Headers();
         console.log("[+] User call POST");
         //Header append
         header.append('Content-Type', type);
-        this.http.post(url, userData, {
+        this.http.post(url, JSON.stringify(userData), {
             headers: header
         })
             .map(function (res) { return res.json(); })
-            .subscribe(function (data) { return _this.returnData = data; }, function (err) { return _this.returnData = err; }, function () { return _this.event.publish("POST", _this.returnData); });
+            .subscribe(function (data) { return _this.returnData = data; }, function (err) { return _this.returnData = err; }, function () { return _this.event.publish(event_type, _this.returnData); });
     };
     HttpProtocalService = __decorate([
         core_1.Injectable(), 
@@ -1219,7 +1409,84 @@ var HttpProtocalService = (function () {
 }());
 exports.HttpProtocalService = HttpProtocalService;
 
-},{"@angular/core":157,"@angular/http":245,"ionic-angular":421,"rxjs/Rx":524}],11:[function(require,module,exports){
+},{"@angular/core":159,"@angular/http":247,"ionic-angular":451,"rxjs/Rx":493}],11:[function(require,module,exports){
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var core_1 = require('@angular/core');
+var localStorage_service = (function () {
+    function localStorage_service() {
+    }
+    localStorage_service.prototype.create = function (data, target) {
+        localStorage.setItem(target, JSON.stringify(data));
+    };
+    localStorage_service.prototype.check = function (target) {
+        return localStorage.hasOwnProperty(target);
+    };
+    localStorage_service.prototype.save = function (data, target, select) {
+        try {
+            var temp = data[0];
+            if (typeof (temp) == "string") {
+                temp = JSON.parse(data[0]);
+            }
+            else if (typeof (temp) == "undefined") {
+                temp = data;
+            }
+            console.log("[+] GET data :", temp);
+            var set = JSON.parse(localStorage.getItem(target));
+            //console.log("[+] DB data : ", set);
+            for (var i = 0; i < select.length; i++) {
+                set[select[i]] = temp[select[i]];
+            }
+            //console.log("[+] after set value",set);
+            localStorage.setItem(target, JSON.stringify(set));
+        }
+        catch (e) {
+            console.log("[-] Error ", e);
+            return false;
+        }
+        return true;
+    };
+    localStorage_service.prototype.load = function (data, target) {
+        var temp = JSON.parse(localStorage.getItem(target));
+        return temp[data];
+    };
+    localStorage_service = __decorate([
+        core_1.Injectable(), 
+        __metadata('design:paramtypes', [])
+    ], localStorage_service);
+    return localStorage_service;
+}());
+exports.localStorage_service = localStorage_service;
+
+},{"@angular/core":159}],12:[function(require,module,exports){
+"use strict";
+var io = require('socket.io-client'); //SOCKET.IO - CLINENT
+var Socket_service_busking = (function () {
+    function Socket_service_busking() {
+        console.log("socket init");
+        this.socket = io.connect("http://192.168.1.9:8000", { transports: ['websocket', 'poling', 'flashsocket'] });
+    }
+    return Socket_service_busking;
+}());
+exports.Socket_service_busking = Socket_service_busking;
+var Socket_service_donation = (function () {
+    function Socket_service_donation() {
+        console.log("socket init");
+        this.socket = io("http://192.168.1.9:9000", { transports: ['websocket', 'poling', 'flashsocket'] });
+    }
+    return Socket_service_donation;
+}());
+exports.Socket_service_donation = Socket_service_donation;
+
+},{"socket.io-client":759}],13:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
@@ -1230,7 +1497,7 @@ __export(require('./src/forms-deprecated'));
 __export(require('./src/common_directives'));
 __export(require('./src/location'));
 
-},{"./src/common_directives":12,"./src/directives":13,"./src/forms-deprecated":30,"./src/location":55,"./src/pipes":61}],12:[function(require,module,exports){
+},{"./src/common_directives":14,"./src/directives":15,"./src/forms-deprecated":32,"./src/location":57,"./src/pipes":63}],14:[function(require,module,exports){
 "use strict";
 var directives_1 = require('./directives');
 var forms_deprecated_1 = require('./forms-deprecated');
@@ -1281,7 +1548,7 @@ var forms_deprecated_1 = require('./forms-deprecated');
  */
 exports.COMMON_DIRECTIVES = [directives_1.CORE_DIRECTIVES, forms_deprecated_1.FORM_DIRECTIVES];
 
-},{"./directives":13,"./forms-deprecated":30}],13:[function(require,module,exports){
+},{"./directives":15,"./forms-deprecated":32}],15:[function(require,module,exports){
 "use strict";
 /**
  * @module
@@ -1309,7 +1576,7 @@ exports.NgSwitchDefault = ng_switch_1.NgSwitchDefault;
 var ng_template_outlet_1 = require('./directives/ng_template_outlet');
 exports.NgTemplateOutlet = ng_template_outlet_1.NgTemplateOutlet;
 
-},{"./directives/core_directives":14,"./directives/ng_class":15,"./directives/ng_for":16,"./directives/ng_if":17,"./directives/ng_plural":18,"./directives/ng_style":19,"./directives/ng_switch":20,"./directives/ng_template_outlet":21}],14:[function(require,module,exports){
+},{"./directives/core_directives":16,"./directives/ng_class":17,"./directives/ng_for":18,"./directives/ng_if":19,"./directives/ng_plural":20,"./directives/ng_style":21,"./directives/ng_switch":22,"./directives/ng_template_outlet":23}],16:[function(require,module,exports){
 "use strict";
 var ng_class_1 = require('./ng_class');
 var ng_for_1 = require('./ng_for');
@@ -1373,7 +1640,7 @@ exports.CORE_DIRECTIVES = [
     ng_plural_1.NgPluralCase,
 ];
 
-},{"./ng_class":15,"./ng_for":16,"./ng_if":17,"./ng_plural":18,"./ng_style":19,"./ng_switch":20,"./ng_template_outlet":21}],15:[function(require,module,exports){
+},{"./ng_class":17,"./ng_for":18,"./ng_if":19,"./ng_plural":20,"./ng_style":21,"./ng_switch":22,"./ng_template_outlet":23}],17:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../facade/collection');
@@ -1501,7 +1768,7 @@ var NgClass = (function () {
 }());
 exports.NgClass = NgClass;
 
-},{"../facade/collection":24,"../facade/lang":28,"@angular/core":157}],16:[function(require,module,exports){
+},{"../facade/collection":26,"../facade/lang":30,"@angular/core":159}],18:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var exceptions_1 = require('../facade/exceptions');
@@ -1664,7 +1931,7 @@ var RecordViewTuple = (function () {
     return RecordViewTuple;
 }());
 
-},{"../facade/exceptions":26,"../facade/lang":28,"@angular/core":157}],17:[function(require,module,exports){
+},{"../facade/exceptions":28,"../facade/lang":30,"@angular/core":159}],19:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../facade/lang');
@@ -1701,7 +1968,7 @@ var NgIf = (function () {
 }());
 exports.NgIf = NgIf;
 
-},{"../facade/lang":28,"@angular/core":157}],18:[function(require,module,exports){
+},{"../facade/lang":30,"@angular/core":159}],20:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../facade/collection');
@@ -1807,7 +2074,7 @@ var NgPlural = (function () {
 }());
 exports.NgPlural = NgPlural;
 
-},{"../facade/collection":24,"../facade/lang":28,"./ng_switch":20,"@angular/core":157}],19:[function(require,module,exports){
+},{"../facade/collection":26,"../facade/lang":30,"./ng_switch":22,"@angular/core":159}],21:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../facade/lang');
@@ -1858,7 +2125,7 @@ var NgStyle = (function () {
 }());
 exports.NgStyle = NgStyle;
 
-},{"../facade/lang":28,"@angular/core":157}],20:[function(require,module,exports){
+},{"../facade/lang":30,"@angular/core":159}],22:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../facade/collection');
@@ -2025,7 +2292,7 @@ var NgSwitchDefault = (function () {
 }());
 exports.NgSwitchDefault = NgSwitchDefault;
 
-},{"../facade/collection":24,"../facade/lang":28,"@angular/core":157}],21:[function(require,module,exports){
+},{"../facade/collection":26,"../facade/lang":30,"@angular/core":159}],23:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../facade/lang');
@@ -2080,7 +2347,7 @@ var NgTemplateOutlet = (function () {
 }());
 exports.NgTemplateOutlet = NgTemplateOutlet;
 
-},{"../facade/lang":28,"@angular/core":157}],22:[function(require,module,exports){
+},{"../facade/lang":30,"@angular/core":159}],24:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -2241,7 +2508,7 @@ var EventEmitter = (function (_super) {
 }(Subject_1.Subject));
 exports.EventEmitter = EventEmitter;
 
-},{"./lang":28,"./promise":29,"rxjs/Observable":519,"rxjs/Subject":525,"rxjs/observable/PromiseObservable":648,"rxjs/operator/toPromise":746}],23:[function(require,module,exports){
+},{"./lang":30,"./promise":31,"rxjs/Observable":488,"rxjs/Subject":494,"rxjs/observable/PromiseObservable":617,"rxjs/operator/toPromise":715}],25:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -2292,7 +2559,7 @@ var BaseWrappedException = (function (_super) {
 }(Error));
 exports.BaseWrappedException = BaseWrappedException;
 
-},{}],24:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 "use strict";
 var lang_1 = require('./lang');
 exports.Map = lang_1.global.Map;
@@ -2661,7 +2928,7 @@ var SetWrapper = (function () {
 }());
 exports.SetWrapper = SetWrapper;
 
-},{"./lang":28}],25:[function(require,module,exports){
+},{"./lang":30}],27:[function(require,module,exports){
 "use strict";
 var base_wrapped_exception_1 = require('./base_wrapped_exception');
 var collection_1 = require('./collection');
@@ -2795,7 +3062,7 @@ var ExceptionHandler = (function () {
 }());
 exports.ExceptionHandler = ExceptionHandler;
 
-},{"./base_wrapped_exception":23,"./collection":24,"./lang":28}],26:[function(require,module,exports){
+},{"./base_wrapped_exception":25,"./collection":26,"./lang":30}],28:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -2878,7 +3145,7 @@ function unimplemented() {
 }
 exports.unimplemented = unimplemented;
 
-},{"./base_wrapped_exception":23,"./exception_handler":25}],27:[function(require,module,exports){
+},{"./base_wrapped_exception":25,"./exception_handler":27}],29:[function(require,module,exports){
 "use strict";
 (function (NumberFormatStyle) {
     NumberFormatStyle[NumberFormatStyle["Decimal"] = 0] = "Decimal";
@@ -3061,7 +3328,7 @@ var DateFormatter = (function () {
 }());
 exports.DateFormatter = DateFormatter;
 
-},{}],28:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 (function (global){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
@@ -3515,7 +3782,7 @@ exports.escapeRegExp = escapeRegExp;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{}],29:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 "use strict";
 var PromiseCompleter = (function () {
     function PromiseCompleter() {
@@ -3564,7 +3831,7 @@ var PromiseWrapper = (function () {
 }());
 exports.PromiseWrapper = PromiseWrapper;
 
-},{}],30:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 "use strict";
 var radio_control_value_accessor_1 = require('./forms-deprecated/directives/radio_control_value_accessor');
 var form_builder_1 = require('./forms-deprecated/form_builder');
@@ -3629,7 +3896,7 @@ exports.Validators = validators_2.Validators;
  */
 exports.FORM_PROVIDERS = [form_builder_1.FormBuilder, radio_control_value_accessor_1.RadioControlRegistry];
 
-},{"./forms-deprecated/directives":31,"./forms-deprecated/directives/abstract_control_directive":32,"./forms-deprecated/directives/checkbox_value_accessor":33,"./forms-deprecated/directives/control_container":34,"./forms-deprecated/directives/control_value_accessor":35,"./forms-deprecated/directives/default_value_accessor":36,"./forms-deprecated/directives/ng_control":37,"./forms-deprecated/directives/ng_control_group":38,"./forms-deprecated/directives/ng_control_name":39,"./forms-deprecated/directives/ng_control_status":40,"./forms-deprecated/directives/ng_form":41,"./forms-deprecated/directives/ng_form_control":42,"./forms-deprecated/directives/ng_form_model":43,"./forms-deprecated/directives/ng_model":44,"./forms-deprecated/directives/radio_control_value_accessor":47,"./forms-deprecated/directives/select_control_value_accessor":48,"./forms-deprecated/directives/validators":51,"./forms-deprecated/form_builder":52,"./forms-deprecated/model":53,"./forms-deprecated/validators":54}],31:[function(require,module,exports){
+},{"./forms-deprecated/directives":33,"./forms-deprecated/directives/abstract_control_directive":34,"./forms-deprecated/directives/checkbox_value_accessor":35,"./forms-deprecated/directives/control_container":36,"./forms-deprecated/directives/control_value_accessor":37,"./forms-deprecated/directives/default_value_accessor":38,"./forms-deprecated/directives/ng_control":39,"./forms-deprecated/directives/ng_control_group":40,"./forms-deprecated/directives/ng_control_name":41,"./forms-deprecated/directives/ng_control_status":42,"./forms-deprecated/directives/ng_form":43,"./forms-deprecated/directives/ng_form_control":44,"./forms-deprecated/directives/ng_form_model":45,"./forms-deprecated/directives/ng_model":46,"./forms-deprecated/directives/radio_control_value_accessor":49,"./forms-deprecated/directives/select_control_value_accessor":50,"./forms-deprecated/directives/validators":53,"./forms-deprecated/form_builder":54,"./forms-deprecated/model":55,"./forms-deprecated/validators":56}],33:[function(require,module,exports){
 "use strict";
 var checkbox_value_accessor_1 = require('./directives/checkbox_value_accessor');
 var default_value_accessor_1 = require('./directives/default_value_accessor');
@@ -3720,7 +3987,7 @@ exports.FORM_DIRECTIVES = [
     validators_1.PatternValidator,
 ];
 
-},{"./directives/checkbox_value_accessor":33,"./directives/default_value_accessor":36,"./directives/ng_control":37,"./directives/ng_control_group":38,"./directives/ng_control_name":39,"./directives/ng_control_status":40,"./directives/ng_form":41,"./directives/ng_form_control":42,"./directives/ng_form_model":43,"./directives/ng_model":44,"./directives/number_value_accessor":46,"./directives/radio_control_value_accessor":47,"./directives/select_control_value_accessor":48,"./directives/select_multiple_control_value_accessor":49,"./directives/validators":51}],32:[function(require,module,exports){
+},{"./directives/checkbox_value_accessor":35,"./directives/default_value_accessor":38,"./directives/ng_control":39,"./directives/ng_control_group":40,"./directives/ng_control_name":41,"./directives/ng_control_status":42,"./directives/ng_form":43,"./directives/ng_form_control":44,"./directives/ng_form_model":45,"./directives/ng_model":46,"./directives/number_value_accessor":48,"./directives/radio_control_value_accessor":49,"./directives/select_control_value_accessor":50,"./directives/select_multiple_control_value_accessor":51,"./directives/validators":53}],34:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../../facade/exceptions');
 var lang_1 = require('../../facade/lang');
@@ -3785,7 +4052,7 @@ var AbstractControlDirective = (function () {
 }());
 exports.AbstractControlDirective = AbstractControlDirective;
 
-},{"../../facade/exceptions":26,"../../facade/lang":28}],33:[function(require,module,exports){
+},{"../../facade/exceptions":28,"../../facade/lang":30}],35:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var control_value_accessor_1 = require('./control_value_accessor');
@@ -3823,7 +4090,7 @@ var CheckboxControlValueAccessor = (function () {
 }());
 exports.CheckboxControlValueAccessor = CheckboxControlValueAccessor;
 
-},{"./control_value_accessor":35,"@angular/core":157}],34:[function(require,module,exports){
+},{"./control_value_accessor":37,"@angular/core":159}],36:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -3863,7 +4130,7 @@ var ControlContainer = (function (_super) {
 }(abstract_control_directive_1.AbstractControlDirective));
 exports.ControlContainer = ControlContainer;
 
-},{"./abstract_control_directive":32}],35:[function(require,module,exports){
+},{"./abstract_control_directive":34}],37:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 /**
@@ -3875,7 +4142,7 @@ var core_1 = require('@angular/core');
 exports.NG_VALUE_ACCESSOR = 
 /*@ts2dart_const*/ new core_1.OpaqueToken('NgValueAccessor');
 
-},{"@angular/core":157}],36:[function(require,module,exports){
+},{"@angular/core":159}],38:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../../facade/lang');
@@ -3919,7 +4186,7 @@ var DefaultValueAccessor = (function () {
 }());
 exports.DefaultValueAccessor = DefaultValueAccessor;
 
-},{"../../facade/lang":28,"./control_value_accessor":35,"@angular/core":157}],37:[function(require,module,exports){
+},{"../../facade/lang":30,"./control_value_accessor":37,"@angular/core":159}],39:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -3957,7 +4224,7 @@ var NgControl = (function (_super) {
 }(abstract_control_directive_1.AbstractControlDirective));
 exports.NgControl = NgControl;
 
-},{"../../facade/exceptions":26,"./abstract_control_directive":32}],38:[function(require,module,exports){
+},{"../../facade/exceptions":28,"./abstract_control_directive":34}],40:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -4036,7 +4303,7 @@ var NgControlGroup = (function (_super) {
 }(control_container_1.ControlContainer));
 exports.NgControlGroup = NgControlGroup;
 
-},{"../validators":54,"./control_container":34,"./shared":50,"@angular/core":157}],39:[function(require,module,exports){
+},{"../validators":56,"./control_container":36,"./shared":52,"@angular/core":159}],41:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -4130,7 +4397,7 @@ var NgControlName = (function (_super) {
 }(ng_control_1.NgControl));
 exports.NgControlName = NgControlName;
 
-},{"../../facade/async":22,"../validators":54,"./control_container":34,"./control_value_accessor":35,"./ng_control":37,"./shared":50,"@angular/core":157}],40:[function(require,module,exports){
+},{"../../facade/async":24,"../validators":56,"./control_container":36,"./control_value_accessor":37,"./ng_control":39,"./shared":52,"@angular/core":159}],42:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../../facade/lang');
@@ -4203,7 +4470,7 @@ var NgControlStatus = (function () {
 }());
 exports.NgControlStatus = NgControlStatus;
 
-},{"../../facade/lang":28,"./ng_control":37,"@angular/core":157}],41:[function(require,module,exports){
+},{"../../facade/lang":30,"./ng_control":39,"@angular/core":159}],43:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -4342,7 +4609,7 @@ var NgForm = (function (_super) {
 }(control_container_1.ControlContainer));
 exports.NgForm = NgForm;
 
-},{"../../facade/async":22,"../../facade/collection":24,"../../facade/lang":28,"../model":53,"../validators":54,"./control_container":34,"./shared":50,"@angular/core":157}],42:[function(require,module,exports){
+},{"../../facade/async":24,"../../facade/collection":26,"../../facade/lang":30,"../model":55,"../validators":56,"./control_container":36,"./shared":52,"@angular/core":159}],44:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -4429,7 +4696,7 @@ var NgFormControl = (function (_super) {
 }(ng_control_1.NgControl));
 exports.NgFormControl = NgFormControl;
 
-},{"../../facade/async":22,"../../facade/collection":24,"../validators":54,"./control_value_accessor":35,"./ng_control":37,"./shared":50,"@angular/core":157}],43:[function(require,module,exports){
+},{"../../facade/async":24,"../../facade/collection":26,"../validators":56,"./control_value_accessor":37,"./ng_control":39,"./shared":52,"@angular/core":159}],45:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -4559,7 +4826,7 @@ var NgFormModel = (function (_super) {
 }(control_container_1.ControlContainer));
 exports.NgFormModel = NgFormModel;
 
-},{"../../facade/async":22,"../../facade/collection":24,"../../facade/exceptions":26,"../../facade/lang":28,"../validators":54,"./control_container":34,"./shared":50,"@angular/core":157}],44:[function(require,module,exports){
+},{"../../facade/async":24,"../../facade/collection":26,"../../facade/exceptions":28,"../../facade/lang":30,"../validators":56,"./control_container":36,"./shared":52,"@angular/core":159}],46:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -4648,7 +4915,7 @@ var NgModel = (function (_super) {
 }(ng_control_1.NgControl));
 exports.NgModel = NgModel;
 
-},{"../../facade/async":22,"../model":53,"../validators":54,"./control_value_accessor":35,"./ng_control":37,"./shared":50,"@angular/core":157}],45:[function(require,module,exports){
+},{"../../facade/async":24,"../model":55,"../validators":56,"./control_value_accessor":37,"./ng_control":39,"./shared":52,"@angular/core":159}],47:[function(require,module,exports){
 "use strict";
 function normalizeValidator(validator) {
     if (validator.validate !== undefined) {
@@ -4669,7 +4936,7 @@ function normalizeAsyncValidator(validator) {
 }
 exports.normalizeAsyncValidator = normalizeAsyncValidator;
 
-},{}],46:[function(require,module,exports){
+},{}],48:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../../facade/lang');
@@ -4714,7 +4981,7 @@ var NumberValueAccessor = (function () {
 }());
 exports.NumberValueAccessor = NumberValueAccessor;
 
-},{"../../facade/lang":28,"./control_value_accessor":35,"@angular/core":157}],47:[function(require,module,exports){
+},{"../../facade/lang":30,"./control_value_accessor":37,"@angular/core":159}],49:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../../facade/collection');
@@ -4827,7 +5094,7 @@ var RadioControlValueAccessor = (function () {
 }());
 exports.RadioControlValueAccessor = RadioControlValueAccessor;
 
-},{"../../facade/collection":24,"../../facade/lang":28,"./control_value_accessor":35,"./ng_control":37,"@angular/core":157}],48:[function(require,module,exports){
+},{"../../facade/collection":26,"../../facade/lang":30,"./control_value_accessor":37,"./ng_control":39,"@angular/core":159}],50:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../../facade/collection');
@@ -4961,7 +5228,7 @@ var NgSelectOption = (function () {
 }());
 exports.NgSelectOption = NgSelectOption;
 
-},{"../../facade/collection":24,"../../facade/lang":28,"./control_value_accessor":35,"@angular/core":157}],49:[function(require,module,exports){
+},{"../../facade/collection":26,"../../facade/lang":30,"./control_value_accessor":37,"@angular/core":159}],51:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../../facade/collection');
@@ -5136,7 +5403,7 @@ var NgSelectMultipleOption = (function () {
 exports.NgSelectMultipleOption = NgSelectMultipleOption;
 exports.SELECT_DIRECTIVES = [SelectMultipleControlValueAccessor, NgSelectMultipleOption];
 
-},{"../../facade/collection":24,"../../facade/lang":28,"./control_value_accessor":35,"@angular/core":157}],50:[function(require,module,exports){
+},{"../../facade/collection":26,"../../facade/lang":30,"./control_value_accessor":37,"@angular/core":159}],52:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../../facade/collection');
 var exceptions_1 = require('../../facade/exceptions');
@@ -5238,7 +5505,7 @@ function selectValueAccessor(dir, valueAccessors) {
 }
 exports.selectValueAccessor = selectValueAccessor;
 
-},{"../../facade/collection":24,"../../facade/exceptions":26,"../../facade/lang":28,"../validators":54,"./checkbox_value_accessor":33,"./default_value_accessor":36,"./normalize_validator":45,"./number_value_accessor":46,"./radio_control_value_accessor":47,"./select_control_value_accessor":48}],51:[function(require,module,exports){
+},{"../../facade/collection":26,"../../facade/exceptions":28,"../../facade/lang":30,"../validators":56,"./checkbox_value_accessor":35,"./default_value_accessor":38,"./normalize_validator":47,"./number_value_accessor":48,"./radio_control_value_accessor":49,"./select_control_value_accessor":50}],53:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../../facade/lang');
@@ -5349,7 +5616,7 @@ var PatternValidator = (function () {
 }());
 exports.PatternValidator = PatternValidator;
 
-},{"../../facade/lang":28,"../validators":54,"@angular/core":157}],52:[function(require,module,exports){
+},{"../../facade/lang":30,"../validators":56,"@angular/core":159}],54:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../facade/collection');
@@ -5425,7 +5692,7 @@ var FormBuilder = (function () {
 }());
 exports.FormBuilder = FormBuilder;
 
-},{"../facade/collection":24,"../facade/lang":28,"./model":53,"@angular/core":157}],53:[function(require,module,exports){
+},{"../facade/collection":26,"../facade/lang":30,"./model":55,"@angular/core":159}],55:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -5944,7 +6211,7 @@ var ControlArray = (function (_super) {
 }(AbstractControl));
 exports.ControlArray = ControlArray;
 
-},{"../facade/async":22,"../facade/collection":24,"../facade/lang":28}],54:[function(require,module,exports){
+},{"../facade/async":24,"../facade/collection":26,"../facade/lang":30}],56:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var async_1 = require('../facade/async');
@@ -6086,7 +6353,7 @@ function _mergeErrors(arrayOfErrors) {
     return collection_1.StringMapWrapper.isEmpty(res) ? null : res;
 }
 
-},{"../facade/async":22,"../facade/collection":24,"../facade/lang":28,"../facade/promise":29,"@angular/core":157}],55:[function(require,module,exports){
+},{"../facade/async":24,"../facade/collection":26,"../facade/lang":30,"../facade/promise":31,"@angular/core":159}],57:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
@@ -6097,7 +6364,7 @@ __export(require('./location/hash_location_strategy'));
 __export(require('./location/path_location_strategy'));
 __export(require('./location/location'));
 
-},{"./location/hash_location_strategy":56,"./location/location":57,"./location/location_strategy":58,"./location/path_location_strategy":59,"./location/platform_location":60}],56:[function(require,module,exports){
+},{"./location/hash_location_strategy":58,"./location/location":59,"./location/location_strategy":60,"./location/path_location_strategy":61,"./location/platform_location":62}],58:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -6168,7 +6435,7 @@ var HashLocationStrategy = (function (_super) {
 }(location_strategy_1.LocationStrategy));
 exports.HashLocationStrategy = HashLocationStrategy;
 
-},{"../facade/lang":28,"./location":57,"./location_strategy":58,"./platform_location":60,"@angular/core":157}],57:[function(require,module,exports){
+},{"../facade/lang":30,"./location":59,"./location_strategy":60,"./platform_location":62,"@angular/core":159}],59:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var async_1 = require('../facade/async');
@@ -6314,7 +6581,7 @@ function _stripIndexHtml(url) {
     return url;
 }
 
-},{"../facade/async":22,"./location_strategy":58,"@angular/core":157}],58:[function(require,module,exports){
+},{"../facade/async":24,"./location_strategy":60,"@angular/core":159}],60:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 /**
@@ -6373,7 +6640,7 @@ exports.LocationStrategy = LocationStrategy;
  */
 exports.APP_BASE_HREF = new core_1.OpaqueToken('appBaseHref');
 
-},{"@angular/core":157}],59:[function(require,module,exports){
+},{"@angular/core":159}],61:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -6434,7 +6701,7 @@ var PathLocationStrategy = (function (_super) {
 }(location_strategy_1.LocationStrategy));
 exports.PathLocationStrategy = PathLocationStrategy;
 
-},{"../facade/exceptions":26,"../facade/lang":28,"./location":57,"./location_strategy":58,"./platform_location":60,"@angular/core":157}],60:[function(require,module,exports){
+},{"../facade/exceptions":28,"../facade/lang":30,"./location":59,"./location_strategy":60,"./platform_location":62,"@angular/core":159}],62:[function(require,module,exports){
 "use strict";
 /**
  * This class should not be used directly by an application developer. Instead, use
@@ -6484,7 +6751,7 @@ var PlatformLocation = (function () {
 }());
 exports.PlatformLocation = PlatformLocation;
 
-},{}],61:[function(require,module,exports){
+},{}],63:[function(require,module,exports){
 /**
  * @module
  * @description
@@ -6516,7 +6783,7 @@ exports.SlicePipe = slice_pipe_1.SlicePipe;
 var uppercase_pipe_1 = require('./pipes/uppercase_pipe');
 exports.UpperCasePipe = uppercase_pipe_1.UpperCasePipe;
 
-},{"./pipes/async_pipe":62,"./pipes/common_pipes":63,"./pipes/date_pipe":64,"./pipes/i18n_plural_pipe":65,"./pipes/i18n_select_pipe":66,"./pipes/json_pipe":68,"./pipes/lowercase_pipe":69,"./pipes/number_pipe":70,"./pipes/replace_pipe":71,"./pipes/slice_pipe":72,"./pipes/uppercase_pipe":73}],62:[function(require,module,exports){
+},{"./pipes/async_pipe":64,"./pipes/common_pipes":65,"./pipes/date_pipe":66,"./pipes/i18n_plural_pipe":67,"./pipes/i18n_select_pipe":68,"./pipes/json_pipe":70,"./pipes/lowercase_pipe":71,"./pipes/number_pipe":72,"./pipes/replace_pipe":73,"./pipes/slice_pipe":74,"./pipes/uppercase_pipe":75}],64:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var async_1 = require('../facade/async');
@@ -6629,7 +6896,7 @@ var AsyncPipe = (function () {
 }());
 exports.AsyncPipe = AsyncPipe;
 
-},{"../facade/async":22,"../facade/lang":28,"./invalid_pipe_argument_exception":67,"@angular/core":157}],63:[function(require,module,exports){
+},{"../facade/async":24,"../facade/lang":30,"./invalid_pipe_argument_exception":69,"@angular/core":159}],65:[function(require,module,exports){
 "use strict";
 /**
  * @module
@@ -6670,7 +6937,7 @@ exports.COMMON_PIPES = [
     i18n_select_pipe_1.I18nSelectPipe,
 ];
 
-},{"./async_pipe":62,"./date_pipe":64,"./i18n_plural_pipe":65,"./i18n_select_pipe":66,"./json_pipe":68,"./lowercase_pipe":69,"./number_pipe":70,"./replace_pipe":71,"./slice_pipe":72,"./uppercase_pipe":73}],64:[function(require,module,exports){
+},{"./async_pipe":64,"./date_pipe":66,"./i18n_plural_pipe":67,"./i18n_select_pipe":68,"./json_pipe":70,"./lowercase_pipe":71,"./number_pipe":72,"./replace_pipe":73,"./slice_pipe":74,"./uppercase_pipe":75}],66:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../facade/collection');
@@ -6728,7 +6995,7 @@ var DatePipe = (function () {
 }());
 exports.DatePipe = DatePipe;
 
-},{"../facade/collection":24,"../facade/intl":27,"../facade/lang":28,"./invalid_pipe_argument_exception":67,"@angular/core":157}],65:[function(require,module,exports){
+},{"../facade/collection":26,"../facade/intl":29,"../facade/lang":30,"./invalid_pipe_argument_exception":69,"@angular/core":159}],67:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../facade/lang');
@@ -6755,7 +7022,7 @@ var I18nPluralPipe = (function () {
 }());
 exports.I18nPluralPipe = I18nPluralPipe;
 
-},{"../facade/lang":28,"./invalid_pipe_argument_exception":67,"@angular/core":157}],66:[function(require,module,exports){
+},{"../facade/lang":30,"./invalid_pipe_argument_exception":69,"@angular/core":159}],68:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../facade/collection');
@@ -6778,7 +7045,7 @@ var I18nSelectPipe = (function () {
 }());
 exports.I18nSelectPipe = I18nSelectPipe;
 
-},{"../facade/collection":24,"../facade/lang":28,"./invalid_pipe_argument_exception":67,"@angular/core":157}],67:[function(require,module,exports){
+},{"../facade/collection":26,"../facade/lang":30,"./invalid_pipe_argument_exception":69,"@angular/core":159}],69:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -6796,7 +7063,7 @@ var InvalidPipeArgumentException = (function (_super) {
 }(exceptions_1.BaseException));
 exports.InvalidPipeArgumentException = InvalidPipeArgumentException;
 
-},{"../facade/exceptions":26,"../facade/lang":28}],68:[function(require,module,exports){
+},{"../facade/exceptions":28,"../facade/lang":30}],70:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../facade/lang');
@@ -6812,7 +7079,7 @@ var JsonPipe = (function () {
 }());
 exports.JsonPipe = JsonPipe;
 
-},{"../facade/lang":28,"@angular/core":157}],69:[function(require,module,exports){
+},{"../facade/lang":30,"@angular/core":159}],71:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../facade/lang');
@@ -6836,7 +7103,7 @@ var LowerCasePipe = (function () {
 }());
 exports.LowerCasePipe = LowerCasePipe;
 
-},{"../facade/lang":28,"./invalid_pipe_argument_exception":67,"@angular/core":157}],70:[function(require,module,exports){
+},{"../facade/lang":30,"./invalid_pipe_argument_exception":69,"@angular/core":159}],72:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var exceptions_1 = require('../facade/exceptions');
@@ -6925,7 +7192,7 @@ var CurrencyPipe = (function () {
 }());
 exports.CurrencyPipe = CurrencyPipe;
 
-},{"../facade/exceptions":26,"../facade/intl":27,"../facade/lang":28,"./invalid_pipe_argument_exception":67,"@angular/core":157}],71:[function(require,module,exports){
+},{"../facade/exceptions":28,"../facade/intl":29,"../facade/lang":30,"./invalid_pipe_argument_exception":69,"@angular/core":159}],73:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../facade/lang');
@@ -6972,7 +7239,7 @@ var ReplacePipe = (function () {
 }());
 exports.ReplacePipe = ReplacePipe;
 
-},{"../facade/lang":28,"./invalid_pipe_argument_exception":67,"@angular/core":157}],72:[function(require,module,exports){
+},{"../facade/lang":30,"./invalid_pipe_argument_exception":69,"@angular/core":159}],74:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../facade/collection');
@@ -7002,7 +7269,7 @@ var SlicePipe = (function () {
 }());
 exports.SlicePipe = SlicePipe;
 
-},{"../facade/collection":24,"../facade/lang":28,"./invalid_pipe_argument_exception":67,"@angular/core":157}],73:[function(require,module,exports){
+},{"../facade/collection":26,"../facade/lang":30,"./invalid_pipe_argument_exception":69,"@angular/core":159}],75:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../facade/lang');
@@ -7026,7 +7293,7 @@ var UpperCasePipe = (function () {
 }());
 exports.UpperCasePipe = UpperCasePipe;
 
-},{"../facade/lang":28,"./invalid_pipe_argument_exception":67,"@angular/core":157}],74:[function(require,module,exports){
+},{"../facade/lang":30,"./invalid_pipe_argument_exception":69,"@angular/core":159}],76:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
@@ -7069,7 +7336,7 @@ exports.ElementSchemaRegistry = element_schema_registry_1.ElementSchemaRegistry;
 __export(require('./src/template_ast'));
 __export(require('./private_export'));
 
-},{"./private_export":77,"./src/compiler":85,"./src/schema/element_schema_registry":130,"./src/template_ast":135}],75:[function(require,module,exports){
+},{"./private_export":79,"./src/compiler":87,"./src/schema/element_schema_registry":132,"./src/template_ast":137}],77:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 exports.isDefaultChangeDetectionStrategy = core_1.__core_private__.isDefaultChangeDetectionStrategy;
@@ -7135,14 +7402,14 @@ exports.clearStyles = core_1.__core_private__.clearStyles;
 exports.collectAndResolveStyles = core_1.__core_private__.collectAndResolveStyles;
 exports.renderStyles = core_1.__core_private__.renderStyles;
 
-},{"@angular/core":157}],76:[function(require,module,exports){
+},{"@angular/core":159}],78:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
 }
 __export(require('./compiler'));
 
-},{"./compiler":74}],77:[function(require,module,exports){
+},{"./compiler":76}],79:[function(require,module,exports){
 "use strict";
 var directive_normalizer = require('./src/directive_normalizer');
 var lexer = require('./src/expression_parser/lexer');
@@ -7191,7 +7458,7 @@ var __compiler_private__;
     __compiler_private__.TypeScriptEmitter = ts_emitter.TypeScriptEmitter;
 })(__compiler_private__ = exports.__compiler_private__ || (exports.__compiler_private__ = {}));
 
-},{"./src/directive_normalizer":88,"./src/expression_parser/lexer":91,"./src/expression_parser/parser":92,"./src/html_parser":103,"./src/i18n/i18n_html_parser":106,"./src/i18n/message":107,"./src/i18n/message_extractor":108,"./src/i18n/xmb_serializer":110,"./src/metadata_resolver":113,"./src/output/path_util":122,"./src/output/ts_emitter":123,"./src/parse_util":124,"./src/schema/dom_element_schema_registry":128,"./src/selector":131,"./src/style_compiler":133,"./src/template_parser":136,"./src/view_compiler/view_compiler":154}],78:[function(require,module,exports){
+},{"./src/directive_normalizer":90,"./src/expression_parser/lexer":93,"./src/expression_parser/parser":94,"./src/html_parser":105,"./src/i18n/i18n_html_parser":108,"./src/i18n/message":109,"./src/i18n/message_extractor":110,"./src/i18n/xmb_serializer":112,"./src/metadata_resolver":115,"./src/output/path_util":124,"./src/output/ts_emitter":125,"./src/parse_util":126,"./src/schema/dom_element_schema_registry":130,"./src/selector":133,"./src/style_compiler":135,"./src/template_parser":138,"./src/view_compiler/view_compiler":156}],80:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -7335,7 +7602,7 @@ var AnimationSequenceAst = (function (_super) {
 }(AnimationWithStepsAst));
 exports.AnimationSequenceAst = AnimationSequenceAst;
 
-},{}],79:[function(require,module,exports){
+},{}],81:[function(require,module,exports){
 "use strict";
 var core_private_1 = require('../../core_private');
 var collection_1 = require('../facade/collection');
@@ -7622,7 +7889,7 @@ function _getStylesArray(obj) {
     return obj.styles.styles;
 }
 
-},{"../../core_private":75,"../facade/collection":95,"../facade/exceptions":97,"../facade/lang":98,"../identifiers":111,"../output/output_ast":119,"./animation_ast":78,"./animation_parser":80}],80:[function(require,module,exports){
+},{"../../core_private":77,"../facade/collection":97,"../facade/exceptions":99,"../facade/lang":100,"../identifiers":113,"../output/output_ast":121,"./animation_ast":80,"./animation_parser":82}],82:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -8091,7 +8358,7 @@ function _createStartKeyframeFromEndKeyframe(endKeyframe, startTime, duration, c
     return new animation_ast_1.AnimationKeyframeAst(_INITIAL_KEYFRAME, new animation_ast_1.AnimationStylesAst([values]));
 }
 
-},{"../../core_private":75,"../compile_metadata":84,"../facade/collection":95,"../facade/lang":98,"../facade/math":99,"../parse_util":124,"./animation_ast":78,"./styles_collection":81}],81:[function(require,module,exports){
+},{"../../core_private":77,"../compile_metadata":86,"../facade/collection":97,"../facade/lang":100,"../facade/math":101,"../parse_util":126,"./animation_ast":80,"./styles_collection":83}],83:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var lang_1 = require('../facade/lang');
@@ -8148,7 +8415,7 @@ var StylesCollection = (function () {
 }());
 exports.StylesCollection = StylesCollection;
 
-},{"../facade/collection":95,"../facade/lang":98}],82:[function(require,module,exports){
+},{"../facade/collection":97,"../facade/lang":100}],84:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var exceptions_1 = require('../src/facade/exceptions');
@@ -8189,7 +8456,7 @@ function assertInterpolationSymbols(identifier, value) {
 }
 exports.assertInterpolationSymbols = assertInterpolationSymbols;
 
-},{"../src/facade/exceptions":97,"../src/facade/lang":98,"@angular/core":157}],83:[function(require,module,exports){
+},{"../src/facade/exceptions":99,"../src/facade/lang":100,"@angular/core":159}],85:[function(require,module,exports){
 "use strict";
 exports.$EOF = 0;
 exports.$TAB = 9;
@@ -8253,7 +8520,7 @@ function isWhitespace(code) {
 }
 exports.isWhitespace = isWhitespace;
 
-},{}],84:[function(require,module,exports){
+},{}],86:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -9117,7 +9384,7 @@ function _normalizeArray(obj) {
     return lang_1.isPresent(obj) ? obj : [];
 }
 
-},{"../core_private":75,"../src/facade/collection":95,"../src/facade/exceptions":97,"../src/facade/lang":98,"./selector":131,"./url_resolver":138,"./util":139,"@angular/core":157}],85:[function(require,module,exports){
+},{"../core_private":77,"../src/facade/collection":97,"../src/facade/exceptions":99,"../src/facade/lang":100,"./selector":133,"./url_resolver":140,"./util":141,"@angular/core":159}],87:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
@@ -9173,7 +9440,7 @@ exports.COMPILER_PROVIDERS =
     url_resolver_2.UrlResolver, view_resolver_2.ViewResolver, directive_resolver_2.DirectiveResolver, pipe_resolver_2.PipeResolver
 ];
 
-},{"./compile_metadata":84,"./config":86,"./directive_normalizer":88,"./directive_resolver":89,"./expression_parser/lexer":91,"./expression_parser/parser":92,"./html_parser":103,"./metadata_resolver":113,"./offline_compiler":114,"./pipe_resolver":125,"./runtime_compiler":127,"./schema/dom_element_schema_registry":128,"./schema/element_schema_registry":130,"./style_compiler":133,"./template_ast":135,"./template_parser":136,"./url_resolver":138,"./view_compiler/view_compiler":154,"./view_resolver":155,"./xhr":156,"@angular/core":157}],86:[function(require,module,exports){
+},{"./compile_metadata":86,"./config":88,"./directive_normalizer":90,"./directive_resolver":91,"./expression_parser/lexer":93,"./expression_parser/parser":94,"./html_parser":105,"./metadata_resolver":115,"./offline_compiler":116,"./pipe_resolver":127,"./runtime_compiler":129,"./schema/dom_element_schema_registry":130,"./schema/element_schema_registry":132,"./style_compiler":135,"./template_ast":137,"./template_parser":138,"./url_resolver":140,"./view_compiler/view_compiler":156,"./view_resolver":157,"./xhr":158,"@angular/core":159}],88:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var exceptions_1 = require('../src/facade/exceptions');
@@ -9260,7 +9527,7 @@ var DefaultRenderTypes = (function () {
 }());
 exports.DefaultRenderTypes = DefaultRenderTypes;
 
-},{"../src/facade/exceptions":97,"./identifiers":111,"@angular/core":157}],87:[function(require,module,exports){
+},{"../src/facade/exceptions":99,"./identifiers":113,"@angular/core":159}],89:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var core_private_1 = require('../core_private');
@@ -9292,7 +9559,7 @@ function hasLifecycleHook(hook, token /** TODO #9100 */) {
 }
 exports.hasLifecycleHook = hasLifecycleHook;
 
-},{"../core_private":75,"../src/facade/collection":95,"@angular/core":157}],88:[function(require,module,exports){
+},{"../core_private":77,"../src/facade/collection":97,"@angular/core":159}],90:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var async_1 = require('../src/facade/async');
@@ -9453,7 +9720,7 @@ var TemplatePreparseVisitor = (function () {
     return TemplatePreparseVisitor;
 }());
 
-},{"../src/facade/async":93,"../src/facade/exceptions":97,"../src/facade/lang":98,"./compile_metadata":84,"./config":86,"./html_ast":101,"./html_parser":103,"./style_url_resolver":134,"./template_preparser":137,"./url_resolver":138,"./xhr":156,"@angular/core":157}],89:[function(require,module,exports){
+},{"../src/facade/async":95,"../src/facade/exceptions":99,"../src/facade/lang":100,"./compile_metadata":86,"./config":88,"./html_ast":103,"./html_parser":105,"./style_url_resolver":136,"./template_preparser":139,"./url_resolver":140,"./xhr":158,"@angular/core":159}],91:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var core_private_1 = require('../core_private');
@@ -9579,7 +9846,7 @@ var DirectiveResolver = (function () {
 exports.DirectiveResolver = DirectiveResolver;
 exports.CODEGEN_DIRECTIVE_RESOLVER = new DirectiveResolver(core_private_1.reflector);
 
-},{"../core_private":75,"../src/facade/collection":95,"../src/facade/exceptions":97,"../src/facade/lang":98,"@angular/core":157}],90:[function(require,module,exports){
+},{"../core_private":77,"../src/facade/collection":97,"../src/facade/exceptions":99,"../src/facade/lang":100,"@angular/core":159}],92:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -10067,7 +10334,7 @@ var AstTransformer = (function () {
 }());
 exports.AstTransformer = AstTransformer;
 
-},{"../facade/collection":95}],91:[function(require,module,exports){
+},{"../facade/collection":97}],93:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -10496,7 +10763,7 @@ var OPERATORS = collection_1.SetWrapper.createFromList([
 ]);
 var KEYWORDS = collection_1.SetWrapper.createFromList(['var', 'let', 'null', 'undefined', 'true', 'false', 'if', 'else']);
 
-},{"../facade/collection":95,"../facade/exceptions":97,"../facade/lang":98,"@angular/core":157}],92:[function(require,module,exports){
+},{"../facade/collection":97,"../facade/exceptions":99,"../facade/lang":100,"@angular/core":159}],94:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -11168,17 +11435,17 @@ var SimpleExpressionChecker = (function () {
     return SimpleExpressionChecker;
 }());
 
-},{"../facade/collection":95,"../facade/exceptions":97,"../facade/lang":98,"../interpolation_config":112,"./ast":90,"./lexer":91,"@angular/core":157}],93:[function(require,module,exports){
-arguments[4][22][0].apply(exports,arguments)
-},{"./lang":98,"./promise":100,"dup":22,"rxjs/Observable":519,"rxjs/Subject":525,"rxjs/observable/PromiseObservable":648,"rxjs/operator/toPromise":746}],94:[function(require,module,exports){
-arguments[4][23][0].apply(exports,arguments)
-},{"dup":23}],95:[function(require,module,exports){
+},{"../facade/collection":97,"../facade/exceptions":99,"../facade/lang":100,"../interpolation_config":114,"./ast":92,"./lexer":93,"@angular/core":159}],95:[function(require,module,exports){
 arguments[4][24][0].apply(exports,arguments)
-},{"./lang":98,"dup":24}],96:[function(require,module,exports){
+},{"./lang":100,"./promise":102,"dup":24,"rxjs/Observable":488,"rxjs/Subject":494,"rxjs/observable/PromiseObservable":617,"rxjs/operator/toPromise":715}],96:[function(require,module,exports){
 arguments[4][25][0].apply(exports,arguments)
-},{"./base_wrapped_exception":94,"./collection":95,"./lang":98,"dup":25}],97:[function(require,module,exports){
+},{"dup":25}],97:[function(require,module,exports){
 arguments[4][26][0].apply(exports,arguments)
-},{"./base_wrapped_exception":94,"./exception_handler":96,"dup":26}],98:[function(require,module,exports){
+},{"./lang":100,"dup":26}],98:[function(require,module,exports){
+arguments[4][27][0].apply(exports,arguments)
+},{"./base_wrapped_exception":96,"./collection":97,"./lang":100,"dup":27}],99:[function(require,module,exports){
+arguments[4][28][0].apply(exports,arguments)
+},{"./base_wrapped_exception":96,"./exception_handler":98,"dup":28}],100:[function(require,module,exports){
 (function (global){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
@@ -11632,15 +11899,15 @@ exports.escapeRegExp = escapeRegExp;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{}],99:[function(require,module,exports){
+},{}],101:[function(require,module,exports){
 "use strict";
 var lang_1 = require('./lang');
 exports.Math = lang_1.global.Math;
 exports.NaN = typeof exports.NaN;
 
-},{"./lang":98}],100:[function(require,module,exports){
-arguments[4][29][0].apply(exports,arguments)
-},{"dup":29}],101:[function(require,module,exports){
+},{"./lang":100}],102:[function(require,module,exports){
+arguments[4][31][0].apply(exports,arguments)
+},{"dup":31}],103:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../src/facade/lang');
 var HtmlTextAst = (function () {
@@ -11725,7 +11992,7 @@ function htmlVisitAll(visitor, asts, context) {
 }
 exports.htmlVisitAll = htmlVisitAll;
 
-},{"../src/facade/lang":98}],102:[function(require,module,exports){
+},{"../src/facade/lang":100}],104:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -12395,7 +12662,7 @@ function mergeTextTokens(srcTokens) {
     return dstTokens;
 }
 
-},{"./chars":83,"./facade/collection":95,"./facade/lang":98,"./html_tags":104,"./interpolation_config":112,"./parse_util":124}],103:[function(require,module,exports){
+},{"./chars":85,"./facade/collection":97,"./facade/lang":100,"./html_tags":106,"./interpolation_config":114,"./parse_util":126}],105:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -12760,7 +13027,7 @@ function lastOnStack(stack, element) {
     return stack.length > 0 && stack[stack.length - 1] === element;
 }
 
-},{"../src/facade/collection":95,"../src/facade/lang":98,"./html_ast":101,"./html_lexer":102,"./html_tags":104,"./parse_util":124,"@angular/core":157}],104:[function(require,module,exports){
+},{"../src/facade/collection":97,"../src/facade/lang":100,"./html_ast":103,"./html_lexer":104,"./html_tags":106,"./parse_util":126,"@angular/core":159}],106:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../src/facade/lang');
 // see http://www.w3.org/TR/html51/syntax.html#named-character-references
@@ -13140,7 +13407,7 @@ function mergeNsAndName(prefix, localName) {
 }
 exports.mergeNsAndName = mergeNsAndName;
 
-},{"../src/facade/lang":98}],105:[function(require,module,exports){
+},{"../src/facade/lang":100}],107:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../facade/exceptions');
 var html_ast_1 = require('../html_ast');
@@ -13232,7 +13499,7 @@ function _expandDefaultForm(ast, errors) {
     return new html_ast_1.HtmlElementAst('ng-container', [switchAttr], children, ast.sourceSpan, ast.sourceSpan, ast.sourceSpan);
 }
 
-},{"../facade/exceptions":97,"../html_ast":101,"./shared":109}],106:[function(require,module,exports){
+},{"../facade/exceptions":99,"../html_ast":103,"./shared":111}],108:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var exceptions_1 = require('../facade/exceptions');
@@ -13505,7 +13772,7 @@ var _CreateNodeMapping = (function () {
     return _CreateNodeMapping;
 }());
 
-},{"../facade/collection":95,"../facade/exceptions":97,"../facade/lang":98,"../html_ast":101,"../html_parser":103,"../interpolation_config":112,"./expander":105,"./message":107,"./shared":109}],107:[function(require,module,exports){
+},{"../facade/collection":97,"../facade/exceptions":99,"../facade/lang":100,"../html_ast":103,"../html_parser":105,"../interpolation_config":114,"./expander":107,"./message":109,"./shared":111}],109:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 /**
@@ -13535,7 +13802,7 @@ function id(m) {
 }
 exports.id = id;
 
-},{"../facade/lang":98}],108:[function(require,module,exports){
+},{"../facade/lang":100}],110:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var lang_1 = require('../facade/lang');
@@ -13702,7 +13969,7 @@ var MessageExtractor = (function () {
 }());
 exports.MessageExtractor = MessageExtractor;
 
-},{"../facade/collection":95,"../facade/lang":98,"../html_ast":101,"../interpolation_config":112,"./message":107,"./shared":109}],109:[function(require,module,exports){
+},{"../facade/collection":97,"../facade/lang":100,"../html_ast":103,"../interpolation_config":114,"./message":109,"./shared":111}],111:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -13909,7 +14176,7 @@ var _StringifyVisitor = (function () {
     return _StringifyVisitor;
 }());
 
-},{"../facade/lang":98,"../html_ast":101,"../parse_util":124,"./message":107}],110:[function(require,module,exports){
+},{"../facade/lang":100,"../html_ast":103,"../parse_util":126,"./message":109}],112:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -14013,7 +14280,7 @@ function _escapeXml(value) {
     return _XML_ESCAPED_CHARS.reduce(function (value, escape) { return value.replace(escape[0], escape[1]); }, value);
 }
 
-},{"../facade/lang":98,"../html_ast":101,"../html_parser":103,"../parse_util":124,"./message":107}],111:[function(require,module,exports){
+},{"../facade/lang":100,"../html_ast":103,"../html_parser":105,"../parse_util":126,"./message":109}],113:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var core_private_1 = require('../core_private');
@@ -14204,14 +14471,14 @@ function identifierToken(identifier) {
 }
 exports.identifierToken = identifierToken;
 
-},{"../core_private":75,"./compile_metadata":84,"./util":139,"@angular/core":157}],112:[function(require,module,exports){
+},{"../core_private":77,"./compile_metadata":86,"./util":141,"@angular/core":159}],114:[function(require,module,exports){
 "use strict";
 exports.DEFAULT_INTERPOLATION_CONFIG = {
     start: '{{',
     end: '}}'
 };
 
-},{}],113:[function(require,module,exports){
+},{}],115:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -14682,7 +14949,7 @@ var _CompileValueConverter = (function (_super) {
     return _CompileValueConverter;
 }(util_1.ValueTransformer));
 
-},{"../core_private":75,"../src/facade/collection":95,"../src/facade/exceptions":97,"../src/facade/lang":98,"./assertions":82,"./compile_metadata":84,"./config":86,"./directive_lifecycle_reflector":87,"./directive_resolver":89,"./pipe_resolver":125,"./url_resolver":138,"./util":139,"./view_resolver":155,"@angular/core":157}],114:[function(require,module,exports){
+},{"../core_private":77,"../src/facade/collection":97,"../src/facade/exceptions":99,"../src/facade/lang":100,"./assertions":84,"./compile_metadata":86,"./config":88,"./directive_lifecycle_reflector":89,"./directive_resolver":91,"./pipe_resolver":127,"./url_resolver":140,"./util":141,"./view_resolver":157,"@angular/core":159}],116:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var compile_metadata_1 = require('./compile_metadata');
@@ -14822,7 +15089,7 @@ function _splitSuffix(path) {
     }
 }
 
-},{"./compile_metadata":84,"./facade/collection":95,"./facade/exceptions":97,"./output/output_ast":119,"./util":139,"@angular/core":157}],115:[function(require,module,exports){
+},{"./compile_metadata":86,"./facade/collection":97,"./facade/exceptions":99,"./output/output_ast":121,"./util":141,"@angular/core":159}],117:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../facade/exceptions');
 var lang_1 = require('../facade/lang');
@@ -15234,7 +15501,7 @@ function _createIndent(count) {
     return res;
 }
 
-},{"../facade/exceptions":97,"../facade/lang":98,"./output_ast":119}],116:[function(require,module,exports){
+},{"../facade/exceptions":99,"../facade/lang":100,"./output_ast":121}],118:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -15399,7 +15666,7 @@ var AbstractJsEmitterVisitor = (function (_super) {
 }(abstract_emitter_1.AbstractEmitterVisitor));
 exports.AbstractJsEmitterVisitor = AbstractJsEmitterVisitor;
 
-},{"../facade/exceptions":97,"../facade/lang":98,"./abstract_emitter":115,"./output_ast":119}],117:[function(require,module,exports){
+},{"../facade/exceptions":99,"../facade/lang":100,"./abstract_emitter":117,"./output_ast":121}],119:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -15781,7 +16048,7 @@ function isConstType(type) {
     return lang_1.isPresent(type) && type.hasModifier(o.TypeModifier.Const);
 }
 
-},{"../facade/exceptions":97,"../facade/lang":98,"./abstract_emitter":115,"./output_ast":119}],118:[function(require,module,exports){
+},{"../facade/exceptions":99,"../facade/lang":100,"./abstract_emitter":117,"./output_ast":121}],120:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -15875,7 +16142,7 @@ var _InterpretiveAppView = (function (_super) {
     return _InterpretiveAppView;
 }(core_private_1.DebugAppView));
 
-},{"../../core_private":75,"../facade/exceptions":97,"../facade/lang":98}],119:[function(require,module,exports){
+},{"../../core_private":77,"../facade/exceptions":99,"../facade/lang":100}],121:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -16855,7 +17122,7 @@ function fn(params, body, type) {
 }
 exports.fn = fn;
 
-},{"../facade/lang":98}],120:[function(require,module,exports){
+},{"../facade/lang":100}],122:[function(require,module,exports){
 "use strict";
 var core_private_1 = require('../../core_private');
 var async_1 = require('../facade/async');
@@ -17306,7 +17573,7 @@ function _declareFn(varNames, statements, ctx, visitor) {
 var CATCH_ERROR_VAR = 'error';
 var CATCH_STACK_VAR = 'stack';
 
-},{"../../core_private":75,"../facade/async":93,"../facade/collection":95,"../facade/exceptions":97,"../facade/lang":98,"./dart_emitter":117,"./output_ast":119,"./ts_emitter":123}],121:[function(require,module,exports){
+},{"../../core_private":77,"../facade/async":95,"../facade/collection":97,"../facade/exceptions":99,"../facade/lang":100,"./dart_emitter":119,"./output_ast":121,"./ts_emitter":125}],123:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -17353,7 +17620,7 @@ var JitEmitterVisitor = (function (_super) {
     return JitEmitterVisitor;
 }(abstract_js_emitter_1.AbstractJsEmitterVisitor));
 
-},{"../facade/lang":98,"../util":139,"./abstract_emitter":115,"./abstract_js_emitter":116}],122:[function(require,module,exports){
+},{"../facade/lang":100,"../util":141,"./abstract_emitter":117,"./abstract_js_emitter":118}],124:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../facade/exceptions');
 var lang_1 = require('../facade/lang');
@@ -17390,7 +17657,7 @@ var AssetUrl = (function () {
 }());
 exports.AssetUrl = AssetUrl;
 
-},{"../facade/exceptions":97,"../facade/lang":98}],123:[function(require,module,exports){
+},{"../facade/exceptions":99,"../facade/lang":100}],125:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -17696,7 +17963,7 @@ var _TsEmitterVisitor = (function (_super) {
     return _TsEmitterVisitor;
 }(abstract_emitter_1.AbstractEmitterVisitor));
 
-},{"../facade/exceptions":97,"../facade/lang":98,"./abstract_emitter":115,"./output_ast":119}],124:[function(require,module,exports){
+},{"../facade/exceptions":99,"../facade/lang":100,"./abstract_emitter":117,"./output_ast":121}],126:[function(require,module,exports){
 "use strict";
 var ParseLocation = (function () {
     function ParseLocation(file, offset, line, col) {
@@ -17777,7 +18044,7 @@ var ParseError = (function () {
 }());
 exports.ParseError = ParseError;
 
-},{}],125:[function(require,module,exports){
+},{}],127:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var core_private_1 = require('../core_private');
@@ -17816,7 +18083,7 @@ var PipeResolver = (function () {
 }());
 exports.PipeResolver = PipeResolver;
 
-},{"../core_private":75,"../src/facade/exceptions":97,"../src/facade/lang":98,"@angular/core":157}],126:[function(require,module,exports){
+},{"../core_private":77,"../src/facade/exceptions":99,"../src/facade/lang":100,"@angular/core":159}],128:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -18193,7 +18460,7 @@ function _addQueryToTokenMap(map, query) {
     });
 }
 
-},{"../src/facade/collection":95,"../src/facade/lang":98,"./compile_metadata":84,"./identifiers":111,"./parse_util":124,"./template_ast":135}],127:[function(require,module,exports){
+},{"../src/facade/collection":97,"../src/facade/lang":100,"./compile_metadata":86,"./identifiers":113,"./parse_util":126,"./template_ast":137}],129:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var exceptions_1 = require('../src/facade/exceptions');
@@ -18374,7 +18641,7 @@ function assertComponent(meta) {
     }
 }
 
-},{"../src/facade/async":93,"../src/facade/collection":95,"../src/facade/exceptions":97,"../src/facade/lang":98,"./compile_metadata":84,"./config":86,"./directive_normalizer":88,"./metadata_resolver":113,"./output/interpretive_view":118,"./output/output_ast":119,"./output/output_interpreter":120,"./output/output_jit":121,"./style_compiler":133,"./template_parser":136,"./view_compiler/view_compiler":154,"./xhr":156,"@angular/core":157}],128:[function(require,module,exports){
+},{"../src/facade/async":95,"../src/facade/collection":97,"../src/facade/exceptions":99,"../src/facade/lang":100,"./compile_metadata":86,"./config":88,"./directive_normalizer":90,"./metadata_resolver":115,"./output/interpretive_view":120,"./output/output_ast":121,"./output/output_interpreter":122,"./output/output_jit":123,"./style_compiler":135,"./template_parser":138,"./view_compiler/view_compiler":156,"./xhr":158,"@angular/core":159}],130:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -18689,7 +18956,7 @@ var DomElementSchemaRegistry = (function (_super) {
 }(element_schema_registry_1.ElementSchemaRegistry));
 exports.DomElementSchemaRegistry = DomElementSchemaRegistry;
 
-},{"../../core_private":75,"../facade/collection":95,"../facade/lang":98,"./dom_security_schema":129,"./element_schema_registry":130,"@angular/core":157}],129:[function(require,module,exports){
+},{"../../core_private":77,"../facade/collection":97,"../facade/lang":100,"./dom_security_schema":131,"./element_schema_registry":132,"@angular/core":159}],131:[function(require,module,exports){
 "use strict";
 var core_private_1 = require('../../core_private');
 // =================================================================================================
@@ -18741,7 +19008,7 @@ registerContext(core_private_1.SecurityContext.RESOURCE_URL, [
     'track|src',
 ]);
 
-},{"../../core_private":75}],130:[function(require,module,exports){
+},{"../../core_private":77}],132:[function(require,module,exports){
 "use strict";
 var ElementSchemaRegistry = (function () {
     function ElementSchemaRegistry() {
@@ -18750,7 +19017,7 @@ var ElementSchemaRegistry = (function () {
 }());
 exports.ElementSchemaRegistry = ElementSchemaRegistry;
 
-},{}],131:[function(require,module,exports){
+},{}],133:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../src/facade/collection');
 var exceptions_1 = require('../src/facade/exceptions');
@@ -19109,7 +19376,7 @@ var SelectorContext = (function () {
 }());
 exports.SelectorContext = SelectorContext;
 
-},{"../src/facade/collection":95,"../src/facade/exceptions":97,"../src/facade/lang":98}],132:[function(require,module,exports){
+},{"../src/facade/collection":97,"../src/facade/exceptions":99,"../src/facade/lang":100}],134:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../src/facade/collection');
 var lang_1 = require('../src/facade/lang');
@@ -19610,7 +19877,7 @@ function escapeBlocks(input) {
     return new StringWithEscapedBlocks(resultParts.join(''), escapedBlocks);
 }
 
-},{"../src/facade/collection":95,"../src/facade/lang":98}],133:[function(require,module,exports){
+},{"../src/facade/collection":97,"../src/facade/lang":100}],135:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../src/facade/lang');
@@ -19691,7 +19958,7 @@ function getStylesVarName(component) {
     return result;
 }
 
-},{"../src/facade/lang":98,"./compile_metadata":84,"./output/output_ast":119,"./shadow_css":132,"./style_url_resolver":134,"./url_resolver":138,"@angular/core":157}],134:[function(require,module,exports){
+},{"../src/facade/lang":100,"./compile_metadata":86,"./output/output_ast":121,"./shadow_css":134,"./style_url_resolver":136,"./url_resolver":140,"@angular/core":159}],136:[function(require,module,exports){
 // Some of the code comes from WebComponents.JS
 // https://github.com/webcomponents/webcomponentsjs/blob/master/src/HTMLImports/path.js
 "use strict";
@@ -19734,7 +20001,7 @@ var _cssImportRe = /@import\s+(?:url\()?\s*(?:(?:['"]([^'"]*))|([^;\)\s]*))[^;]*
 //       https://github.com/angular/angular/issues/4596
 var _urlWithSchemaRe = /^([a-zA-Z\-\+\.]+):/g;
 
-},{"../src/facade/lang":98}],135:[function(require,module,exports){
+},{"../src/facade/lang":100}],137:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../src/facade/lang');
 /**
@@ -20016,7 +20283,7 @@ function templateVisitAll(visitor, asts, context) {
 }
 exports.templateVisitAll = templateVisitAll;
 
-},{"../src/facade/lang":98}],136:[function(require,module,exports){
+},{"../src/facade/lang":100}],138:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -20833,7 +21100,7 @@ function removeDuplicates(items) {
     return res;
 }
 
-},{"../core_private":75,"../src/facade/collection":95,"../src/facade/exceptions":97,"../src/facade/lang":98,"./expression_parser/ast":90,"./expression_parser/parser":92,"./html_ast":101,"./html_parser":103,"./html_tags":104,"./identifiers":111,"./parse_util":124,"./provider_parser":126,"./schema/element_schema_registry":130,"./selector":131,"./style_url_resolver":134,"./template_ast":135,"./template_preparser":137,"./util":139,"@angular/core":157}],137:[function(require,module,exports){
+},{"../core_private":77,"../src/facade/collection":97,"../src/facade/exceptions":99,"../src/facade/lang":100,"./expression_parser/ast":92,"./expression_parser/parser":94,"./html_ast":103,"./html_parser":105,"./html_tags":106,"./identifiers":113,"./parse_util":126,"./provider_parser":128,"./schema/element_schema_registry":132,"./selector":133,"./style_url_resolver":136,"./template_ast":137,"./template_preparser":139,"./util":141,"@angular/core":159}],139:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../src/facade/lang');
 var html_tags_1 = require('./html_tags');
@@ -20917,7 +21184,7 @@ function normalizeNgContentSelect(selectAttr) {
     return selectAttr;
 }
 
-},{"../src/facade/lang":98,"./html_tags":104}],138:[function(require,module,exports){
+},{"../src/facade/lang":100,"./html_tags":106}],140:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../src/facade/lang');
@@ -21233,7 +21500,7 @@ function _resolveUrl(base, url) {
     return _joinAndCanonicalizePath(parts);
 }
 
-},{"../src/facade/lang":98,"@angular/core":157}],139:[function(require,module,exports){
+},{"../src/facade/lang":100,"@angular/core":159}],141:[function(require,module,exports){
 "use strict";
 var collection_1 = require('./facade/collection');
 var lang_1 = require('./facade/lang');
@@ -21314,7 +21581,7 @@ function assetUrl(pkg, path, type) {
 }
 exports.assetUrl = assetUrl;
 
-},{"./facade/collection":95,"./facade/lang":98}],140:[function(require,module,exports){
+},{"./facade/collection":97,"./facade/lang":100}],142:[function(require,module,exports){
 "use strict";
 var CompileBinding = (function () {
     function CompileBinding(node, sourceAst) {
@@ -21325,7 +21592,7 @@ var CompileBinding = (function () {
 }());
 exports.CompileBinding = CompileBinding;
 
-},{}],141:[function(require,module,exports){
+},{}],143:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -21704,7 +21971,7 @@ var _ValueOutputAstTransformer = (function (_super) {
     return _ValueOutputAstTransformer;
 }(util_2.ValueTransformer));
 
-},{"../compile_metadata":84,"../facade/collection":95,"../facade/lang":98,"../identifiers":111,"../output/output_ast":119,"../template_ast":135,"../util":139,"./compile_method":142,"./compile_query":144,"./constants":146,"./util":151,"@angular/core":157}],142:[function(require,module,exports){
+},{"../compile_metadata":86,"../facade/collection":97,"../facade/lang":100,"../identifiers":113,"../output/output_ast":121,"../template_ast":137,"../util":141,"./compile_method":144,"./compile_query":146,"./constants":148,"./util":153,"@angular/core":159}],144:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var lang_1 = require('../facade/lang');
@@ -21769,7 +22036,7 @@ var CompileMethod = (function () {
 }());
 exports.CompileMethod = CompileMethod;
 
-},{"../facade/collection":95,"../facade/lang":98,"../output/output_ast":119}],143:[function(require,module,exports){
+},{"../facade/collection":97,"../facade/lang":100,"../output/output_ast":121}],145:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../facade/exceptions');
 var lang_1 = require('../facade/lang');
@@ -21869,7 +22136,7 @@ function _findPipeMeta(view, name) {
     return pipeMeta;
 }
 
-},{"../facade/exceptions":97,"../facade/lang":98,"../identifiers":111,"../output/output_ast":119,"./util":151}],144:[function(require,module,exports){
+},{"../facade/exceptions":99,"../facade/lang":100,"../identifiers":113,"../output/output_ast":121,"./util":153}],146:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var lang_1 = require('../facade/lang');
@@ -21983,7 +22250,7 @@ function addQueryToTokenMap(map, query) {
 }
 exports.addQueryToTokenMap = addQueryToTokenMap;
 
-},{"../facade/collection":95,"../facade/lang":98,"../identifiers":111,"../output/output_ast":119,"./util":151}],145:[function(require,module,exports){
+},{"../facade/collection":97,"../facade/lang":100,"../identifiers":113,"../output/output_ast":121,"./util":153}],147:[function(require,module,exports){
 "use strict";
 var core_private_1 = require('../../core_private');
 var compile_metadata_1 = require('../compile_metadata');
@@ -22145,7 +22412,7 @@ function getViewType(component, embeddedTemplateIndex) {
     }
 }
 
-},{"../../core_private":75,"../compile_metadata":84,"../facade/collection":95,"../facade/lang":98,"../identifiers":111,"../output/output_ast":119,"./compile_method":142,"./compile_pipe":143,"./compile_query":144,"./constants":146,"./util":151}],146:[function(require,module,exports){
+},{"../../core_private":77,"../compile_metadata":86,"../facade/collection":97,"../facade/lang":100,"../identifiers":113,"../output/output_ast":121,"./compile_method":144,"./compile_pipe":145,"./compile_query":146,"./constants":148,"./util":153}],148:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var core_private_1 = require('../../core_private');
@@ -22259,7 +22526,7 @@ var DetectChangesVars = (function () {
 }());
 exports.DetectChangesVars = DetectChangesVars;
 
-},{"../../core_private":75,"../compile_metadata":84,"../facade/lang":98,"../identifiers":111,"../output/output_ast":119,"@angular/core":157}],147:[function(require,module,exports){
+},{"../../core_private":77,"../compile_metadata":86,"../facade/lang":100,"../identifiers":113,"../output/output_ast":121,"@angular/core":159}],149:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var lang_1 = require('../facade/lang');
@@ -22394,7 +22661,7 @@ function santitizeEventName(name) {
     return lang_1.StringWrapper.replaceAll(name, /[^a-zA-Z_]/g, '_');
 }
 
-},{"../facade/collection":95,"../facade/lang":98,"../output/output_ast":119,"./compile_binding":140,"./compile_method":142,"./constants":146,"./expression_converter":148}],148:[function(require,module,exports){
+},{"../facade/collection":97,"../facade/lang":100,"../output/output_ast":121,"./compile_binding":142,"./compile_method":144,"./constants":148,"./expression_converter":150}],150:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../facade/exceptions');
 var lang_1 = require('../facade/lang');
@@ -22632,7 +22899,7 @@ function flattenStatements(arg, output) {
     }
 }
 
-},{"../facade/exceptions":97,"../facade/lang":98,"../identifiers":111,"../output/output_ast":119}],149:[function(require,module,exports){
+},{"../facade/exceptions":99,"../facade/lang":100,"../identifiers":113,"../output/output_ast":121}],151:[function(require,module,exports){
 "use strict";
 var core_private_1 = require('../../core_private');
 var o = require('../output/output_ast');
@@ -22696,7 +22963,7 @@ function bindPipeDestroyLifecycleCallbacks(pipeMeta, pipeInstance, view) {
 }
 exports.bindPipeDestroyLifecycleCallbacks = bindPipeDestroyLifecycleCallbacks;
 
-},{"../../core_private":75,"../output/output_ast":119,"./constants":146}],150:[function(require,module,exports){
+},{"../../core_private":77,"../output/output_ast":121,"./constants":148}],152:[function(require,module,exports){
 "use strict";
 var core_private_1 = require('../../core_private');
 var lang_1 = require('../facade/lang');
@@ -22908,7 +23175,7 @@ function logBindingUpdateStmt(renderNode, propName, value) {
         .toStmt();
 }
 
-},{"../../core_private":75,"../facade/lang":98,"../identifiers":111,"../output/output_ast":119,"../template_ast":135,"../util":139,"./compile_binding":140,"./constants":146,"./expression_converter":148,"@angular/core":157}],151:[function(require,module,exports){
+},{"../../core_private":77,"../facade/lang":100,"../identifiers":113,"../output/output_ast":121,"../template_ast":137,"../util":141,"./compile_binding":142,"./constants":148,"./expression_converter":150,"@angular/core":159}],153:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../facade/exceptions');
 var lang_1 = require('../facade/lang');
@@ -22999,7 +23266,7 @@ function createPureProxy(fn, argCount, pureProxyProp, view) {
 }
 exports.createPureProxy = createPureProxy;
 
-},{"../facade/exceptions":97,"../facade/lang":98,"../identifiers":111,"../output/output_ast":119}],152:[function(require,module,exports){
+},{"../facade/exceptions":99,"../facade/lang":100,"../identifiers":113,"../output/output_ast":121}],154:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var template_ast_1 = require('../template_ast');
@@ -23077,7 +23344,7 @@ var ViewBinderVisitor = (function () {
     return ViewBinderVisitor;
 }());
 
-},{"../facade/collection":95,"../template_ast":135,"./event_binder":147,"./lifecycle_binder":149,"./property_binder":150}],153:[function(require,module,exports){
+},{"../facade/collection":97,"../template_ast":137,"./event_binder":149,"./lifecycle_binder":151,"./property_binder":152}],155:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var core_private_1 = require('../../core_private');
@@ -23568,7 +23835,7 @@ function getChangeDetectionMode(view) {
     return mode;
 }
 
-},{"../../core_private":75,"../animation/animation_compiler":79,"../compile_metadata":84,"../facade/collection":95,"../facade/lang":98,"../identifiers":111,"../output/output_ast":119,"../template_ast":135,"./compile_element":141,"./compile_view":145,"./constants":146,"./util":151,"@angular/core":157}],154:[function(require,module,exports){
+},{"../../core_private":77,"../animation/animation_compiler":81,"../compile_metadata":86,"../facade/collection":97,"../facade/lang":100,"../identifiers":113,"../output/output_ast":121,"../template_ast":137,"./compile_element":143,"./compile_view":147,"./constants":148,"./util":153,"@angular/core":159}],156:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var animation_compiler_1 = require('../animation/animation_compiler');
@@ -23619,7 +23886,7 @@ var ViewCompiler = (function () {
 }());
 exports.ViewCompiler = ViewCompiler;
 
-},{"../animation/animation_compiler":79,"../config":86,"./compile_element":141,"./compile_view":145,"./view_binder":152,"./view_builder":153,"@angular/core":157}],155:[function(require,module,exports){
+},{"../animation/animation_compiler":81,"../config":88,"./compile_element":143,"./compile_view":147,"./view_binder":154,"./view_builder":155,"@angular/core":159}],157:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var core_private_1 = require('../core_private');
@@ -23683,7 +23950,7 @@ var ViewResolver = (function () {
 }());
 exports.ViewResolver = ViewResolver;
 
-},{"../core_private":75,"../src/facade/collection":95,"../src/facade/exceptions":97,"../src/facade/lang":98,"@angular/core":157}],156:[function(require,module,exports){
+},{"../core_private":77,"../src/facade/collection":97,"../src/facade/exceptions":99,"../src/facade/lang":100,"@angular/core":159}],158:[function(require,module,exports){
 "use strict";
 // TODO: vsavkin rename it into TemplateLoader
 /**
@@ -23698,7 +23965,7 @@ var XHR = (function () {
 }());
 exports.XHR = XHR;
 
-},{}],157:[function(require,module,exports){
+},{}],159:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
@@ -23760,7 +24027,7 @@ __export(require('./src/animation/metadata'));
 var animation_player_1 = require('./src/animation/animation_player');
 exports.AnimationPlayer = animation_player_1.AnimationPlayer;
 
-},{"./private_export":158,"./src/animation/animation_player":164,"./src/animation/metadata":168,"./src/application_common_providers":169,"./src/application_ref":170,"./src/application_tokens":171,"./src/change_detection":172,"./src/debug/debug_node":182,"./src/di":184,"./src/facade/async":196,"./src/facade/exceptions":200,"./src/facade/lang":201,"./src/linker":204,"./src/metadata":221,"./src/platform_common_providers":226,"./src/platform_directives_and_pipes":227,"./src/profile/profile":228,"./src/render":235,"./src/testability/testability":238,"./src/util":239,"./src/zone":241}],158:[function(require,module,exports){
+},{"./private_export":160,"./src/animation/animation_player":166,"./src/animation/metadata":170,"./src/application_common_providers":171,"./src/application_ref":172,"./src/application_tokens":173,"./src/change_detection":174,"./src/debug/debug_node":184,"./src/di":186,"./src/facade/async":198,"./src/facade/exceptions":202,"./src/facade/lang":203,"./src/linker":206,"./src/metadata":223,"./src/platform_common_providers":228,"./src/platform_directives_and_pipes":229,"./src/profile/profile":230,"./src/render":237,"./src/testability/testability":240,"./src/util":241,"./src/zone":243}],160:[function(require,module,exports){
 "use strict";
 var animation_constants_1 = require('./src/animation/animation_constants');
 var animation_driver_1 = require('./src/animation/animation_driver');
@@ -23862,7 +24129,7 @@ exports.__core_private__ = {
     FILL_STYLE_FLAG: animation_constants_1.FILL_STYLE_FLAG
 };
 
-},{"./src/animation/animation_constants":160,"./src/animation/animation_driver":161,"./src/animation/animation_group_player":162,"./src/animation/animation_keyframe":163,"./src/animation/animation_player":164,"./src/animation/animation_sequence_player":165,"./src/animation/animation_style_util":166,"./src/animation/animation_styles":167,"./src/change_detection/change_detection_util":174,"./src/change_detection/constants":176,"./src/console":181,"./src/debug/debug_renderer":183,"./src/di/provider_util":191,"./src/di/reflective_provider":195,"./src/linker/component_resolver":206,"./src/linker/debug_context":207,"./src/linker/element":209,"./src/linker/template_ref":215,"./src/linker/view":216,"./src/linker/view_type":219,"./src/linker/view_utils":220,"./src/metadata/lifecycle_hooks":224,"./src/metadata/view":225,"./src/profile/wtf_init":230,"./src/reflection/reflection":231,"./src/reflection/reflection_capabilities":232,"./src/reflection/reflector_reader":234,"./src/render/api":236,"./src/security":237,"./src/util/decorators":240}],159:[function(require,module,exports){
+},{"./src/animation/animation_constants":162,"./src/animation/animation_driver":163,"./src/animation/animation_group_player":164,"./src/animation/animation_keyframe":165,"./src/animation/animation_player":166,"./src/animation/animation_sequence_player":167,"./src/animation/animation_style_util":168,"./src/animation/animation_styles":169,"./src/change_detection/change_detection_util":176,"./src/change_detection/constants":178,"./src/console":183,"./src/debug/debug_renderer":185,"./src/di/provider_util":193,"./src/di/reflective_provider":197,"./src/linker/component_resolver":208,"./src/linker/debug_context":209,"./src/linker/element":211,"./src/linker/template_ref":217,"./src/linker/view":218,"./src/linker/view_type":221,"./src/linker/view_utils":222,"./src/metadata/lifecycle_hooks":226,"./src/metadata/view":227,"./src/profile/wtf_init":232,"./src/reflection/reflection":233,"./src/reflection/reflection_capabilities":234,"./src/reflection/reflector_reader":236,"./src/render/api":238,"./src/security":239,"./src/util/decorators":242}],161:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var lang_1 = require('../facade/lang');
@@ -23917,14 +24184,14 @@ var ActiveAnimationPlayersMap = (function () {
 }());
 exports.ActiveAnimationPlayersMap = ActiveAnimationPlayersMap;
 
-},{"../facade/collection":198,"../facade/lang":201}],160:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/lang":203}],162:[function(require,module,exports){
 "use strict";
 exports.FILL_STYLE_FLAG = 'true'; // TODO (matsko): change to boolean
 exports.ANY_STATE = '*';
 exports.DEFAULT_STATE = '*';
 exports.EMPTY_STATE = 'void';
 
-},{}],161:[function(require,module,exports){
+},{}],163:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -23950,7 +24217,7 @@ var NoOpAnimationDriver = (function (_super) {
 }(AnimationDriver));
 exports.NoOpAnimationDriver = NoOpAnimationDriver;
 
-},{"./animation_player":164}],162:[function(require,module,exports){
+},{"./animation_player":166}],164:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var math_1 = require('../facade/math');
@@ -24015,7 +24282,7 @@ var AnimationGroupPlayer = (function () {
 }());
 exports.AnimationGroupPlayer = AnimationGroupPlayer;
 
-},{"../facade/lang":201,"../facade/math":202}],163:[function(require,module,exports){
+},{"../facade/lang":203,"../facade/math":204}],165:[function(require,module,exports){
 "use strict";
 var AnimationKeyframe = (function () {
     function AnimationKeyframe(offset, styles) {
@@ -24026,7 +24293,7 @@ var AnimationKeyframe = (function () {
 }());
 exports.AnimationKeyframe = AnimationKeyframe;
 
-},{}],164:[function(require,module,exports){
+},{}],166:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../facade/exceptions');
 var lang_1 = require('../facade/lang');
@@ -24069,7 +24336,7 @@ var NoOpAnimationPlayer = (function () {
 }());
 exports.NoOpAnimationPlayer = NoOpAnimationPlayer;
 
-},{"../facade/exceptions":200,"../facade/lang":201}],165:[function(require,module,exports){
+},{"../facade/exceptions":202,"../facade/lang":203}],167:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var animation_player_1 = require('./animation_player');
@@ -24139,7 +24406,7 @@ var AnimationSequencePlayer = (function () {
 }());
 exports.AnimationSequencePlayer = AnimationSequencePlayer;
 
-},{"../facade/lang":201,"./animation_player":164}],166:[function(require,module,exports){
+},{"../facade/lang":203,"./animation_player":166}],168:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var lang_1 = require('../facade/lang');
@@ -24239,7 +24506,7 @@ function flattenStyles(styles) {
 }
 exports.flattenStyles = flattenStyles;
 
-},{"../facade/collection":198,"../facade/lang":201,"./animation_constants":160,"./metadata":168}],167:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/lang":203,"./animation_constants":162,"./metadata":170}],169:[function(require,module,exports){
 "use strict";
 var AnimationStyles = (function () {
     function AnimationStyles(styles) {
@@ -24249,7 +24516,7 @@ var AnimationStyles = (function () {
 }());
 exports.AnimationStyles = AnimationStyles;
 
-},{}],168:[function(require,module,exports){
+},{}],170:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -24877,7 +25144,7 @@ function trigger(name, animation) {
 }
 exports.trigger = trigger;
 
-},{"../facade/exceptions":200,"../facade/lang":201}],169:[function(require,module,exports){
+},{"../facade/exceptions":202,"../facade/lang":203}],171:[function(require,module,exports){
 "use strict";
 var application_ref_1 = require('./application_ref');
 var application_tokens_1 = require('./application_tokens');
@@ -24902,7 +25169,7 @@ exports.APPLICATION_COMMON_PROVIDERS =
     /* @ts2dart_Provider */ { provide: dynamic_component_loader_1.DynamicComponentLoader, useClass: dynamic_component_loader_1.DynamicComponentLoader_ },
 ];
 
-},{"./application_ref":170,"./application_tokens":171,"./change_detection/change_detection":173,"./linker/component_resolver":206,"./linker/dynamic_component_loader":208,"./linker/view_utils":220}],170:[function(require,module,exports){
+},{"./application_ref":172,"./application_tokens":173,"./change_detection/change_detection":175,"./linker/component_resolver":208,"./linker/dynamic_component_loader":210,"./linker/view_utils":222}],172:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -25365,7 +25632,7 @@ exports.APPLICATION_CORE_PROVIDERS = [
     /* @ts2dart_Provider */ { provide: ApplicationRef, useExisting: ApplicationRef_ },
 ];
 
-},{"../src/facade/async":196,"../src/facade/collection":198,"../src/facade/exceptions":200,"../src/facade/lang":201,"./application_tokens":171,"./console":181,"./di":184,"./linker/component_resolver":206,"./profile/profile":228,"./testability/testability":238,"./zone/ng_zone":242}],171:[function(require,module,exports){
+},{"../src/facade/async":198,"../src/facade/collection":200,"../src/facade/exceptions":202,"../src/facade/lang":203,"./application_tokens":173,"./console":183,"./di":186,"./linker/component_resolver":208,"./profile/profile":230,"./testability/testability":240,"./zone/ng_zone":244}],173:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../src/facade/lang');
 var di_1 = require('./di');
@@ -25415,7 +25682,7 @@ exports.APP_INITIALIZER =
 exports.PACKAGE_ROOT_URL = 
 /*@ts2dart_const*/ new di_1.OpaqueToken('Application Packages Root URL');
 
-},{"../src/facade/lang":201,"./di":184}],172:[function(require,module,exports){
+},{"../src/facade/lang":203,"./di":186}],174:[function(require,module,exports){
 /**
  * @module
  * @description
@@ -25433,7 +25700,7 @@ exports.KeyValueDiffers = change_detection_1.KeyValueDiffers;
 exports.SimpleChange = change_detection_1.SimpleChange;
 exports.WrappedValue = change_detection_1.WrappedValue;
 
-},{"./change_detection/change_detection":173}],173:[function(require,module,exports){
+},{"./change_detection/change_detection":175}],175:[function(require,module,exports){
 "use strict";
 var default_iterable_differ_1 = require('./differs/default_iterable_differ');
 var default_keyvalue_differ_1 = require('./differs/default_keyvalue_differ');
@@ -25479,7 +25746,7 @@ exports.iterableDiff =
 exports.defaultIterableDiffers = new iterable_differs_1.IterableDiffers(exports.iterableDiff);
 exports.defaultKeyValueDiffers = new keyvalue_differs_1.KeyValueDiffers(exports.keyValDiff);
 
-},{"./change_detection_util":174,"./change_detector_ref":175,"./constants":176,"./differs/default_iterable_differ":177,"./differs/default_keyvalue_differ":178,"./differs/iterable_differs":179,"./differs/keyvalue_differs":180}],174:[function(require,module,exports){
+},{"./change_detection_util":176,"./change_detector_ref":177,"./constants":178,"./differs/default_iterable_differ":179,"./differs/default_keyvalue_differ":180,"./differs/iterable_differs":181,"./differs/keyvalue_differs":182}],176:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var lang_1 = require('../facade/lang');
@@ -25560,7 +25827,7 @@ var SimpleChange = (function () {
 }());
 exports.SimpleChange = SimpleChange;
 
-},{"../facade/collection":198,"../facade/lang":201}],175:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/lang":203}],177:[function(require,module,exports){
 "use strict";
 /**
  * @stable
@@ -25572,7 +25839,7 @@ var ChangeDetectorRef = (function () {
 }());
 exports.ChangeDetectorRef = ChangeDetectorRef;
 
-},{}],176:[function(require,module,exports){
+},{}],178:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 /**
@@ -25658,7 +25925,7 @@ function isDefaultChangeDetectionStrategy(changeDetectionStrategy) {
 }
 exports.isDefaultChangeDetectionStrategy = isDefaultChangeDetectionStrategy;
 
-},{"../facade/lang":201}],177:[function(require,module,exports){
+},{"../facade/lang":203}],179:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../../facade/collection');
 var exceptions_1 = require('../../facade/exceptions');
@@ -26319,7 +26586,7 @@ var _DuplicateMap = (function () {
     return _DuplicateMap;
 }());
 
-},{"../../facade/collection":198,"../../facade/exceptions":200,"../../facade/lang":201}],178:[function(require,module,exports){
+},{"../../facade/collection":200,"../../facade/exceptions":202,"../../facade/lang":203}],180:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../../facade/collection');
 var exceptions_1 = require('../../facade/exceptions');
@@ -26680,7 +26947,7 @@ var KeyValueChangeRecord = (function () {
 }());
 exports.KeyValueChangeRecord = KeyValueChangeRecord;
 
-},{"../../facade/collection":198,"../../facade/exceptions":200,"../../facade/lang":201}],179:[function(require,module,exports){
+},{"../../facade/collection":200,"../../facade/exceptions":202,"../../facade/lang":203}],181:[function(require,module,exports){
 "use strict";
 var di_1 = require('../../di');
 var collection_1 = require('../../facade/collection');
@@ -26753,7 +27020,7 @@ var IterableDiffers = (function () {
 }());
 exports.IterableDiffers = IterableDiffers;
 
-},{"../../di":184,"../../facade/collection":198,"../../facade/exceptions":200,"../../facade/lang":201}],180:[function(require,module,exports){
+},{"../../di":186,"../../facade/collection":200,"../../facade/exceptions":202,"../../facade/lang":203}],182:[function(require,module,exports){
 "use strict";
 var di_1 = require('../../di');
 var collection_1 = require('../../facade/collection');
@@ -26826,7 +27093,7 @@ var KeyValueDiffers = (function () {
 }());
 exports.KeyValueDiffers = KeyValueDiffers;
 
-},{"../../di":184,"../../facade/collection":198,"../../facade/exceptions":200,"../../facade/lang":201}],181:[function(require,module,exports){
+},{"../../di":186,"../../facade/collection":200,"../../facade/exceptions":202,"../../facade/lang":203}],183:[function(require,module,exports){
 "use strict";
 var decorators_1 = require('./di/decorators');
 var lang_1 = require('./facade/lang');
@@ -26847,7 +27114,7 @@ var Console = (function () {
 }());
 exports.Console = Console;
 
-},{"./di/decorators":185,"./facade/lang":201}],182:[function(require,module,exports){
+},{"./di/decorators":187,"./facade/lang":203}],184:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -27056,7 +27323,7 @@ function removeDebugNodeFromIndex(node) {
 }
 exports.removeDebugNodeFromIndex = removeDebugNodeFromIndex;
 
-},{"../facade/collection":198,"../facade/lang":201}],183:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/lang":203}],185:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var debug_node_1 = require('./debug_node');
@@ -27185,7 +27452,7 @@ var DebugDomRenderer = (function () {
 }());
 exports.DebugDomRenderer = DebugDomRenderer;
 
-},{"../facade/lang":201,"./debug_node":182}],184:[function(require,module,exports){
+},{"../facade/lang":203,"./debug_node":184}],186:[function(require,module,exports){
 /**
  * @module
  * @description
@@ -27232,7 +27499,7 @@ exports.OutOfBoundsError = reflective_exceptions_1.OutOfBoundsError;
 var opaque_token_1 = require('./di/opaque_token');
 exports.OpaqueToken = opaque_token_1.OpaqueToken;
 
-},{"./di/decorators":185,"./di/forward_ref":186,"./di/injector":187,"./di/metadata":188,"./di/opaque_token":189,"./di/provider":190,"./di/reflective_exceptions":192,"./di/reflective_injector":193,"./di/reflective_key":194,"./di/reflective_provider":195}],185:[function(require,module,exports){
+},{"./di/decorators":187,"./di/forward_ref":188,"./di/injector":189,"./di/metadata":190,"./di/opaque_token":191,"./di/provider":192,"./di/reflective_exceptions":194,"./di/reflective_injector":195,"./di/reflective_key":196,"./di/reflective_provider":197}],187:[function(require,module,exports){
 "use strict";
 var decorators_1 = require('../util/decorators');
 var metadata_1 = require('./metadata');
@@ -27273,7 +27540,7 @@ exports.Host = decorators_1.makeParamDecorator(metadata_1.HostMetadata);
  */
 exports.SkipSelf = decorators_1.makeParamDecorator(metadata_1.SkipSelfMetadata);
 
-},{"../util/decorators":240,"./metadata":188}],186:[function(require,module,exports){
+},{"../util/decorators":242,"./metadata":190}],188:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 /**
@@ -27321,7 +27588,7 @@ function resolveForwardRef(type) {
 }
 exports.resolveForwardRef = resolveForwardRef;
 
-},{"../facade/lang":201}],187:[function(require,module,exports){
+},{"../facade/lang":203}],189:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../facade/exceptions');
 var _THROW_IF_NOT_FOUND = new Object();
@@ -27362,7 +27629,7 @@ var Injector = (function () {
 }());
 exports.Injector = Injector;
 
-},{"../facade/exceptions":200}],188:[function(require,module,exports){
+},{"../facade/exceptions":202}],190:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 /**
@@ -27635,7 +27902,7 @@ var HostMetadata = (function () {
 }());
 exports.HostMetadata = HostMetadata;
 
-},{"../facade/lang":201}],189:[function(require,module,exports){
+},{"../facade/lang":203}],191:[function(require,module,exports){
 "use strict";
 /**
  * Creates a token that can be used in a DI Provider.
@@ -27669,7 +27936,7 @@ var OpaqueToken = (function () {
 }());
 exports.OpaqueToken = OpaqueToken;
 
-},{}],190:[function(require,module,exports){
+},{}],192:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -27954,7 +28221,7 @@ function provide(token /** TODO #9100 */, _a) {
 }
 exports.provide = provide;
 
-},{"../facade/exceptions":200,"../facade/lang":201}],191:[function(require,module,exports){
+},{"../facade/exceptions":202,"../facade/lang":203}],193:[function(require,module,exports){
 "use strict";
 var provider_1 = require('./provider');
 function isProviderLiteral(obj) {
@@ -27966,7 +28233,7 @@ function createProvider(obj) {
 }
 exports.createProvider = createProvider;
 
-},{"./provider":190}],192:[function(require,module,exports){
+},{"./provider":192}],194:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -28254,7 +28521,7 @@ var MixingMultiProvidersWithRegularProvidersError = (function (_super) {
 }(exceptions_1.BaseException));
 exports.MixingMultiProvidersWithRegularProvidersError = MixingMultiProvidersWithRegularProvidersError;
 
-},{"../facade/collection":198,"../facade/exceptions":200,"../facade/lang":201}],193:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/exceptions":202,"../facade/lang":203}],195:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var exceptions_1 = require('../facade/exceptions');
@@ -29084,7 +29351,7 @@ function _mapProviders(injector, fn) {
     return res;
 }
 
-},{"../facade/collection":198,"../facade/exceptions":200,"./injector":187,"./metadata":188,"./reflective_exceptions":192,"./reflective_key":194,"./reflective_provider":195}],194:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/exceptions":202,"./injector":189,"./metadata":190,"./reflective_exceptions":194,"./reflective_key":196,"./reflective_provider":197}],196:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../facade/exceptions');
 var lang_1 = require('../facade/lang');
@@ -29168,7 +29435,7 @@ var KeyRegistry = (function () {
 exports.KeyRegistry = KeyRegistry;
 var _globalKeyRegistry = new KeyRegistry();
 
-},{"../facade/exceptions":200,"../facade/lang":201,"./forward_ref":186}],195:[function(require,module,exports){
+},{"../facade/exceptions":202,"../facade/lang":203,"./forward_ref":188}],197:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var collection_1 = require('../facade/collection');
@@ -29408,17 +29675,17 @@ function _createDependency(token /** TODO #9100 */, optional /** TODO #9100 */, 
     return new ReflectiveDependency(reflective_key_1.ReflectiveKey.get(token), optional, lowerBoundVisibility, upperBoundVisibility, depProps);
 }
 
-},{"../facade/collection":198,"../facade/lang":201,"../reflection/reflection":231,"./forward_ref":186,"./metadata":188,"./provider":190,"./provider_util":191,"./reflective_exceptions":192,"./reflective_key":194}],196:[function(require,module,exports){
-arguments[4][22][0].apply(exports,arguments)
-},{"./lang":201,"./promise":203,"dup":22,"rxjs/Observable":519,"rxjs/Subject":525,"rxjs/observable/PromiseObservable":648,"rxjs/operator/toPromise":746}],197:[function(require,module,exports){
-arguments[4][23][0].apply(exports,arguments)
-},{"dup":23}],198:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/lang":203,"../reflection/reflection":233,"./forward_ref":188,"./metadata":190,"./provider":192,"./provider_util":193,"./reflective_exceptions":194,"./reflective_key":196}],198:[function(require,module,exports){
 arguments[4][24][0].apply(exports,arguments)
-},{"./lang":201,"dup":24}],199:[function(require,module,exports){
+},{"./lang":203,"./promise":205,"dup":24,"rxjs/Observable":488,"rxjs/Subject":494,"rxjs/observable/PromiseObservable":617,"rxjs/operator/toPromise":715}],199:[function(require,module,exports){
 arguments[4][25][0].apply(exports,arguments)
-},{"./base_wrapped_exception":197,"./collection":198,"./lang":201,"dup":25}],200:[function(require,module,exports){
+},{"dup":25}],200:[function(require,module,exports){
 arguments[4][26][0].apply(exports,arguments)
-},{"./base_wrapped_exception":197,"./exception_handler":199,"dup":26}],201:[function(require,module,exports){
+},{"./lang":203,"dup":26}],201:[function(require,module,exports){
+arguments[4][27][0].apply(exports,arguments)
+},{"./base_wrapped_exception":199,"./collection":200,"./lang":203,"dup":27}],202:[function(require,module,exports){
+arguments[4][28][0].apply(exports,arguments)
+},{"./base_wrapped_exception":199,"./exception_handler":201,"dup":28}],203:[function(require,module,exports){
 (function (global){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
@@ -29872,11 +30139,11 @@ exports.escapeRegExp = escapeRegExp;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{}],202:[function(require,module,exports){
-arguments[4][99][0].apply(exports,arguments)
-},{"./lang":201,"dup":99}],203:[function(require,module,exports){
-arguments[4][29][0].apply(exports,arguments)
-},{"dup":29}],204:[function(require,module,exports){
+},{}],204:[function(require,module,exports){
+arguments[4][101][0].apply(exports,arguments)
+},{"./lang":203,"dup":101}],205:[function(require,module,exports){
+arguments[4][31][0].apply(exports,arguments)
+},{"dup":31}],206:[function(require,module,exports){
 "use strict";
 // Public API for compiler
 var component_factory_1 = require('./linker/component_factory');
@@ -29903,7 +30170,7 @@ var view_ref_1 = require('./linker/view_ref');
 exports.EmbeddedViewRef = view_ref_1.EmbeddedViewRef;
 exports.ViewRef = view_ref_1.ViewRef;
 
-},{"./linker/component_factory":205,"./linker/component_resolver":206,"./linker/dynamic_component_loader":208,"./linker/element_ref":211,"./linker/exceptions":212,"./linker/query_list":213,"./linker/systemjs_component_resolver":214,"./linker/template_ref":215,"./linker/view_container_ref":217,"./linker/view_ref":218}],205:[function(require,module,exports){
+},{"./linker/component_factory":207,"./linker/component_resolver":208,"./linker/dynamic_component_loader":210,"./linker/element_ref":213,"./linker/exceptions":214,"./linker/query_list":215,"./linker/systemjs_component_resolver":216,"./linker/template_ref":217,"./linker/view_container_ref":219,"./linker/view_ref":220}],207:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -30057,7 +30324,7 @@ var ComponentFactory = (function () {
 }());
 exports.ComponentFactory = ComponentFactory;
 
-},{"../facade/exceptions":200,"../facade/lang":201,"./view_utils":220}],206:[function(require,module,exports){
+},{"../facade/exceptions":202,"../facade/lang":203,"./view_utils":222}],208:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -30109,7 +30376,7 @@ var ReflectorComponentResolver = (function (_super) {
 }(ComponentResolver));
 exports.ReflectorComponentResolver = ReflectorComponentResolver;
 
-},{"../di/decorators":185,"../facade/async":196,"../facade/exceptions":200,"../facade/lang":201,"../reflection/reflection":231,"./component_factory":205}],207:[function(require,module,exports){
+},{"../di/decorators":187,"../facade/async":198,"../facade/exceptions":202,"../facade/lang":203,"../reflection/reflection":233,"./component_factory":207}],209:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var lang_1 = require('../facade/lang');
@@ -30228,7 +30495,7 @@ var DebugContext = (function () {
 }());
 exports.DebugContext = DebugContext;
 
-},{"../facade/collection":198,"../facade/lang":201,"./view_type":219}],208:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/lang":203,"./view_type":221}],210:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -30288,7 +30555,7 @@ var DynamicComponentLoader_ = (function (_super) {
 }(DynamicComponentLoader));
 exports.DynamicComponentLoader_ = DynamicComponentLoader_;
 
-},{"../di/decorators":185,"../di/reflective_injector":193,"../facade/lang":201,"./component_resolver":206}],209:[function(require,module,exports){
+},{"../di/decorators":187,"../di/reflective_injector":195,"../facade/lang":203,"./component_resolver":208}],211:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var exceptions_1 = require('../facade/exceptions');
@@ -30382,7 +30649,7 @@ var AppElement = (function () {
 }());
 exports.AppElement = AppElement;
 
-},{"../facade/collection":198,"../facade/exceptions":200,"../facade/lang":201,"./element_ref":211,"./view_container_ref":217,"./view_type":219}],210:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/exceptions":202,"../facade/lang":203,"./element_ref":213,"./view_container_ref":219,"./view_type":221}],212:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -30413,7 +30680,7 @@ var ElementInjector = (function (_super) {
 }(injector_1.Injector));
 exports.ElementInjector = ElementInjector;
 
-},{"../di/injector":187}],211:[function(require,module,exports){
+},{"../di/injector":189}],213:[function(require,module,exports){
 "use strict";
 /**
  * A wrapper around a native element inside of a View.
@@ -30432,7 +30699,7 @@ var ElementRef = (function () {
 }());
 exports.ElementRef = ElementRef;
 
-},{}],212:[function(require,module,exports){
+},{}],214:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -30515,7 +30782,7 @@ var ViewDestroyedException = (function (_super) {
 }(exceptions_1.BaseException));
 exports.ViewDestroyedException = ViewDestroyedException;
 
-},{"../facade/exceptions":200}],213:[function(require,module,exports){
+},{"../facade/exceptions":202}],215:[function(require,module,exports){
 "use strict";
 var async_1 = require('../facade/async');
 var collection_1 = require('../facade/collection');
@@ -30612,7 +30879,7 @@ var QueryList = (function () {
 }());
 exports.QueryList = QueryList;
 
-},{"../facade/async":196,"../facade/collection":198,"../facade/lang":201}],214:[function(require,module,exports){
+},{"../facade/async":198,"../facade/collection":200,"../facade/lang":203}],216:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var _SEPARATOR = '#';
@@ -30665,7 +30932,7 @@ var SystemJsCmpFactoryResolver = (function () {
 }());
 exports.SystemJsCmpFactoryResolver = SystemJsCmpFactoryResolver;
 
-},{"../facade/lang":201}],215:[function(require,module,exports){
+},{"../facade/lang":203}],217:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -30734,7 +31001,7 @@ var TemplateRef_ = (function (_super) {
 }(TemplateRef));
 exports.TemplateRef_ = TemplateRef_;
 
-},{"../facade/lang":201}],216:[function(require,module,exports){
+},{"../facade/lang":203}],218:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -31132,7 +31399,7 @@ function _findLastRenderNode(node) {
     return lastNode;
 }
 
-},{"../animation/active_animation_players_map":159,"../animation/animation_group_player":162,"../change_detection/change_detection":173,"../facade/async":196,"../facade/collection":198,"../facade/lang":201,"../profile/profile":228,"./debug_context":207,"./element":209,"./element_injector":210,"./exceptions":212,"./view_ref":218,"./view_type":219,"./view_utils":220}],217:[function(require,module,exports){
+},{"../animation/active_animation_players_map":161,"../animation/animation_group_player":164,"../change_detection/change_detection":175,"../facade/async":198,"../facade/collection":200,"../facade/lang":203,"../profile/profile":230,"./debug_context":209,"./element":211,"./element_injector":212,"./exceptions":214,"./view_ref":220,"./view_type":221,"./view_utils":222}],219:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../facade/collection');
 var exceptions_1 = require('../facade/exceptions');
@@ -31287,7 +31554,7 @@ var ViewContainerRef_ = (function () {
 }());
 exports.ViewContainerRef_ = ViewContainerRef_;
 
-},{"../facade/collection":198,"../facade/exceptions":200,"../facade/lang":201,"../profile/profile":228}],218:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/exceptions":202,"../facade/lang":203,"../profile/profile":230}],220:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -31423,7 +31690,7 @@ var ViewRef_ = (function () {
 }());
 exports.ViewRef_ = ViewRef_;
 
-},{"../change_detection/constants":176,"../facade/exceptions":200}],219:[function(require,module,exports){
+},{"../change_detection/constants":178,"../facade/exceptions":202}],221:[function(require,module,exports){
 "use strict";
 (function (ViewType) {
     // A view that contains the host element with bound component directive.
@@ -31438,7 +31705,7 @@ exports.ViewRef_ = ViewRef_;
 })(exports.ViewType || (exports.ViewType = {}));
 var ViewType = exports.ViewType;
 
-},{}],220:[function(require,module,exports){
+},{}],222:[function(require,module,exports){
 "use strict";
 var application_tokens_1 = require('../application_tokens');
 var change_detection_1 = require('../change_detection/change_detection');
@@ -31793,7 +32060,7 @@ function pureProxy10(fn) {
 }
 exports.pureProxy10 = pureProxy10;
 
-},{"../application_tokens":171,"../change_detection/change_detection":173,"../change_detection/change_detection_util":174,"../di/decorators":185,"../facade/collection":198,"../facade/exceptions":200,"../facade/lang":201,"../render/api":236,"../security":237,"./element":209,"./exceptions":212}],221:[function(require,module,exports){
+},{"../application_tokens":173,"../change_detection/change_detection":175,"../change_detection/change_detection_util":176,"../di/decorators":187,"../facade/collection":200,"../facade/exceptions":202,"../facade/lang":203,"../render/api":238,"../security":239,"./element":211,"./exceptions":214}],223:[function(require,module,exports){
 /**
  * This indirection is needed to free up Component, etc symbols in the public API
  * to be used by the decorator versions of these annotations.
@@ -32836,7 +33103,7 @@ exports.HostBinding = decorators_1.makePropDecorator(directives_1.HostBindingMet
  */
 exports.HostListener = decorators_1.makePropDecorator(directives_1.HostListenerMetadata);
 
-},{"./metadata/di":222,"./metadata/directives":223,"./metadata/lifecycle_hooks":224,"./metadata/view":225,"./util/decorators":240}],222:[function(require,module,exports){
+},{"./metadata/di":224,"./metadata/directives":225,"./metadata/lifecycle_hooks":226,"./metadata/view":227,"./util/decorators":242}],224:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -33332,7 +33599,7 @@ var ViewChildMetadata = (function (_super) {
 }(ViewQueryMetadata));
 exports.ViewChildMetadata = ViewChildMetadata;
 
-},{"../di/forward_ref":186,"../di/metadata":188,"../facade/lang":201}],223:[function(require,module,exports){
+},{"../di/forward_ref":188,"../di/metadata":190,"../facade/lang":203}],225:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -34226,7 +34493,7 @@ var HostListenerMetadata = (function () {
 }());
 exports.HostListenerMetadata = HostListenerMetadata;
 
-},{"../change_detection/constants":176,"../di/metadata":188,"../facade/lang":201}],224:[function(require,module,exports){
+},{"../change_detection/constants":178,"../di/metadata":190,"../facade/lang":203}],226:[function(require,module,exports){
 "use strict";
 /**
  * @stable
@@ -34739,7 +35006,7 @@ var AfterViewChecked = (function () {
 }());
 exports.AfterViewChecked = AfterViewChecked;
 
-},{}],225:[function(require,module,exports){
+},{}],227:[function(require,module,exports){
 "use strict";
 /**
  * Defines template and style encapsulation options available for Component's {@link View}.
@@ -34818,7 +35085,7 @@ var ViewMetadata = (function () {
 }());
 exports.ViewMetadata = ViewMetadata;
 
-},{}],226:[function(require,module,exports){
+},{}],228:[function(require,module,exports){
 "use strict";
 var application_ref_1 = require('./application_ref');
 var console_1 = require('./console');
@@ -34840,7 +35107,7 @@ exports.PLATFORM_COMMON_PROVIDERS = [
     console_1.Console
 ];
 
-},{"./application_ref":170,"./console":181,"./reflection/reflection":231,"./reflection/reflector_reader":234,"./testability/testability":238}],227:[function(require,module,exports){
+},{"./application_ref":172,"./console":183,"./reflection/reflection":233,"./reflection/reflector_reader":236,"./testability/testability":240}],229:[function(require,module,exports){
 "use strict";
 var di_1 = require('./di');
 /**
@@ -34897,7 +35164,7 @@ exports.PLATFORM_DIRECTIVES =
   */
 exports.PLATFORM_PIPES = new di_1.OpaqueToken('Platform Pipes');
 
-},{"./di":184}],228:[function(require,module,exports){
+},{"./di":186}],230:[function(require,module,exports){
 "use strict";
 var impl = require('./wtf_impl');
 // Change exports to const once https://github.com/angular/ts2dart/issues/150
@@ -34971,7 +35238,7 @@ exports.wtfStartTimeRange = exports.wtfEnabled ? impl.startTimeRange : function 
  */
 exports.wtfEndTimeRange = exports.wtfEnabled ? impl.endTimeRange : function (r) { return null; };
 
-},{"./wtf_impl":229}],229:[function(require,module,exports){
+},{"./wtf_impl":231}],231:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var trace;
@@ -35007,7 +35274,7 @@ function endTimeRange(range) {
 }
 exports.endTimeRange = endTimeRange;
 
-},{"../facade/lang":201}],230:[function(require,module,exports){
+},{"../facade/lang":203}],232:[function(require,module,exports){
 "use strict";
 /**
  * This is here because DART requires it. It is noop in JS.
@@ -35015,7 +35282,7 @@ exports.endTimeRange = endTimeRange;
 function wtfInit() { }
 exports.wtfInit = wtfInit;
 
-},{}],231:[function(require,module,exports){
+},{}],233:[function(require,module,exports){
 "use strict";
 var reflection_capabilities_1 = require('./reflection_capabilities');
 var reflector_1 = require('./reflector');
@@ -35028,7 +35295,7 @@ exports.Reflector = reflector_2.Reflector;
  */
 exports.reflector = new reflector_1.Reflector(new reflection_capabilities_1.ReflectionCapabilities());
 
-},{"./reflection_capabilities":232,"./reflector":233}],232:[function(require,module,exports){
+},{"./reflection_capabilities":234,"./reflector":235}],234:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var ReflectionCapabilities = (function () {
@@ -35260,7 +35527,7 @@ function convertTsickleDecoratorIntoMetadata(decoratorInvocations) {
     });
 }
 
-},{"../facade/lang":201}],233:[function(require,module,exports){
+},{"../facade/lang":203}],235:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -35428,7 +35695,7 @@ function _mergeMaps(target, config) {
     collection_1.StringMapWrapper.forEach(config, function (v, k) { return target.set(k, v); });
 }
 
-},{"../facade/collection":198,"../facade/exceptions":200,"../facade/lang":201,"./reflector_reader":234}],234:[function(require,module,exports){
+},{"../facade/collection":200,"../facade/exceptions":202,"../facade/lang":203,"./reflector_reader":236}],236:[function(require,module,exports){
 "use strict";
 /**
  * Provides read-only access to reflection data about symbols. Used internally by Angular
@@ -35441,7 +35708,7 @@ var ReflectorReader = (function () {
 }());
 exports.ReflectorReader = ReflectorReader;
 
-},{}],235:[function(require,module,exports){
+},{}],237:[function(require,module,exports){
 "use strict";
 // Public API for render
 var api_1 = require('./render/api');
@@ -35449,7 +35716,7 @@ exports.RenderComponentType = api_1.RenderComponentType;
 exports.Renderer = api_1.Renderer;
 exports.RootRenderer = api_1.RootRenderer;
 
-},{"./render/api":236}],236:[function(require,module,exports){
+},{"./render/api":238}],238:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../facade/exceptions');
 /**
@@ -35531,7 +35798,7 @@ var RootRenderer = (function () {
 }());
 exports.RootRenderer = RootRenderer;
 
-},{"../facade/exceptions":200}],237:[function(require,module,exports){
+},{"../facade/exceptions":202}],239:[function(require,module,exports){
 "use strict";
 /**
  * A SecurityContext marks a location that has dangerous security implications, e.g. a DOM property
@@ -35560,7 +35827,7 @@ var SanitizationService = (function () {
 }());
 exports.SanitizationService = SanitizationService;
 
-},{}],238:[function(require,module,exports){
+},{}],240:[function(require,module,exports){
 "use strict";
 var decorators_1 = require('../di/decorators');
 var async_1 = require('../facade/async');
@@ -35705,13 +35972,13 @@ function setTestabilityGetter(getter) {
 exports.setTestabilityGetter = setTestabilityGetter;
 var _testabilityGetter = new _NoopGetTestability();
 
-},{"../di/decorators":185,"../facade/async":196,"../facade/collection":198,"../facade/exceptions":200,"../facade/lang":201,"../zone/ng_zone":242}],239:[function(require,module,exports){
+},{"../di/decorators":187,"../facade/async":198,"../facade/collection":200,"../facade/exceptions":202,"../facade/lang":203,"../zone/ng_zone":244}],241:[function(require,module,exports){
 "use strict";
 // Public API for util
 var decorators_1 = require('./util/decorators');
 exports.Class = decorators_1.Class;
 
-},{"./util/decorators":240}],240:[function(require,module,exports){
+},{"./util/decorators":242}],242:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var _nextClassId = 0;
@@ -35971,14 +36238,14 @@ function makePropDecorator(annotationCls /** TODO #9100 */) {
 }
 exports.makePropDecorator = makePropDecorator;
 
-},{"../facade/lang":201}],241:[function(require,module,exports){
+},{"../facade/lang":203}],243:[function(require,module,exports){
 "use strict";
 // Public API for Zone
 var ng_zone_1 = require('./zone/ng_zone');
 exports.NgZone = ng_zone_1.NgZone;
 exports.NgZoneError = ng_zone_1.NgZoneError;
 
-},{"./zone/ng_zone":242}],242:[function(require,module,exports){
+},{"./zone/ng_zone":244}],244:[function(require,module,exports){
 "use strict";
 var async_1 = require('../facade/async');
 var exceptions_1 = require('../facade/exceptions');
@@ -36229,7 +36496,7 @@ var NgZone = (function () {
 }());
 exports.NgZone = NgZone;
 
-},{"../facade/async":196,"../facade/exceptions":200,"./ng_zone_impl":243}],243:[function(require,module,exports){
+},{"../facade/async":198,"../facade/exceptions":202,"./ng_zone_impl":245}],245:[function(require,module,exports){
 "use strict";
 /**
  * Stores error information; delivered via [NgZone.onError] stream.
@@ -36316,7 +36583,7 @@ var NgZoneImpl = (function () {
 }());
 exports.NgZoneImpl = NgZoneImpl;
 
-},{}],244:[function(require,module,exports){
+},{}],246:[function(require,module,exports){
 "use strict";
 var browser_jsonp_1 = require('./src/backends/browser_jsonp');
 var browser_xhr_1 = require('./src/backends/browser_xhr');
@@ -36649,14 +36916,14 @@ function jsonpFactory(jsonpBackend, requestOptions) {
  */
 exports.JSON_BINDINGS = exports.JSONP_PROVIDERS;
 
-},{"./src/backends/browser_jsonp":246,"./src/backends/browser_xhr":247,"./src/backends/jsonp_backend":248,"./src/backends/xhr_backend":249,"./src/base_request_options":250,"./src/base_response_options":251,"./src/enums":252,"./src/headers":258,"./src/http":259,"./src/interfaces":261,"./src/static_request":262,"./src/static_response":263,"./src/url_search_params":264}],245:[function(require,module,exports){
+},{"./src/backends/browser_jsonp":248,"./src/backends/browser_xhr":249,"./src/backends/jsonp_backend":250,"./src/backends/xhr_backend":251,"./src/base_request_options":252,"./src/base_response_options":253,"./src/enums":254,"./src/headers":260,"./src/http":261,"./src/interfaces":263,"./src/static_request":264,"./src/static_response":265,"./src/url_search_params":266}],247:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
 }
 __export(require('./http'));
 
-},{"./http":244}],246:[function(require,module,exports){
+},{"./http":246}],248:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../facade/lang');
@@ -36704,7 +36971,7 @@ var BrowserJsonp = (function () {
 }());
 exports.BrowserJsonp = BrowserJsonp;
 
-},{"../facade/lang":257,"@angular/core":157}],247:[function(require,module,exports){
+},{"../facade/lang":259,"@angular/core":159}],249:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var BrowserXhr = (function () {
@@ -36721,7 +36988,7 @@ var BrowserXhr = (function () {
 }());
 exports.BrowserXhr = BrowserXhr;
 
-},{"@angular/core":157}],248:[function(require,module,exports){
+},{"@angular/core":159}],250:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -36864,7 +37131,7 @@ var JSONPBackend_ = (function (_super) {
 }(JSONPBackend));
 exports.JSONPBackend_ = JSONPBackend_;
 
-},{"../base_response_options":251,"../enums":252,"../facade/exceptions":256,"../facade/lang":257,"../interfaces":261,"../static_response":263,"./browser_jsonp":246,"@angular/core":157,"rxjs/Observable":519}],249:[function(require,module,exports){
+},{"../base_response_options":253,"../enums":254,"../facade/exceptions":258,"../facade/lang":259,"../interfaces":263,"../static_response":265,"./browser_jsonp":248,"@angular/core":159,"rxjs/Observable":488}],251:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var platform_browser_1 = require('@angular/platform-browser');
@@ -37035,7 +37302,7 @@ var XHRBackend = (function () {
 }());
 exports.XHRBackend = XHRBackend;
 
-},{"../base_response_options":251,"../enums":252,"../facade/lang":257,"../headers":258,"../http_utils":260,"../interfaces":261,"../static_response":263,"./browser_xhr":247,"@angular/core":157,"@angular/platform-browser":277,"rxjs/Observable":519}],250:[function(require,module,exports){
+},{"../base_response_options":253,"../enums":254,"../facade/lang":259,"../headers":260,"../http_utils":262,"../interfaces":263,"../static_response":265,"./browser_xhr":249,"@angular/core":159,"@angular/platform-browser":279,"rxjs/Observable":488}],252:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -37142,7 +37409,7 @@ var BaseRequestOptions = (function (_super) {
 }(RequestOptions));
 exports.BaseRequestOptions = BaseRequestOptions;
 
-},{"../src/facade/lang":257,"./enums":252,"./headers":258,"./http_utils":260,"./url_search_params":264,"@angular/core":157}],251:[function(require,module,exports){
+},{"../src/facade/lang":259,"./enums":254,"./headers":260,"./http_utils":262,"./url_search_params":266,"@angular/core":159}],253:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -37243,7 +37510,7 @@ var BaseResponseOptions = (function (_super) {
 }(ResponseOptions));
 exports.BaseResponseOptions = BaseResponseOptions;
 
-},{"../src/facade/lang":257,"./enums":252,"./headers":258,"@angular/core":157}],252:[function(require,module,exports){
+},{"../src/facade/lang":259,"./enums":254,"./headers":260,"@angular/core":159}],254:[function(require,module,exports){
 "use strict";
 /**
  * Supported http methods.
@@ -37298,15 +37565,15 @@ var ResponseType = exports.ResponseType;
 })(exports.ContentType || (exports.ContentType = {}));
 var ContentType = exports.ContentType;
 
-},{}],253:[function(require,module,exports){
-arguments[4][23][0].apply(exports,arguments)
-},{"dup":23}],254:[function(require,module,exports){
-arguments[4][24][0].apply(exports,arguments)
-},{"./lang":257,"dup":24}],255:[function(require,module,exports){
+},{}],255:[function(require,module,exports){
 arguments[4][25][0].apply(exports,arguments)
-},{"./base_wrapped_exception":253,"./collection":254,"./lang":257,"dup":25}],256:[function(require,module,exports){
+},{"dup":25}],256:[function(require,module,exports){
 arguments[4][26][0].apply(exports,arguments)
-},{"./base_wrapped_exception":253,"./exception_handler":255,"dup":26}],257:[function(require,module,exports){
+},{"./lang":259,"dup":26}],257:[function(require,module,exports){
+arguments[4][27][0].apply(exports,arguments)
+},{"./base_wrapped_exception":255,"./collection":256,"./lang":259,"dup":27}],258:[function(require,module,exports){
+arguments[4][28][0].apply(exports,arguments)
+},{"./base_wrapped_exception":255,"./exception_handler":257,"dup":28}],259:[function(require,module,exports){
 (function (global){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
@@ -37760,7 +38027,7 @@ exports.escapeRegExp = escapeRegExp;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{}],258:[function(require,module,exports){
+},{}],260:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../src/facade/exceptions');
 var lang_1 = require('../src/facade/lang');
@@ -37896,7 +38163,7 @@ var Headers = (function () {
 }());
 exports.Headers = Headers;
 
-},{"../src/facade/collection":254,"../src/facade/exceptions":256,"../src/facade/lang":257}],259:[function(require,module,exports){
+},{"../src/facade/collection":256,"../src/facade/exceptions":258,"../src/facade/lang":259}],261:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -38046,7 +38313,7 @@ var Jsonp = (function (_super) {
 }(Http));
 exports.Jsonp = Jsonp;
 
-},{"../src/facade/exceptions":256,"../src/facade/lang":257,"./base_request_options":250,"./enums":252,"./interfaces":261,"./static_request":262,"@angular/core":157}],260:[function(require,module,exports){
+},{"../src/facade/exceptions":258,"../src/facade/lang":259,"./base_request_options":252,"./enums":254,"./interfaces":263,"./static_request":264,"@angular/core":159}],262:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../src/facade/exceptions');
 var lang_1 = require('../src/facade/lang');
@@ -38077,7 +38344,7 @@ exports.getResponseURL = getResponseURL;
 var lang_2 = require('../src/facade/lang');
 exports.isJsObject = lang_2.isJsObject;
 
-},{"../src/facade/exceptions":256,"../src/facade/lang":257,"./enums":252}],261:[function(require,module,exports){
+},{"../src/facade/exceptions":258,"../src/facade/lang":259,"./enums":254}],263:[function(require,module,exports){
 "use strict";
 /**
  * Abstract class from which real backends are derived.
@@ -38108,7 +38375,7 @@ var XSRFStrategy = (function () {
 }());
 exports.XSRFStrategy = XSRFStrategy;
 
-},{}],262:[function(require,module,exports){
+},{}],264:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../src/facade/lang');
 var enums_1 = require('./enums');
@@ -38269,7 +38536,7 @@ var FormData = w['FormData'] || noop;
 var Blob = w['Blob'] || noop;
 var ArrayBuffer = w['ArrayBuffer'] || noop;
 
-},{"../src/facade/lang":257,"./enums":252,"./headers":258,"./http_utils":260,"./url_search_params":264}],263:[function(require,module,exports){
+},{"../src/facade/lang":259,"./enums":254,"./headers":260,"./http_utils":262,"./url_search_params":266}],265:[function(require,module,exports){
 "use strict";
 var exceptions_1 = require('../src/facade/exceptions');
 var lang_1 = require('../src/facade/lang');
@@ -38338,7 +38605,7 @@ var Response = (function () {
 }());
 exports.Response = Response;
 
-},{"../src/facade/exceptions":256,"../src/facade/lang":257,"./http_utils":260}],264:[function(require,module,exports){
+},{"../src/facade/exceptions":258,"../src/facade/lang":259,"./http_utils":262}],266:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../src/facade/collection');
 var lang_1 = require('../src/facade/lang');
@@ -38467,13 +38734,13 @@ var URLSearchParams = (function () {
 }());
 exports.URLSearchParams = URLSearchParams;
 
-},{"../src/facade/collection":254,"../src/facade/lang":257}],265:[function(require,module,exports){
+},{"../src/facade/collection":256,"../src/facade/lang":259}],267:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 exports.ReflectionCapabilities = core_1.__core_private__.ReflectionCapabilities;
 exports.reflector = core_1.__core_private__.reflector;
 
-},{"@angular/core":157}],266:[function(require,module,exports){
+},{"@angular/core":159}],268:[function(require,module,exports){
 "use strict";
 var common_1 = require('@angular/common');
 var compiler_1 = require('@angular/compiler');
@@ -38617,17 +38884,17 @@ function bootstrapWorkerApp(appComponentType, customProviders) {
 }
 exports.bootstrapWorkerApp = bootstrapWorkerApp;
 
-},{"./core_private":265,"./src/facade/async":267,"./src/facade/lang":272,"./src/xhr/xhr_cache":274,"./src/xhr/xhr_impl":275,"@angular/common":11,"@angular/compiler":76,"@angular/core":157,"@angular/platform-browser":277}],267:[function(require,module,exports){
-arguments[4][22][0].apply(exports,arguments)
-},{"./lang":272,"./promise":273,"dup":22,"rxjs/Observable":519,"rxjs/Subject":525,"rxjs/observable/PromiseObservable":648,"rxjs/operator/toPromise":746}],268:[function(require,module,exports){
-arguments[4][23][0].apply(exports,arguments)
-},{"dup":23}],269:[function(require,module,exports){
+},{"./core_private":267,"./src/facade/async":269,"./src/facade/lang":274,"./src/xhr/xhr_cache":276,"./src/xhr/xhr_impl":277,"@angular/common":13,"@angular/compiler":78,"@angular/core":159,"@angular/platform-browser":279}],269:[function(require,module,exports){
 arguments[4][24][0].apply(exports,arguments)
-},{"./lang":272,"dup":24}],270:[function(require,module,exports){
+},{"./lang":274,"./promise":275,"dup":24,"rxjs/Observable":488,"rxjs/Subject":494,"rxjs/observable/PromiseObservable":617,"rxjs/operator/toPromise":715}],270:[function(require,module,exports){
 arguments[4][25][0].apply(exports,arguments)
-},{"./base_wrapped_exception":268,"./collection":269,"./lang":272,"dup":25}],271:[function(require,module,exports){
+},{"dup":25}],271:[function(require,module,exports){
 arguments[4][26][0].apply(exports,arguments)
-},{"./base_wrapped_exception":268,"./exception_handler":270,"dup":26}],272:[function(require,module,exports){
+},{"./lang":274,"dup":26}],272:[function(require,module,exports){
+arguments[4][27][0].apply(exports,arguments)
+},{"./base_wrapped_exception":270,"./collection":271,"./lang":274,"dup":27}],273:[function(require,module,exports){
+arguments[4][28][0].apply(exports,arguments)
+},{"./base_wrapped_exception":270,"./exception_handler":272,"dup":28}],274:[function(require,module,exports){
 (function (global){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
@@ -39081,9 +39348,9 @@ exports.escapeRegExp = escapeRegExp;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{}],273:[function(require,module,exports){
-arguments[4][29][0].apply(exports,arguments)
-},{"dup":29}],274:[function(require,module,exports){
+},{}],275:[function(require,module,exports){
+arguments[4][31][0].apply(exports,arguments)
+},{"dup":31}],276:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -39122,7 +39389,7 @@ var CachedXHR = (function (_super) {
 }(compiler_1.XHR));
 exports.CachedXHR = CachedXHR;
 
-},{"../facade/exceptions":271,"../facade/lang":272,"../facade/promise":273,"@angular/compiler":76}],275:[function(require,module,exports){
+},{"../facade/exceptions":273,"../facade/lang":274,"../facade/promise":275,"@angular/compiler":78}],277:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -39169,7 +39436,7 @@ var XHRImpl = (function (_super) {
 }(compiler_1.XHR));
 exports.XHRImpl = XHRImpl;
 
-},{"../facade/lang":272,"../facade/promise":273,"@angular/compiler":76}],276:[function(require,module,exports){
+},{"../facade/lang":274,"../facade/promise":275,"@angular/compiler":78}],278:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 exports.RenderDebugInfo = core_1.__core_private__.RenderDebugInfo;
@@ -39194,7 +39461,7 @@ exports.flattenStyles = core_1.__core_private__.flattenStyles;
 exports.clearStyles = core_1.__core_private__.clearStyles;
 exports.collectAndResolveStyles = core_1.__core_private__.collectAndResolveStyles;
 
-},{"@angular/core":157}],277:[function(require,module,exports){
+},{"@angular/core":159}],279:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
@@ -39250,7 +39517,7 @@ var browser_2 = require('./src/browser');
 /* @deprecated use BROWSER_PLATFORM_PROVIDERS */
 exports.BROWSER_PROVIDERS = browser_2.BROWSER_PLATFORM_PROVIDERS;
 
-},{"./private_export":278,"./src/browser":279,"./src/browser/location/browser_platform_location":282,"./src/browser/title":285,"./src/browser/tools/tools":287,"./src/dom/debug/by":288,"./src/dom/debug/ng_probe":289,"./src/dom/dom_tokens":292,"./src/dom/events/dom_events":293,"./src/dom/events/event_manager":294,"./src/dom/events/hammer_gestures":296,"./src/dom/events/key_events":297,"./src/security/dom_sanitization_service":310,"./src/web_workers/shared/client_message_broker":315,"./src/web_workers/shared/message_bus":316,"./src/web_workers/shared/serializer":321,"./src/web_workers/shared/service_message_broker":322,"./src/web_workers/ui/location_providers":325,"./src/web_workers/worker/location_providers":329,"./src/worker_app":333,"./src/worker_render":334}],278:[function(require,module,exports){
+},{"./private_export":280,"./src/browser":281,"./src/browser/location/browser_platform_location":284,"./src/browser/title":287,"./src/browser/tools/tools":289,"./src/dom/debug/by":290,"./src/dom/debug/ng_probe":291,"./src/dom/dom_tokens":294,"./src/dom/events/dom_events":295,"./src/dom/events/event_manager":296,"./src/dom/events/hammer_gestures":298,"./src/dom/events/key_events":299,"./src/security/dom_sanitization_service":312,"./src/web_workers/shared/client_message_broker":317,"./src/web_workers/shared/message_bus":318,"./src/web_workers/shared/serializer":323,"./src/web_workers/shared/service_message_broker":324,"./src/web_workers/ui/location_providers":327,"./src/web_workers/worker/location_providers":331,"./src/worker_app":335,"./src/worker_render":336}],280:[function(require,module,exports){
 "use strict";
 var dom_adapter = require('./src/dom/dom_adapter');
 var dom_renderer = require('./src/dom/dom_renderer');
@@ -39265,7 +39532,7 @@ exports.__platform_browser_private__ = {
     SharedStylesHost: shared_styles_host.SharedStylesHost
 };
 
-},{"./src/dom/dom_adapter":290,"./src/dom/dom_renderer":291,"./src/dom/shared_styles_host":298}],279:[function(require,module,exports){
+},{"./src/dom/dom_adapter":292,"./src/dom/dom_renderer":293,"./src/dom/shared_styles_host":300}],281:[function(require,module,exports){
 "use strict";
 var common_1 = require('@angular/common');
 var core_1 = require('@angular/core');
@@ -39344,7 +39611,7 @@ function _resolveDefaultAnimationDriver() {
     return new core_private_1.NoOpAnimationDriver();
 }
 
-},{"../core_private":276,"../src/dom/web_animations_driver":300,"./browser/browser_adapter":280,"./browser/location/browser_platform_location":282,"./browser/testability":284,"./dom/debug/ng_probe":289,"./dom/dom_adapter":290,"./dom/dom_renderer":291,"./dom/dom_tokens":292,"./dom/events/dom_events":293,"./dom/events/event_manager":294,"./dom/events/hammer_gestures":296,"./dom/events/key_events":297,"./dom/shared_styles_host":298,"./facade/lang":308,"./security/dom_sanitization_service":310,"@angular/common":11,"@angular/core":157}],280:[function(require,module,exports){
+},{"../core_private":278,"../src/dom/web_animations_driver":302,"./browser/browser_adapter":282,"./browser/location/browser_platform_location":284,"./browser/testability":286,"./dom/debug/ng_probe":291,"./dom/dom_adapter":292,"./dom/dom_renderer":293,"./dom/dom_tokens":294,"./dom/events/dom_events":295,"./dom/events/event_manager":296,"./dom/events/hammer_gestures":298,"./dom/events/key_events":299,"./dom/shared_styles_host":300,"./facade/lang":310,"./security/dom_sanitization_service":312,"@angular/common":13,"@angular/core":159}],282:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -39809,7 +40076,7 @@ function parseCookieValue(cookie, name) {
 }
 exports.parseCookieValue = parseCookieValue;
 
-},{"../dom/dom_adapter":290,"../facade/collection":305,"../facade/lang":308,"./generic_browser_adapter":281}],281:[function(require,module,exports){
+},{"../dom/dom_adapter":292,"../facade/collection":307,"../facade/lang":310,"./generic_browser_adapter":283}],283:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -39879,7 +40146,7 @@ var GenericBrowserDomAdapter = (function (_super) {
 }(dom_adapter_1.DomAdapter));
 exports.GenericBrowserDomAdapter = GenericBrowserDomAdapter;
 
-},{"../dom/dom_adapter":290,"../facade/collection":305,"../facade/lang":308}],282:[function(require,module,exports){
+},{"../dom/dom_adapter":292,"../facade/collection":307,"../facade/lang":310}],284:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -39959,14 +40226,14 @@ var BrowserPlatformLocation = (function (_super) {
 }(common_1.PlatformLocation));
 exports.BrowserPlatformLocation = BrowserPlatformLocation;
 
-},{"../../dom/dom_adapter":290,"./history":283,"@angular/common":11,"@angular/core":157}],283:[function(require,module,exports){
+},{"../../dom/dom_adapter":292,"./history":285,"@angular/common":13,"@angular/core":159}],285:[function(require,module,exports){
 "use strict";
 function supportsState() {
     return !!window.history.pushState;
 }
 exports.supportsState = supportsState;
 
-},{}],284:[function(require,module,exports){
+},{}],286:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var dom_adapter_1 = require('../dom/dom_adapter');
@@ -40044,7 +40311,7 @@ var BrowserGetTestability = (function () {
 }());
 exports.BrowserGetTestability = BrowserGetTestability;
 
-},{"../dom/dom_adapter":290,"../facade/collection":305,"../facade/lang":308,"@angular/core":157}],285:[function(require,module,exports){
+},{"../dom/dom_adapter":292,"../facade/collection":307,"../facade/lang":310,"@angular/core":159}],287:[function(require,module,exports){
 "use strict";
 var dom_adapter_1 = require('../dom/dom_adapter');
 /**
@@ -40074,7 +40341,7 @@ var Title = (function () {
 }());
 exports.Title = Title;
 
-},{"../dom/dom_adapter":290}],286:[function(require,module,exports){
+},{"../dom/dom_adapter":292}],288:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var dom_adapter_1 = require('../../dom/dom_adapter');
@@ -40154,7 +40421,7 @@ var AngularProfiler = (function () {
 }());
 exports.AngularProfiler = AngularProfiler;
 
-},{"../../dom/dom_adapter":290,"../../facade/browser":304,"../../facade/lang":308,"@angular/core":157}],287:[function(require,module,exports){
+},{"../../dom/dom_adapter":292,"../../facade/browser":306,"../../facade/lang":310,"@angular/core":159}],289:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../../facade/lang');
 var common_tools_1 = require('./common_tools');
@@ -40183,7 +40450,7 @@ function disableDebugTools() {
 }
 exports.disableDebugTools = disableDebugTools;
 
-},{"../../facade/lang":308,"./common_tools":286}],288:[function(require,module,exports){
+},{"../../facade/lang":310,"./common_tools":288}],290:[function(require,module,exports){
 "use strict";
 var dom_adapter_1 = require('../../dom/dom_adapter');
 var lang_1 = require('../../facade/lang');
@@ -40229,7 +40496,7 @@ var By = (function () {
 }());
 exports.By = By;
 
-},{"../../dom/dom_adapter":290,"../../facade/lang":308}],289:[function(require,module,exports){
+},{"../../dom/dom_adapter":292,"../../facade/lang":310}],291:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var core_private_1 = require('../../../core_private');
@@ -40267,7 +40534,7 @@ function _createRootRenderer(rootRenderer /** TODO #9100 */) {
 exports.ELEMENT_PROBE_PROVIDERS = [{ provide: core_1.RootRenderer, useFactory: _createConditionalRootRenderer, deps: [dom_renderer_1.DomRootRenderer] }];
 exports.ELEMENT_PROBE_PROVIDERS_PROD_MODE = [{ provide: core_1.RootRenderer, useFactory: _createRootRenderer, deps: [dom_renderer_1.DomRootRenderer] }];
 
-},{"../../../core_private":276,"../dom_adapter":290,"../dom_renderer":291,"@angular/core":157}],290:[function(require,module,exports){
+},{"../../../core_private":278,"../dom_adapter":292,"../dom_renderer":293,"@angular/core":159}],292:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var _DOM = null;
@@ -40311,7 +40578,7 @@ var DomAdapter = (function () {
 }());
 exports.DomAdapter = DomAdapter;
 
-},{"../facade/lang":308}],291:[function(require,module,exports){
+},{"../facade/lang":310}],293:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -40596,7 +40863,7 @@ function splitNamespace(name) {
     return [match[1], match[2]];
 }
 
-},{"../../core_private":276,"../facade/exceptions":307,"../facade/lang":308,"./dom_adapter":290,"./dom_tokens":292,"./events/event_manager":294,"./shared_styles_host":298,"./util":299,"@angular/core":157}],292:[function(require,module,exports){
+},{"../../core_private":278,"../facade/exceptions":309,"../facade/lang":310,"./dom_adapter":292,"./dom_tokens":294,"./events/event_manager":296,"./shared_styles_host":300,"./util":301,"@angular/core":159}],294:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 /**
@@ -40607,7 +40874,7 @@ var core_1 = require('@angular/core');
  */
 exports.DOCUMENT = new core_1.OpaqueToken('DocumentToken');
 
-},{"@angular/core":157}],293:[function(require,module,exports){
+},{"@angular/core":159}],295:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -40644,7 +40911,7 @@ var DomEventsPlugin = (function (_super) {
 }(event_manager_1.EventManagerPlugin));
 exports.DomEventsPlugin = DomEventsPlugin;
 
-},{"../dom_adapter":290,"./event_manager":294,"@angular/core":157}],294:[function(require,module,exports){
+},{"../dom_adapter":292,"./event_manager":296,"@angular/core":159}],296:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../../facade/collection');
@@ -40704,7 +40971,7 @@ var EventManagerPlugin = (function () {
 }());
 exports.EventManagerPlugin = EventManagerPlugin;
 
-},{"../../facade/collection":305,"../../facade/exceptions":307,"@angular/core":157}],295:[function(require,module,exports){
+},{"../../facade/collection":307,"../../facade/exceptions":309,"@angular/core":159}],297:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -40763,7 +41030,7 @@ var HammerGesturesPluginCommon = (function (_super) {
 }(event_manager_1.EventManagerPlugin));
 exports.HammerGesturesPluginCommon = HammerGesturesPluginCommon;
 
-},{"../../facade/collection":305,"./event_manager":294}],296:[function(require,module,exports){
+},{"../../facade/collection":307,"./event_manager":296}],298:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -40837,7 +41104,7 @@ var HammerGesturesPlugin = (function (_super) {
 }(hammer_common_1.HammerGesturesPluginCommon));
 exports.HammerGesturesPlugin = HammerGesturesPlugin;
 
-},{"../../facade/exceptions":307,"../../facade/lang":308,"./hammer_common":295,"@angular/core":157}],297:[function(require,module,exports){
+},{"../../facade/exceptions":309,"../../facade/lang":310,"./hammer_common":297,"@angular/core":159}],299:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -40945,7 +41212,7 @@ var KeyEventsPlugin = (function (_super) {
 }(event_manager_1.EventManagerPlugin));
 exports.KeyEventsPlugin = KeyEventsPlugin;
 
-},{"../../facade/collection":305,"../../facade/lang":308,"../dom_adapter":290,"./event_manager":294,"@angular/core":157}],298:[function(require,module,exports){
+},{"../../facade/collection":307,"../../facade/lang":310,"../dom_adapter":292,"./event_manager":296,"@angular/core":159}],300:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -41021,7 +41288,7 @@ var DomSharedStylesHost = (function (_super) {
 }(SharedStylesHost));
 exports.DomSharedStylesHost = DomSharedStylesHost;
 
-},{"../facade/collection":305,"./dom_adapter":290,"./dom_tokens":292,"@angular/core":157}],299:[function(require,module,exports){
+},{"../facade/collection":307,"./dom_adapter":292,"./dom_tokens":294,"@angular/core":159}],301:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var CAMEL_CASE_REGEXP = /([A-Z])/g;
@@ -41035,7 +41302,7 @@ function dashCaseToCamelCase(input) {
 }
 exports.dashCaseToCamelCase = dashCaseToCamelCase;
 
-},{"../facade/lang":308}],300:[function(require,module,exports){
+},{"../facade/lang":310}],302:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var collection_1 = require('../facade/collection');
@@ -41164,7 +41431,7 @@ function _computeStyle(element, prop) {
     return dom_adapter_1.getDOM().getComputedStyle(element)[prop];
 }
 
-},{"../facade/collection":305,"../facade/lang":308,"./dom_adapter":290,"./util":299,"./web_animations_player":301,"@angular/core":157}],301:[function(require,module,exports){
+},{"../facade/collection":307,"../facade/lang":310,"./dom_adapter":292,"./util":301,"./web_animations_player":303,"@angular/core":159}],303:[function(require,module,exports){
 "use strict";
 var lang_1 = require('../facade/lang');
 var WebAnimationsPlayer = (function () {
@@ -41211,11 +41478,11 @@ var WebAnimationsPlayer = (function () {
 }());
 exports.WebAnimationsPlayer = WebAnimationsPlayer;
 
-},{"../facade/lang":308}],302:[function(require,module,exports){
-arguments[4][22][0].apply(exports,arguments)
-},{"./lang":308,"./promise":309,"dup":22,"rxjs/Observable":519,"rxjs/Subject":525,"rxjs/observable/PromiseObservable":648,"rxjs/operator/toPromise":746}],303:[function(require,module,exports){
-arguments[4][23][0].apply(exports,arguments)
-},{"dup":23}],304:[function(require,module,exports){
+},{"../facade/lang":310}],304:[function(require,module,exports){
+arguments[4][24][0].apply(exports,arguments)
+},{"./lang":310,"./promise":311,"dup":24,"rxjs/Observable":488,"rxjs/Subject":494,"rxjs/observable/PromiseObservable":617,"rxjs/operator/toPromise":715}],305:[function(require,module,exports){
+arguments[4][25][0].apply(exports,arguments)
+},{"dup":25}],306:[function(require,module,exports){
 "use strict";
 /**
  * JS version of browser APIs. This library can only run in the browser.
@@ -41234,13 +41501,13 @@ exports.History = win['History'];
 exports.Location = win['Location'];
 exports.EventListener = win['EventListener'];
 
-},{}],305:[function(require,module,exports){
-arguments[4][24][0].apply(exports,arguments)
-},{"./lang":308,"dup":24}],306:[function(require,module,exports){
-arguments[4][25][0].apply(exports,arguments)
-},{"./base_wrapped_exception":303,"./collection":305,"./lang":308,"dup":25}],307:[function(require,module,exports){
+},{}],307:[function(require,module,exports){
 arguments[4][26][0].apply(exports,arguments)
-},{"./base_wrapped_exception":303,"./exception_handler":306,"dup":26}],308:[function(require,module,exports){
+},{"./lang":310,"dup":26}],308:[function(require,module,exports){
+arguments[4][27][0].apply(exports,arguments)
+},{"./base_wrapped_exception":305,"./collection":307,"./lang":310,"dup":27}],309:[function(require,module,exports){
+arguments[4][28][0].apply(exports,arguments)
+},{"./base_wrapped_exception":305,"./exception_handler":308,"dup":28}],310:[function(require,module,exports){
 (function (global){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
@@ -41694,9 +41961,9 @@ exports.escapeRegExp = escapeRegExp;
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{}],309:[function(require,module,exports){
-arguments[4][29][0].apply(exports,arguments)
-},{"dup":29}],310:[function(require,module,exports){
+},{}],311:[function(require,module,exports){
+arguments[4][31][0].apply(exports,arguments)
+},{"dup":31}],312:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -41850,7 +42117,7 @@ var SafeResourceUrlImpl = (function (_super) {
     return SafeResourceUrlImpl;
 }(SafeValueImpl));
 
-},{"../../core_private":276,"./html_sanitizer":311,"./style_sanitizer":312,"./url_sanitizer":313,"@angular/core":157}],311:[function(require,module,exports){
+},{"../../core_private":278,"./html_sanitizer":313,"./style_sanitizer":314,"./url_sanitizer":315,"@angular/core":159}],313:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var dom_adapter_1 = require('../dom/dom_adapter');
@@ -42097,7 +42364,7 @@ function sanitizeHtml(unsafeHtml) {
 }
 exports.sanitizeHtml = sanitizeHtml;
 
-},{"../dom/dom_adapter":290,"./url_sanitizer":313,"@angular/core":157}],312:[function(require,module,exports){
+},{"../dom/dom_adapter":292,"./url_sanitizer":315,"@angular/core":159}],314:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var dom_adapter_1 = require('../dom/dom_adapter');
@@ -42181,7 +42448,7 @@ function sanitizeStyle(value) {
 }
 exports.sanitizeStyle = sanitizeStyle;
 
-},{"../dom/dom_adapter":290,"./url_sanitizer":313,"@angular/core":157}],313:[function(require,module,exports){
+},{"../dom/dom_adapter":292,"./url_sanitizer":315,"@angular/core":159}],315:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var dom_adapter_1 = require('../dom/dom_adapter');
@@ -42224,12 +42491,12 @@ function sanitizeUrl(url) {
 }
 exports.sanitizeUrl = sanitizeUrl;
 
-},{"../dom/dom_adapter":290,"@angular/core":157}],314:[function(require,module,exports){
+},{"../dom/dom_adapter":292,"@angular/core":159}],316:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 exports.ON_WEB_WORKER = new core_1.OpaqueToken('WebWorker.onWebWorker');
 
-},{"@angular/core":157}],315:[function(require,module,exports){
+},{"@angular/core":159}],317:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -42414,7 +42681,7 @@ var UiArguments = (function () {
 }());
 exports.UiArguments = UiArguments;
 
-},{"../../facade/async":302,"../../facade/collection":305,"../../facade/lang":308,"./message_bus":316,"./serializer":321,"@angular/core":157}],316:[function(require,module,exports){
+},{"../../facade/async":304,"../../facade/collection":307,"../../facade/lang":310,"./message_bus":318,"./serializer":323,"@angular/core":159}],318:[function(require,module,exports){
 "use strict";
 /**
  * Message Bus is a low level API used to communicate between the UI and the background.
@@ -42430,7 +42697,7 @@ var MessageBus = (function () {
 }());
 exports.MessageBus = MessageBus;
 
-},{}],317:[function(require,module,exports){
+},{}],319:[function(require,module,exports){
 "use strict";
 /**
  * All channels used by angular's WebWorker components are listed here.
@@ -42440,7 +42707,7 @@ exports.RENDERER_CHANNEL = 'ng-Renderer';
 exports.EVENT_CHANNEL = 'ng-Events';
 exports.ROUTER_CHANNEL = 'ng-Router';
 
-},{}],318:[function(require,module,exports){
+},{}],320:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var async_1 = require('../../facade/async');
@@ -42588,7 +42855,7 @@ var _Channel = (function () {
     return _Channel;
 }());
 
-},{"../../facade/async":302,"../../facade/collection":305,"../../facade/exceptions":307,"@angular/core":157}],319:[function(require,module,exports){
+},{"../../facade/async":304,"../../facade/collection":307,"../../facade/exceptions":309,"@angular/core":159}],321:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var RenderStore = (function () {
@@ -42632,7 +42899,7 @@ var RenderStore = (function () {
 }());
 exports.RenderStore = RenderStore;
 
-},{"@angular/core":157}],320:[function(require,module,exports){
+},{"@angular/core":159}],322:[function(require,module,exports){
 "use strict";
 // This file contains interface versions of browser types that can be serialized to Plain Old
 // JavaScript Objects
@@ -42652,7 +42919,7 @@ var LocationType = (function () {
 }());
 exports.LocationType = LocationType;
 
-},{}],321:[function(require,module,exports){
+},{}],323:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var core_private_1 = require('../../../core_private');
@@ -42772,7 +43039,7 @@ var RenderStoreObject = (function () {
 }());
 exports.RenderStoreObject = RenderStoreObject;
 
-},{"../../../core_private":276,"../../facade/exceptions":307,"../../facade/lang":308,"./render_store":319,"./serialized_types":320,"@angular/core":157}],322:[function(require,module,exports){
+},{"../../../core_private":278,"../../facade/exceptions":309,"../../facade/lang":310,"./render_store":321,"./serialized_types":322,"@angular/core":159}],324:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -42887,7 +43154,7 @@ var ReceivedMessage = (function () {
 }());
 exports.ReceivedMessage = ReceivedMessage;
 
-},{"../../facade/async":302,"../../facade/collection":305,"../../facade/lang":308,"../shared/message_bus":316,"../shared/serializer":321,"@angular/core":157}],323:[function(require,module,exports){
+},{"../../facade/async":304,"../../facade/collection":307,"../../facade/lang":310,"../shared/message_bus":318,"../shared/serializer":323,"@angular/core":159}],325:[function(require,module,exports){
 "use strict";
 var async_1 = require('../../facade/async');
 var exceptions_1 = require('../../facade/exceptions');
@@ -42995,7 +43262,7 @@ var EventDispatcher = (function () {
 }());
 exports.EventDispatcher = EventDispatcher;
 
-},{"../../facade/async":302,"../../facade/exceptions":307,"../shared/serializer":321,"./event_serializer":324}],324:[function(require,module,exports){
+},{"../../facade/async":304,"../../facade/exceptions":309,"../shared/serializer":323,"./event_serializer":326}],326:[function(require,module,exports){
 "use strict";
 var collection_1 = require('../../facade/collection');
 var lang_1 = require('../../facade/lang');
@@ -43055,7 +43322,7 @@ function serializeEvent(e, properties) {
     return serialized;
 }
 
-},{"../../facade/collection":305,"../../facade/lang":308}],325:[function(require,module,exports){
+},{"../../facade/collection":307,"../../facade/lang":310}],327:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var browser_platform_location_1 = require('../../browser/location/browser_platform_location');
@@ -43076,7 +43343,7 @@ function initUiLocation(injector) {
     };
 }
 
-},{"../../browser/location/browser_platform_location":282,"./platform_location":326,"@angular/core":157}],326:[function(require,module,exports){
+},{"../../browser/location/browser_platform_location":284,"./platform_location":328,"@angular/core":159}],328:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var browser_platform_location_1 = require('../../browser/location/browser_platform_location');
@@ -43129,7 +43396,7 @@ var MessageBasedPlatformLocation = (function () {
 }());
 exports.MessageBasedPlatformLocation = MessageBasedPlatformLocation;
 
-},{"../../browser/location/browser_platform_location":282,"../../facade/async":302,"../../facade/lang":308,"../shared/message_bus":316,"../shared/messaging_api":317,"../shared/serialized_types":320,"../shared/serializer":321,"../shared/service_message_broker":322,"@angular/core":157}],327:[function(require,module,exports){
+},{"../../browser/location/browser_platform_location":284,"../../facade/async":304,"../../facade/lang":310,"../shared/message_bus":318,"../shared/messaging_api":319,"../shared/serialized_types":322,"../shared/serializer":323,"../shared/service_message_broker":324,"@angular/core":159}],329:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var lang_1 = require('../../facade/lang');
@@ -43261,7 +43528,7 @@ var MessageBasedRenderer = (function () {
 }());
 exports.MessageBasedRenderer = MessageBasedRenderer;
 
-},{"../../facade/lang":308,"../shared/message_bus":316,"../shared/messaging_api":317,"../shared/render_store":319,"../shared/serializer":321,"../shared/service_message_broker":322,"../ui/event_dispatcher":323,"@angular/core":157}],328:[function(require,module,exports){
+},{"../../facade/lang":310,"../shared/message_bus":318,"../shared/messaging_api":319,"../shared/render_store":321,"../shared/serializer":323,"../shared/service_message_broker":324,"../ui/event_dispatcher":325,"@angular/core":159}],330:[function(require,module,exports){
 "use strict";
 // no deserialization is necessary in TS.
 // This is only here to match dart interface
@@ -43270,7 +43537,7 @@ function deserializeGenericEvent(serializedEvent) {
 }
 exports.deserializeGenericEvent = deserializeGenericEvent;
 
-},{}],329:[function(require,module,exports){
+},{}],331:[function(require,module,exports){
 "use strict";
 var common_1 = require('@angular/common');
 var core_1 = require('@angular/core');
@@ -43292,7 +43559,7 @@ function appInitFnFactory(platformLocation, zone) {
     return function () { return zone.runGuarded(function () { return platformLocation.init(); }); };
 }
 
-},{"./platform_location":330,"@angular/common":11,"@angular/core":157}],330:[function(require,module,exports){
+},{"./platform_location":332,"@angular/common":13,"@angular/core":159}],332:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -43427,7 +43694,7 @@ var WebWorkerPlatformLocation = (function (_super) {
 }(common_1.PlatformLocation));
 exports.WebWorkerPlatformLocation = WebWorkerPlatformLocation;
 
-},{"../../facade/async":302,"../../facade/collection":305,"../../facade/exceptions":307,"../../facade/lang":308,"../shared/client_message_broker":315,"../shared/message_bus":316,"../shared/messaging_api":317,"../shared/serialized_types":320,"../shared/serializer":321,"./event_deserializer":328,"@angular/common":11,"@angular/core":157}],331:[function(require,module,exports){
+},{"../../facade/async":304,"../../facade/collection":307,"../../facade/exceptions":309,"../../facade/lang":310,"../shared/client_message_broker":317,"../shared/message_bus":318,"../shared/messaging_api":319,"../shared/serialized_types":322,"../shared/serializer":323,"./event_deserializer":330,"@angular/common":13,"@angular/core":159}],333:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var async_1 = require('../../facade/async');
@@ -43669,7 +43936,7 @@ var WebWorkerRenderNode = (function () {
 }());
 exports.WebWorkerRenderNode = WebWorkerRenderNode;
 
-},{"../../facade/async":302,"../../facade/collection":305,"../../facade/lang":308,"../shared/client_message_broker":315,"../shared/message_bus":316,"../shared/messaging_api":317,"../shared/render_store":319,"../shared/serializer":321,"./event_deserializer":328,"@angular/core":157}],332:[function(require,module,exports){
+},{"../../facade/async":304,"../../facade/collection":307,"../../facade/lang":310,"../shared/client_message_broker":317,"../shared/message_bus":318,"../shared/messaging_api":319,"../shared/render_store":321,"../shared/serializer":323,"./event_deserializer":330,"@angular/core":159}],334:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -43878,7 +44145,7 @@ var WorkerDomAdapter = (function (_super) {
 }(dom_adapter_1.DomAdapter));
 exports.WorkerDomAdapter = WorkerDomAdapter;
 
-},{"../../dom/dom_adapter":290}],333:[function(require,module,exports){
+},{"../../dom/dom_adapter":292}],335:[function(require,module,exports){
 "use strict";
 var common_1 = require('@angular/common');
 var core_1 = require('@angular/core');
@@ -43950,7 +44217,7 @@ function setupWebWorker() {
     worker_adapter_1.WorkerDomAdapter.makeCurrent();
 }
 
-},{"./browser":279,"./facade/lang":308,"./web_workers/shared/api":314,"./web_workers/shared/client_message_broker":315,"./web_workers/shared/message_bus":316,"./web_workers/shared/post_message_bus":318,"./web_workers/shared/render_store":319,"./web_workers/shared/serializer":321,"./web_workers/shared/service_message_broker":322,"./web_workers/worker/renderer":331,"./web_workers/worker/worker_adapter":332,"@angular/common":11,"@angular/core":157}],334:[function(require,module,exports){
+},{"./browser":281,"./facade/lang":310,"./web_workers/shared/api":316,"./web_workers/shared/client_message_broker":317,"./web_workers/shared/message_bus":318,"./web_workers/shared/post_message_bus":320,"./web_workers/shared/render_store":321,"./web_workers/shared/serializer":323,"./web_workers/shared/service_message_broker":324,"./web_workers/worker/renderer":333,"./web_workers/worker/worker_adapter":334,"@angular/common":13,"@angular/core":159}],336:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var core_private_1 = require('../core_private');
@@ -44104,7 +44371,4043 @@ function _resolveDefaultAnimationDriver() {
     return new core_private_1.NoOpAnimationDriver();
 }
 
-},{"../core_private":276,"./browser":279,"./browser/browser_adapter":280,"./browser/testability":284,"./dom/dom_adapter":290,"./dom/dom_renderer":291,"./dom/dom_tokens":292,"./dom/events/dom_events":293,"./dom/events/event_manager":294,"./dom/events/hammer_gestures":296,"./dom/events/key_events":297,"./dom/shared_styles_host":298,"./facade/exceptions":307,"./facade/lang":308,"./web_workers/shared/api":314,"./web_workers/shared/client_message_broker":315,"./web_workers/shared/message_bus":316,"./web_workers/shared/post_message_bus":318,"./web_workers/shared/render_store":319,"./web_workers/shared/serializer":321,"./web_workers/shared/service_message_broker":322,"./web_workers/ui/renderer":327,"@angular/core":157}],335:[function(require,module,exports){
+},{"../core_private":278,"./browser":281,"./browser/browser_adapter":282,"./browser/testability":286,"./dom/dom_adapter":292,"./dom/dom_renderer":293,"./dom/dom_tokens":294,"./dom/events/dom_events":295,"./dom/events/event_manager":296,"./dom/events/hammer_gestures":298,"./dom/events/key_events":299,"./dom/shared_styles_host":300,"./facade/exceptions":309,"./facade/lang":310,"./web_workers/shared/api":316,"./web_workers/shared/client_message_broker":317,"./web_workers/shared/message_bus":318,"./web_workers/shared/post_message_bus":320,"./web_workers/shared/render_store":321,"./web_workers/shared/serializer":323,"./web_workers/shared/service_message_broker":324,"./web_workers/ui/renderer":329,"@angular/core":159}],337:[function(require,module,exports){
+module.exports = after
+
+function after(count, callback, err_cb) {
+    var bail = false
+    err_cb = err_cb || noop
+    proxy.count = count
+
+    return (count === 0) ? callback() : proxy
+
+    function proxy(err, result) {
+        if (proxy.count <= 0) {
+            throw new Error('after called too many times')
+        }
+        --proxy.count
+
+        // after first error, rest are passed to err_cb
+        if (err) {
+            bail = true
+            callback(err)
+            // future error callbacks will go to error handler
+            callback = err_cb
+        } else if (proxy.count === 0 && !bail) {
+            callback(null, result)
+        }
+    }
+}
+
+function noop() {}
+
+},{}],338:[function(require,module,exports){
+/**
+ * An abstraction for slicing an arraybuffer even when
+ * ArrayBuffer.prototype.slice is not supported
+ *
+ * @api public
+ */
+
+module.exports = function(arraybuffer, start, end) {
+  var bytes = arraybuffer.byteLength;
+  start = start || 0;
+  end = end || bytes;
+
+  if (arraybuffer.slice) { return arraybuffer.slice(start, end); }
+
+  if (start < 0) { start += bytes; }
+  if (end < 0) { end += bytes; }
+  if (end > bytes) { end = bytes; }
+
+  if (start >= bytes || start >= end || bytes === 0) {
+    return new ArrayBuffer(0);
+  }
+
+  var abv = new Uint8Array(arraybuffer);
+  var result = new Uint8Array(end - start);
+  for (var i = start, ii = 0; i < end; i++, ii++) {
+    result[ii] = abv[i];
+  }
+  return result.buffer;
+};
+
+},{}],339:[function(require,module,exports){
+
+/**
+ * Expose `Backoff`.
+ */
+
+module.exports = Backoff;
+
+/**
+ * Initialize backoff timer with `opts`.
+ *
+ * - `min` initial timeout in milliseconds [100]
+ * - `max` max timeout [10000]
+ * - `jitter` [0]
+ * - `factor` [2]
+ *
+ * @param {Object} opts
+ * @api public
+ */
+
+function Backoff(opts) {
+  opts = opts || {};
+  this.ms = opts.min || 100;
+  this.max = opts.max || 10000;
+  this.factor = opts.factor || 2;
+  this.jitter = opts.jitter > 0 && opts.jitter <= 1 ? opts.jitter : 0;
+  this.attempts = 0;
+}
+
+/**
+ * Return the backoff duration.
+ *
+ * @return {Number}
+ * @api public
+ */
+
+Backoff.prototype.duration = function(){
+  var ms = this.ms * Math.pow(this.factor, this.attempts++);
+  if (this.jitter) {
+    var rand =  Math.random();
+    var deviation = Math.floor(rand * this.jitter * ms);
+    ms = (Math.floor(rand * 10) & 1) == 0  ? ms - deviation : ms + deviation;
+  }
+  return Math.min(ms, this.max) | 0;
+};
+
+/**
+ * Reset the number of attempts.
+ *
+ * @api public
+ */
+
+Backoff.prototype.reset = function(){
+  this.attempts = 0;
+};
+
+/**
+ * Set the minimum duration
+ *
+ * @api public
+ */
+
+Backoff.prototype.setMin = function(min){
+  this.ms = min;
+};
+
+/**
+ * Set the maximum duration
+ *
+ * @api public
+ */
+
+Backoff.prototype.setMax = function(max){
+  this.max = max;
+};
+
+/**
+ * Set the jitter
+ *
+ * @api public
+ */
+
+Backoff.prototype.setJitter = function(jitter){
+  this.jitter = jitter;
+};
+
+
+},{}],340:[function(require,module,exports){
+/*
+ * base64-arraybuffer
+ * https://github.com/niklasvh/base64-arraybuffer
+ *
+ * Copyright (c) 2012 Niklas von Hertzen
+ * Licensed under the MIT license.
+ */
+(function(){
+  "use strict";
+
+  var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+  // Use a lookup table to find the index.
+  var lookup = new Uint8Array(256);
+  for (var i = 0; i < chars.length; i++) {
+    lookup[chars.charCodeAt(i)] = i;
+  }
+
+  exports.encode = function(arraybuffer) {
+    var bytes = new Uint8Array(arraybuffer),
+    i, len = bytes.length, base64 = "";
+
+    for (i = 0; i < len; i+=3) {
+      base64 += chars[bytes[i] >> 2];
+      base64 += chars[((bytes[i] & 3) << 4) | (bytes[i + 1] >> 4)];
+      base64 += chars[((bytes[i + 1] & 15) << 2) | (bytes[i + 2] >> 6)];
+      base64 += chars[bytes[i + 2] & 63];
+    }
+
+    if ((len % 3) === 2) {
+      base64 = base64.substring(0, base64.length - 1) + "=";
+    } else if (len % 3 === 1) {
+      base64 = base64.substring(0, base64.length - 2) + "==";
+    }
+
+    return base64;
+  };
+
+  exports.decode =  function(base64) {
+    var bufferLength = base64.length * 0.75,
+    len = base64.length, i, p = 0,
+    encoded1, encoded2, encoded3, encoded4;
+
+    if (base64[base64.length - 1] === "=") {
+      bufferLength--;
+      if (base64[base64.length - 2] === "=") {
+        bufferLength--;
+      }
+    }
+
+    var arraybuffer = new ArrayBuffer(bufferLength),
+    bytes = new Uint8Array(arraybuffer);
+
+    for (i = 0; i < len; i+=4) {
+      encoded1 = lookup[base64.charCodeAt(i)];
+      encoded2 = lookup[base64.charCodeAt(i+1)];
+      encoded3 = lookup[base64.charCodeAt(i+2)];
+      encoded4 = lookup[base64.charCodeAt(i+3)];
+
+      bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
+      bytes[p++] = ((encoded2 & 15) << 4) | (encoded3 >> 2);
+      bytes[p++] = ((encoded3 & 3) << 6) | (encoded4 & 63);
+    }
+
+    return arraybuffer;
+  };
+})();
+
+},{}],341:[function(require,module,exports){
+(function (global){
+/**
+ * Create a blob builder even when vendor prefixes exist
+ */
+
+var BlobBuilder = global.BlobBuilder
+  || global.WebKitBlobBuilder
+  || global.MSBlobBuilder
+  || global.MozBlobBuilder;
+
+/**
+ * Check if Blob constructor is supported
+ */
+
+var blobSupported = (function() {
+  try {
+    var a = new Blob(['hi']);
+    return a.size === 2;
+  } catch(e) {
+    return false;
+  }
+})();
+
+/**
+ * Check if Blob constructor supports ArrayBufferViews
+ * Fails in Safari 6, so we need to map to ArrayBuffers there.
+ */
+
+var blobSupportsArrayBufferView = blobSupported && (function() {
+  try {
+    var b = new Blob([new Uint8Array([1,2])]);
+    return b.size === 2;
+  } catch(e) {
+    return false;
+  }
+})();
+
+/**
+ * Check if BlobBuilder is supported
+ */
+
+var blobBuilderSupported = BlobBuilder
+  && BlobBuilder.prototype.append
+  && BlobBuilder.prototype.getBlob;
+
+/**
+ * Helper function that maps ArrayBufferViews to ArrayBuffers
+ * Used by BlobBuilder constructor and old browsers that didn't
+ * support it in the Blob constructor.
+ */
+
+function mapArrayBufferViews(ary) {
+  for (var i = 0; i < ary.length; i++) {
+    var chunk = ary[i];
+    if (chunk.buffer instanceof ArrayBuffer) {
+      var buf = chunk.buffer;
+
+      // if this is a subarray, make a copy so we only
+      // include the subarray region from the underlying buffer
+      if (chunk.byteLength !== buf.byteLength) {
+        var copy = new Uint8Array(chunk.byteLength);
+        copy.set(new Uint8Array(buf, chunk.byteOffset, chunk.byteLength));
+        buf = copy.buffer;
+      }
+
+      ary[i] = buf;
+    }
+  }
+}
+
+function BlobBuilderConstructor(ary, options) {
+  options = options || {};
+
+  var bb = new BlobBuilder();
+  mapArrayBufferViews(ary);
+
+  for (var i = 0; i < ary.length; i++) {
+    bb.append(ary[i]);
+  }
+
+  return (options.type) ? bb.getBlob(options.type) : bb.getBlob();
+};
+
+function BlobConstructor(ary, options) {
+  mapArrayBufferViews(ary);
+  return new Blob(ary, options || {});
+};
+
+module.exports = (function() {
+  if (blobSupported) {
+    return blobSupportsArrayBufferView ? global.Blob : BlobConstructor;
+  } else if (blobBuilderSupported) {
+    return BlobBuilderConstructor;
+  } else {
+    return undefined;
+  }
+})();
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{}],342:[function(require,module,exports){
+
+},{}],343:[function(require,module,exports){
+/**
+ * Slice reference.
+ */
+
+var slice = [].slice;
+
+/**
+ * Bind `obj` to `fn`.
+ *
+ * @param {Object} obj
+ * @param {Function|String} fn or string
+ * @return {Function}
+ * @api public
+ */
+
+module.exports = function(obj, fn){
+  if ('string' == typeof fn) fn = obj[fn];
+  if ('function' != typeof fn) throw new Error('bind() requires a function');
+  var args = slice.call(arguments, 2);
+  return function(){
+    return fn.apply(obj, args.concat(slice.call(arguments)));
+  }
+};
+
+},{}],344:[function(require,module,exports){
+
+/**
+ * Expose `Emitter`.
+ */
+
+module.exports = Emitter;
+
+/**
+ * Initialize a new `Emitter`.
+ *
+ * @api public
+ */
+
+function Emitter(obj) {
+  if (obj) return mixin(obj);
+};
+
+/**
+ * Mixin the emitter properties.
+ *
+ * @param {Object} obj
+ * @return {Object}
+ * @api private
+ */
+
+function mixin(obj) {
+  for (var key in Emitter.prototype) {
+    obj[key] = Emitter.prototype[key];
+  }
+  return obj;
+}
+
+/**
+ * Listen on the given `event` with `fn`.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.on =
+Emitter.prototype.addEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+  (this._callbacks['$' + event] = this._callbacks['$' + event] || [])
+    .push(fn);
+  return this;
+};
+
+/**
+ * Adds an `event` listener that will be invoked a single
+ * time then automatically removed.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.once = function(event, fn){
+  function on() {
+    this.off(event, on);
+    fn.apply(this, arguments);
+  }
+
+  on.fn = fn;
+  this.on(event, on);
+  return this;
+};
+
+/**
+ * Remove the given callback for `event` or all
+ * registered callbacks.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.off =
+Emitter.prototype.removeListener =
+Emitter.prototype.removeAllListeners =
+Emitter.prototype.removeEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+
+  // all
+  if (0 == arguments.length) {
+    this._callbacks = {};
+    return this;
+  }
+
+  // specific event
+  var callbacks = this._callbacks['$' + event];
+  if (!callbacks) return this;
+
+  // remove all handlers
+  if (1 == arguments.length) {
+    delete this._callbacks['$' + event];
+    return this;
+  }
+
+  // remove specific handler
+  var cb;
+  for (var i = 0; i < callbacks.length; i++) {
+    cb = callbacks[i];
+    if (cb === fn || cb.fn === fn) {
+      callbacks.splice(i, 1);
+      break;
+    }
+  }
+  return this;
+};
+
+/**
+ * Emit `event` with the given args.
+ *
+ * @param {String} event
+ * @param {Mixed} ...
+ * @return {Emitter}
+ */
+
+Emitter.prototype.emit = function(event){
+  this._callbacks = this._callbacks || {};
+  var args = [].slice.call(arguments, 1)
+    , callbacks = this._callbacks['$' + event];
+
+  if (callbacks) {
+    callbacks = callbacks.slice(0);
+    for (var i = 0, len = callbacks.length; i < len; ++i) {
+      callbacks[i].apply(this, args);
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return array of callbacks for `event`.
+ *
+ * @param {String} event
+ * @return {Array}
+ * @api public
+ */
+
+Emitter.prototype.listeners = function(event){
+  this._callbacks = this._callbacks || {};
+  return this._callbacks['$' + event] || [];
+};
+
+/**
+ * Check if this emitter has `event` handlers.
+ *
+ * @param {String} event
+ * @return {Boolean}
+ * @api public
+ */
+
+Emitter.prototype.hasListeners = function(event){
+  return !! this.listeners(event).length;
+};
+
+},{}],345:[function(require,module,exports){
+
+module.exports = function(a, b){
+  var fn = function(){};
+  fn.prototype = b.prototype;
+  a.prototype = new fn;
+  a.prototype.constructor = a;
+};
+},{}],346:[function(require,module,exports){
+
+/**
+ * This is the web browser implementation of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = require('./debug');
+exports.log = log;
+exports.formatArgs = formatArgs;
+exports.save = save;
+exports.load = load;
+exports.useColors = useColors;
+exports.storage = 'undefined' != typeof chrome
+               && 'undefined' != typeof chrome.storage
+                  ? chrome.storage.local
+                  : localstorage();
+
+/**
+ * Colors.
+ */
+
+exports.colors = [
+  'lightseagreen',
+  'forestgreen',
+  'goldenrod',
+  'dodgerblue',
+  'darkorchid',
+  'crimson'
+];
+
+/**
+ * Currently only WebKit-based Web Inspectors, Firefox >= v31,
+ * and the Firebug extension (any Firefox version) are known
+ * to support "%c" CSS customizations.
+ *
+ * TODO: add a `localStorage` variable to explicitly enable/disable colors
+ */
+
+function useColors() {
+  // is webkit? http://stackoverflow.com/a/16459606/376773
+  return ('WebkitAppearance' in document.documentElement.style) ||
+    // is firebug? http://stackoverflow.com/a/398120/376773
+    (window.console && (console.firebug || (console.exception && console.table))) ||
+    // is firefox >= v31?
+    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
+    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
+}
+
+/**
+ * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
+ */
+
+exports.formatters.j = function(v) {
+  return JSON.stringify(v);
+};
+
+
+/**
+ * Colorize log arguments if enabled.
+ *
+ * @api public
+ */
+
+function formatArgs() {
+  var args = arguments;
+  var useColors = this.useColors;
+
+  args[0] = (useColors ? '%c' : '')
+    + this.namespace
+    + (useColors ? ' %c' : ' ')
+    + args[0]
+    + (useColors ? '%c ' : ' ')
+    + '+' + exports.humanize(this.diff);
+
+  if (!useColors) return args;
+
+  var c = 'color: ' + this.color;
+  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
+
+  // the final "%c" is somewhat tricky, because there could be other
+  // arguments passed either before or after the %c, so we need to
+  // figure out the correct index to insert the CSS into
+  var index = 0;
+  var lastC = 0;
+  args[0].replace(/%[a-z%]/g, function(match) {
+    if ('%%' === match) return;
+    index++;
+    if ('%c' === match) {
+      // we only are interested in the *last* %c
+      // (the user may have provided their own)
+      lastC = index;
+    }
+  });
+
+  args.splice(lastC, 0, c);
+  return args;
+}
+
+/**
+ * Invokes `console.log()` when available.
+ * No-op when `console.log` is not a "function".
+ *
+ * @api public
+ */
+
+function log() {
+  // this hackery is required for IE8/9, where
+  // the `console.log` function doesn't have 'apply'
+  return 'object' === typeof console
+    && console.log
+    && Function.prototype.apply.call(console.log, console, arguments);
+}
+
+/**
+ * Save `namespaces`.
+ *
+ * @param {String} namespaces
+ * @api private
+ */
+
+function save(namespaces) {
+  try {
+    if (null == namespaces) {
+      exports.storage.removeItem('debug');
+    } else {
+      exports.storage.debug = namespaces;
+    }
+  } catch(e) {}
+}
+
+/**
+ * Load `namespaces`.
+ *
+ * @return {String} returns the previously persisted debug modes
+ * @api private
+ */
+
+function load() {
+  var r;
+  try {
+    r = exports.storage.debug;
+  } catch(e) {}
+  return r;
+}
+
+/**
+ * Enable namespaces listed in `localStorage.debug` initially.
+ */
+
+exports.enable(load());
+
+/**
+ * Localstorage attempts to return the localstorage.
+ *
+ * This is necessary because safari throws
+ * when a user disables cookies/localstorage
+ * and you attempt to access it.
+ *
+ * @return {LocalStorage}
+ * @api private
+ */
+
+function localstorage(){
+  try {
+    return window.localStorage;
+  } catch (e) {}
+}
+
+},{"./debug":347}],347:[function(require,module,exports){
+
+/**
+ * This is the common logic for both the Node.js and web browser
+ * implementations of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = debug;
+exports.coerce = coerce;
+exports.disable = disable;
+exports.enable = enable;
+exports.enabled = enabled;
+exports.humanize = require('ms');
+
+/**
+ * The currently active debug mode names, and names to skip.
+ */
+
+exports.names = [];
+exports.skips = [];
+
+/**
+ * Map of special "%n" handling functions, for the debug "format" argument.
+ *
+ * Valid key names are a single, lowercased letter, i.e. "n".
+ */
+
+exports.formatters = {};
+
+/**
+ * Previously assigned color.
+ */
+
+var prevColor = 0;
+
+/**
+ * Previous log timestamp.
+ */
+
+var prevTime;
+
+/**
+ * Select a color.
+ *
+ * @return {Number}
+ * @api private
+ */
+
+function selectColor() {
+  return exports.colors[prevColor++ % exports.colors.length];
+}
+
+/**
+ * Create a debugger with the given `namespace`.
+ *
+ * @param {String} namespace
+ * @return {Function}
+ * @api public
+ */
+
+function debug(namespace) {
+
+  // define the `disabled` version
+  function disabled() {
+  }
+  disabled.enabled = false;
+
+  // define the `enabled` version
+  function enabled() {
+
+    var self = enabled;
+
+    // set `diff` timestamp
+    var curr = +new Date();
+    var ms = curr - (prevTime || curr);
+    self.diff = ms;
+    self.prev = prevTime;
+    self.curr = curr;
+    prevTime = curr;
+
+    // add the `color` if not set
+    if (null == self.useColors) self.useColors = exports.useColors();
+    if (null == self.color && self.useColors) self.color = selectColor();
+
+    var args = Array.prototype.slice.call(arguments);
+
+    args[0] = exports.coerce(args[0]);
+
+    if ('string' !== typeof args[0]) {
+      // anything else let's inspect with %o
+      args = ['%o'].concat(args);
+    }
+
+    // apply any `formatters` transformations
+    var index = 0;
+    args[0] = args[0].replace(/%([a-z%])/g, function(match, format) {
+      // if we encounter an escaped % then don't increase the array index
+      if (match === '%%') return match;
+      index++;
+      var formatter = exports.formatters[format];
+      if ('function' === typeof formatter) {
+        var val = args[index];
+        match = formatter.call(self, val);
+
+        // now we need to remove `args[index]` since it's inlined in the `format`
+        args.splice(index, 1);
+        index--;
+      }
+      return match;
+    });
+
+    if ('function' === typeof exports.formatArgs) {
+      args = exports.formatArgs.apply(self, args);
+    }
+    var logFn = enabled.log || exports.log || console.log.bind(console);
+    logFn.apply(self, args);
+  }
+  enabled.enabled = true;
+
+  var fn = exports.enabled(namespace) ? enabled : disabled;
+
+  fn.namespace = namespace;
+
+  return fn;
+}
+
+/**
+ * Enables a debug mode by namespaces. This can include modes
+ * separated by a colon and wildcards.
+ *
+ * @param {String} namespaces
+ * @api public
+ */
+
+function enable(namespaces) {
+  exports.save(namespaces);
+
+  var split = (namespaces || '').split(/[\s,]+/);
+  var len = split.length;
+
+  for (var i = 0; i < len; i++) {
+    if (!split[i]) continue; // ignore empty strings
+    namespaces = split[i].replace(/\*/g, '.*?');
+    if (namespaces[0] === '-') {
+      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
+    } else {
+      exports.names.push(new RegExp('^' + namespaces + '$'));
+    }
+  }
+}
+
+/**
+ * Disable debug output.
+ *
+ * @api public
+ */
+
+function disable() {
+  exports.enable('');
+}
+
+/**
+ * Returns true if the given mode name is enabled, false otherwise.
+ *
+ * @param {String} name
+ * @return {Boolean}
+ * @api public
+ */
+
+function enabled(name) {
+  var i, len;
+  for (i = 0, len = exports.skips.length; i < len; i++) {
+    if (exports.skips[i].test(name)) {
+      return false;
+    }
+  }
+  for (i = 0, len = exports.names.length; i < len; i++) {
+    if (exports.names[i].test(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Coerce `val`.
+ *
+ * @param {Mixed} val
+ * @return {Mixed}
+ * @api private
+ */
+
+function coerce(val) {
+  if (val instanceof Error) return val.stack || val.message;
+  return val;
+}
+
+},{"ms":480}],348:[function(require,module,exports){
+
+module.exports = require('./lib/index');
+
+},{"./lib/index":349}],349:[function(require,module,exports){
+
+module.exports = require('./socket');
+
+/**
+ * Exports parser
+ *
+ * @api public
+ *
+ */
+module.exports.parser = require('engine.io-parser');
+
+},{"./socket":350,"engine.io-parser":359}],350:[function(require,module,exports){
+(function (global){
+/**
+ * Module dependencies.
+ */
+
+var transports = require('./transports/index');
+var Emitter = require('component-emitter');
+var debug = require('debug')('engine.io-client:socket');
+var index = require('indexof');
+var parser = require('engine.io-parser');
+var parseuri = require('parseuri');
+var parsejson = require('parsejson');
+var parseqs = require('parseqs');
+
+/**
+ * Module exports.
+ */
+
+module.exports = Socket;
+
+/**
+ * Socket constructor.
+ *
+ * @param {String|Object} uri or options
+ * @param {Object} options
+ * @api public
+ */
+
+function Socket (uri, opts) {
+  if (!(this instanceof Socket)) return new Socket(uri, opts);
+
+  opts = opts || {};
+
+  if (uri && 'object' === typeof uri) {
+    opts = uri;
+    uri = null;
+  }
+
+  if (uri) {
+    uri = parseuri(uri);
+    opts.hostname = uri.host;
+    opts.secure = uri.protocol === 'https' || uri.protocol === 'wss';
+    opts.port = uri.port;
+    if (uri.query) opts.query = uri.query;
+  } else if (opts.host) {
+    opts.hostname = parseuri(opts.host).host;
+  }
+
+  this.secure = null != opts.secure ? opts.secure
+    : (global.location && 'https:' === location.protocol);
+
+  if (opts.hostname && !opts.port) {
+    // if no port is specified manually, use the protocol default
+    opts.port = this.secure ? '443' : '80';
+  }
+
+  this.agent = opts.agent || false;
+  this.hostname = opts.hostname ||
+    (global.location ? location.hostname : 'localhost');
+  this.port = opts.port || (global.location && location.port
+      ? location.port
+      : (this.secure ? 443 : 80));
+  this.query = opts.query || {};
+  if ('string' === typeof this.query) this.query = parseqs.decode(this.query);
+  this.upgrade = false !== opts.upgrade;
+  this.path = (opts.path || '/engine.io').replace(/\/$/, '') + '/';
+  this.forceJSONP = !!opts.forceJSONP;
+  this.jsonp = false !== opts.jsonp;
+  this.forceBase64 = !!opts.forceBase64;
+  this.enablesXDR = !!opts.enablesXDR;
+  this.timestampParam = opts.timestampParam || 't';
+  this.timestampRequests = opts.timestampRequests;
+  this.transports = opts.transports || ['polling', 'websocket'];
+  this.readyState = '';
+  this.writeBuffer = [];
+  this.prevBufferLen = 0;
+  this.policyPort = opts.policyPort || 843;
+  this.rememberUpgrade = opts.rememberUpgrade || false;
+  this.binaryType = null;
+  this.onlyBinaryUpgrades = opts.onlyBinaryUpgrades;
+  this.perMessageDeflate = false !== opts.perMessageDeflate ? (opts.perMessageDeflate || {}) : false;
+
+  if (true === this.perMessageDeflate) this.perMessageDeflate = {};
+  if (this.perMessageDeflate && null == this.perMessageDeflate.threshold) {
+    this.perMessageDeflate.threshold = 1024;
+  }
+
+  // SSL options for Node.js client
+  this.pfx = opts.pfx || null;
+  this.key = opts.key || null;
+  this.passphrase = opts.passphrase || null;
+  this.cert = opts.cert || null;
+  this.ca = opts.ca || null;
+  this.ciphers = opts.ciphers || null;
+  this.rejectUnauthorized = opts.rejectUnauthorized === undefined ? null : opts.rejectUnauthorized;
+
+  // other options for Node.js client
+  var freeGlobal = typeof global === 'object' && global;
+  if (freeGlobal.global === freeGlobal) {
+    if (opts.extraHeaders && Object.keys(opts.extraHeaders).length > 0) {
+      this.extraHeaders = opts.extraHeaders;
+    }
+  }
+
+  // set on handshake
+  this.id = null;
+  this.upgrades = null;
+  this.pingInterval = null;
+  this.pingTimeout = null;
+
+  // set on heartbeat
+  this.pingIntervalTimer = null;
+  this.pingTimeoutTimer = null;
+
+  this.open();
+}
+
+Socket.priorWebsocketSuccess = false;
+
+/**
+ * Mix in `Emitter`.
+ */
+
+Emitter(Socket.prototype);
+
+/**
+ * Protocol version.
+ *
+ * @api public
+ */
+
+Socket.protocol = parser.protocol; // this is an int
+
+/**
+ * Expose deps for legacy compatibility
+ * and standalone browser access.
+ */
+
+Socket.Socket = Socket;
+Socket.Transport = require('./transport');
+Socket.transports = require('./transports/index');
+Socket.parser = require('engine.io-parser');
+
+/**
+ * Creates transport of the given type.
+ *
+ * @param {String} transport name
+ * @return {Transport}
+ * @api private
+ */
+
+Socket.prototype.createTransport = function (name) {
+  debug('creating transport "%s"', name);
+  var query = clone(this.query);
+
+  // append engine.io protocol identifier
+  query.EIO = parser.protocol;
+
+  // transport name
+  query.transport = name;
+
+  // session id if we already have one
+  if (this.id) query.sid = this.id;
+
+  var transport = new transports[name]({
+    agent: this.agent,
+    hostname: this.hostname,
+    port: this.port,
+    secure: this.secure,
+    path: this.path,
+    query: query,
+    forceJSONP: this.forceJSONP,
+    jsonp: this.jsonp,
+    forceBase64: this.forceBase64,
+    enablesXDR: this.enablesXDR,
+    timestampRequests: this.timestampRequests,
+    timestampParam: this.timestampParam,
+    policyPort: this.policyPort,
+    socket: this,
+    pfx: this.pfx,
+    key: this.key,
+    passphrase: this.passphrase,
+    cert: this.cert,
+    ca: this.ca,
+    ciphers: this.ciphers,
+    rejectUnauthorized: this.rejectUnauthorized,
+    perMessageDeflate: this.perMessageDeflate,
+    extraHeaders: this.extraHeaders
+  });
+
+  return transport;
+};
+
+function clone (obj) {
+  var o = {};
+  for (var i in obj) {
+    if (obj.hasOwnProperty(i)) {
+      o[i] = obj[i];
+    }
+  }
+  return o;
+}
+
+/**
+ * Initializes transport to use and starts probe.
+ *
+ * @api private
+ */
+Socket.prototype.open = function () {
+  var transport;
+  if (this.rememberUpgrade && Socket.priorWebsocketSuccess && this.transports.indexOf('websocket') !== -1) {
+    transport = 'websocket';
+  } else if (0 === this.transports.length) {
+    // Emit error on next tick so it can be listened to
+    var self = this;
+    setTimeout(function () {
+      self.emit('error', 'No transports available');
+    }, 0);
+    return;
+  } else {
+    transport = this.transports[0];
+  }
+  this.readyState = 'opening';
+
+  // Retry with the next transport if the transport is disabled (jsonp: false)
+  try {
+    transport = this.createTransport(transport);
+  } catch (e) {
+    this.transports.shift();
+    this.open();
+    return;
+  }
+
+  transport.open();
+  this.setTransport(transport);
+};
+
+/**
+ * Sets the current transport. Disables the existing one (if any).
+ *
+ * @api private
+ */
+
+Socket.prototype.setTransport = function (transport) {
+  debug('setting transport %s', transport.name);
+  var self = this;
+
+  if (this.transport) {
+    debug('clearing existing transport %s', this.transport.name);
+    this.transport.removeAllListeners();
+  }
+
+  // set up transport
+  this.transport = transport;
+
+  // set up transport listeners
+  transport
+  .on('drain', function () {
+    self.onDrain();
+  })
+  .on('packet', function (packet) {
+    self.onPacket(packet);
+  })
+  .on('error', function (e) {
+    self.onError(e);
+  })
+  .on('close', function () {
+    self.onClose('transport close');
+  });
+};
+
+/**
+ * Probes a transport.
+ *
+ * @param {String} transport name
+ * @api private
+ */
+
+Socket.prototype.probe = function (name) {
+  debug('probing transport "%s"', name);
+  var transport = this.createTransport(name, { probe: 1 });
+  var failed = false;
+  var self = this;
+
+  Socket.priorWebsocketSuccess = false;
+
+  function onTransportOpen () {
+    if (self.onlyBinaryUpgrades) {
+      var upgradeLosesBinary = !this.supportsBinary && self.transport.supportsBinary;
+      failed = failed || upgradeLosesBinary;
+    }
+    if (failed) return;
+
+    debug('probe transport "%s" opened', name);
+    transport.send([{ type: 'ping', data: 'probe' }]);
+    transport.once('packet', function (msg) {
+      if (failed) return;
+      if ('pong' === msg.type && 'probe' === msg.data) {
+        debug('probe transport "%s" pong', name);
+        self.upgrading = true;
+        self.emit('upgrading', transport);
+        if (!transport) return;
+        Socket.priorWebsocketSuccess = 'websocket' === transport.name;
+
+        debug('pausing current transport "%s"', self.transport.name);
+        self.transport.pause(function () {
+          if (failed) return;
+          if ('closed' === self.readyState) return;
+          debug('changing transport and sending upgrade packet');
+
+          cleanup();
+
+          self.setTransport(transport);
+          transport.send([{ type: 'upgrade' }]);
+          self.emit('upgrade', transport);
+          transport = null;
+          self.upgrading = false;
+          self.flush();
+        });
+      } else {
+        debug('probe transport "%s" failed', name);
+        var err = new Error('probe error');
+        err.transport = transport.name;
+        self.emit('upgradeError', err);
+      }
+    });
+  }
+
+  function freezeTransport () {
+    if (failed) return;
+
+    // Any callback called by transport should be ignored since now
+    failed = true;
+
+    cleanup();
+
+    transport.close();
+    transport = null;
+  }
+
+  // Handle any error that happens while probing
+  function onerror (err) {
+    var error = new Error('probe error: ' + err);
+    error.transport = transport.name;
+
+    freezeTransport();
+
+    debug('probe transport "%s" failed because of error: %s', name, err);
+
+    self.emit('upgradeError', error);
+  }
+
+  function onTransportClose () {
+    onerror('transport closed');
+  }
+
+  // When the socket is closed while we're probing
+  function onclose () {
+    onerror('socket closed');
+  }
+
+  // When the socket is upgraded while we're probing
+  function onupgrade (to) {
+    if (transport && to.name !== transport.name) {
+      debug('"%s" works - aborting "%s"', to.name, transport.name);
+      freezeTransport();
+    }
+  }
+
+  // Remove all listeners on the transport and on self
+  function cleanup () {
+    transport.removeListener('open', onTransportOpen);
+    transport.removeListener('error', onerror);
+    transport.removeListener('close', onTransportClose);
+    self.removeListener('close', onclose);
+    self.removeListener('upgrading', onupgrade);
+  }
+
+  transport.once('open', onTransportOpen);
+  transport.once('error', onerror);
+  transport.once('close', onTransportClose);
+
+  this.once('close', onclose);
+  this.once('upgrading', onupgrade);
+
+  transport.open();
+};
+
+/**
+ * Called when connection is deemed open.
+ *
+ * @api public
+ */
+
+Socket.prototype.onOpen = function () {
+  debug('socket open');
+  this.readyState = 'open';
+  Socket.priorWebsocketSuccess = 'websocket' === this.transport.name;
+  this.emit('open');
+  this.flush();
+
+  // we check for `readyState` in case an `open`
+  // listener already closed the socket
+  if ('open' === this.readyState && this.upgrade && this.transport.pause) {
+    debug('starting upgrade probes');
+    for (var i = 0, l = this.upgrades.length; i < l; i++) {
+      this.probe(this.upgrades[i]);
+    }
+  }
+};
+
+/**
+ * Handles a packet.
+ *
+ * @api private
+ */
+
+Socket.prototype.onPacket = function (packet) {
+  if ('opening' === this.readyState || 'open' === this.readyState ||
+      'closing' === this.readyState) {
+    debug('socket receive: type "%s", data "%s"', packet.type, packet.data);
+
+    this.emit('packet', packet);
+
+    // Socket is live - any packet counts
+    this.emit('heartbeat');
+
+    switch (packet.type) {
+      case 'open':
+        this.onHandshake(parsejson(packet.data));
+        break;
+
+      case 'pong':
+        this.setPing();
+        this.emit('pong');
+        break;
+
+      case 'error':
+        var err = new Error('server error');
+        err.code = packet.data;
+        this.onError(err);
+        break;
+
+      case 'message':
+        this.emit('data', packet.data);
+        this.emit('message', packet.data);
+        break;
+    }
+  } else {
+    debug('packet received with socket readyState "%s"', this.readyState);
+  }
+};
+
+/**
+ * Called upon handshake completion.
+ *
+ * @param {Object} handshake obj
+ * @api private
+ */
+
+Socket.prototype.onHandshake = function (data) {
+  this.emit('handshake', data);
+  this.id = data.sid;
+  this.transport.query.sid = data.sid;
+  this.upgrades = this.filterUpgrades(data.upgrades);
+  this.pingInterval = data.pingInterval;
+  this.pingTimeout = data.pingTimeout;
+  this.onOpen();
+  // In case open handler closes socket
+  if ('closed' === this.readyState) return;
+  this.setPing();
+
+  // Prolong liveness of socket on heartbeat
+  this.removeListener('heartbeat', this.onHeartbeat);
+  this.on('heartbeat', this.onHeartbeat);
+};
+
+/**
+ * Resets ping timeout.
+ *
+ * @api private
+ */
+
+Socket.prototype.onHeartbeat = function (timeout) {
+  clearTimeout(this.pingTimeoutTimer);
+  var self = this;
+  self.pingTimeoutTimer = setTimeout(function () {
+    if ('closed' === self.readyState) return;
+    self.onClose('ping timeout');
+  }, timeout || (self.pingInterval + self.pingTimeout));
+};
+
+/**
+ * Pings server every `this.pingInterval` and expects response
+ * within `this.pingTimeout` or closes connection.
+ *
+ * @api private
+ */
+
+Socket.prototype.setPing = function () {
+  var self = this;
+  clearTimeout(self.pingIntervalTimer);
+  self.pingIntervalTimer = setTimeout(function () {
+    debug('writing ping packet - expecting pong within %sms', self.pingTimeout);
+    self.ping();
+    self.onHeartbeat(self.pingTimeout);
+  }, self.pingInterval);
+};
+
+/**
+* Sends a ping packet.
+*
+* @api private
+*/
+
+Socket.prototype.ping = function () {
+  var self = this;
+  this.sendPacket('ping', function () {
+    self.emit('ping');
+  });
+};
+
+/**
+ * Called on `drain` event
+ *
+ * @api private
+ */
+
+Socket.prototype.onDrain = function () {
+  this.writeBuffer.splice(0, this.prevBufferLen);
+
+  // setting prevBufferLen = 0 is very important
+  // for example, when upgrading, upgrade packet is sent over,
+  // and a nonzero prevBufferLen could cause problems on `drain`
+  this.prevBufferLen = 0;
+
+  if (0 === this.writeBuffer.length) {
+    this.emit('drain');
+  } else {
+    this.flush();
+  }
+};
+
+/**
+ * Flush write buffers.
+ *
+ * @api private
+ */
+
+Socket.prototype.flush = function () {
+  if ('closed' !== this.readyState && this.transport.writable &&
+    !this.upgrading && this.writeBuffer.length) {
+    debug('flushing %d packets in socket', this.writeBuffer.length);
+    this.transport.send(this.writeBuffer);
+    // keep track of current length of writeBuffer
+    // splice writeBuffer and callbackBuffer on `drain`
+    this.prevBufferLen = this.writeBuffer.length;
+    this.emit('flush');
+  }
+};
+
+/**
+ * Sends a message.
+ *
+ * @param {String} message.
+ * @param {Function} callback function.
+ * @param {Object} options.
+ * @return {Socket} for chaining.
+ * @api public
+ */
+
+Socket.prototype.write =
+Socket.prototype.send = function (msg, options, fn) {
+  this.sendPacket('message', msg, options, fn);
+  return this;
+};
+
+/**
+ * Sends a packet.
+ *
+ * @param {String} packet type.
+ * @param {String} data.
+ * @param {Object} options.
+ * @param {Function} callback function.
+ * @api private
+ */
+
+Socket.prototype.sendPacket = function (type, data, options, fn) {
+  if ('function' === typeof data) {
+    fn = data;
+    data = undefined;
+  }
+
+  if ('function' === typeof options) {
+    fn = options;
+    options = null;
+  }
+
+  if ('closing' === this.readyState || 'closed' === this.readyState) {
+    return;
+  }
+
+  options = options || {};
+  options.compress = false !== options.compress;
+
+  var packet = {
+    type: type,
+    data: data,
+    options: options
+  };
+  this.emit('packetCreate', packet);
+  this.writeBuffer.push(packet);
+  if (fn) this.once('flush', fn);
+  this.flush();
+};
+
+/**
+ * Closes the connection.
+ *
+ * @api private
+ */
+
+Socket.prototype.close = function () {
+  if ('opening' === this.readyState || 'open' === this.readyState) {
+    this.readyState = 'closing';
+
+    var self = this;
+
+    if (this.writeBuffer.length) {
+      this.once('drain', function () {
+        if (this.upgrading) {
+          waitForUpgrade();
+        } else {
+          close();
+        }
+      });
+    } else if (this.upgrading) {
+      waitForUpgrade();
+    } else {
+      close();
+    }
+  }
+
+  function close () {
+    self.onClose('forced close');
+    debug('socket closing - telling transport to close');
+    self.transport.close();
+  }
+
+  function cleanupAndClose () {
+    self.removeListener('upgrade', cleanupAndClose);
+    self.removeListener('upgradeError', cleanupAndClose);
+    close();
+  }
+
+  function waitForUpgrade () {
+    // wait for upgrade to finish since we can't send packets while pausing a transport
+    self.once('upgrade', cleanupAndClose);
+    self.once('upgradeError', cleanupAndClose);
+  }
+
+  return this;
+};
+
+/**
+ * Called upon transport error
+ *
+ * @api private
+ */
+
+Socket.prototype.onError = function (err) {
+  debug('socket error %j', err);
+  Socket.priorWebsocketSuccess = false;
+  this.emit('error', err);
+  this.onClose('transport error', err);
+};
+
+/**
+ * Called upon transport close.
+ *
+ * @api private
+ */
+
+Socket.prototype.onClose = function (reason, desc) {
+  if ('opening' === this.readyState || 'open' === this.readyState || 'closing' === this.readyState) {
+    debug('socket close with reason: "%s"', reason);
+    var self = this;
+
+    // clear timers
+    clearTimeout(this.pingIntervalTimer);
+    clearTimeout(this.pingTimeoutTimer);
+
+    // stop event from firing again for transport
+    this.transport.removeAllListeners('close');
+
+    // ensure transport won't stay open
+    this.transport.close();
+
+    // ignore further transport communication
+    this.transport.removeAllListeners();
+
+    // set ready state
+    this.readyState = 'closed';
+
+    // clear session id
+    this.id = null;
+
+    // emit close event
+    this.emit('close', reason, desc);
+
+    // clean buffers after, so users can still
+    // grab the buffers on `close` event
+    self.writeBuffer = [];
+    self.prevBufferLen = 0;
+  }
+};
+
+/**
+ * Filters upgrades, returning only those matching client transports.
+ *
+ * @param {Array} server upgrades
+ * @api private
+ *
+ */
+
+Socket.prototype.filterUpgrades = function (upgrades) {
+  var filteredUpgrades = [];
+  for (var i = 0, j = upgrades.length; i < j; i++) {
+    if (~index(this.transports, upgrades[i])) filteredUpgrades.push(upgrades[i]);
+  }
+  return filteredUpgrades;
+};
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"./transport":351,"./transports/index":352,"component-emitter":358,"debug":346,"engine.io-parser":359,"indexof":364,"parsejson":481,"parseqs":482,"parseuri":483}],351:[function(require,module,exports){
+/**
+ * Module dependencies.
+ */
+
+var parser = require('engine.io-parser');
+var Emitter = require('component-emitter');
+
+/**
+ * Module exports.
+ */
+
+module.exports = Transport;
+
+/**
+ * Transport abstract constructor.
+ *
+ * @param {Object} options.
+ * @api private
+ */
+
+function Transport (opts) {
+  this.path = opts.path;
+  this.hostname = opts.hostname;
+  this.port = opts.port;
+  this.secure = opts.secure;
+  this.query = opts.query;
+  this.timestampParam = opts.timestampParam;
+  this.timestampRequests = opts.timestampRequests;
+  this.readyState = '';
+  this.agent = opts.agent || false;
+  this.socket = opts.socket;
+  this.enablesXDR = opts.enablesXDR;
+
+  // SSL options for Node.js client
+  this.pfx = opts.pfx;
+  this.key = opts.key;
+  this.passphrase = opts.passphrase;
+  this.cert = opts.cert;
+  this.ca = opts.ca;
+  this.ciphers = opts.ciphers;
+  this.rejectUnauthorized = opts.rejectUnauthorized;
+
+  // other options for Node.js client
+  this.extraHeaders = opts.extraHeaders;
+}
+
+/**
+ * Mix in `Emitter`.
+ */
+
+Emitter(Transport.prototype);
+
+/**
+ * Emits an error.
+ *
+ * @param {String} str
+ * @return {Transport} for chaining
+ * @api public
+ */
+
+Transport.prototype.onError = function (msg, desc) {
+  var err = new Error(msg);
+  err.type = 'TransportError';
+  err.description = desc;
+  this.emit('error', err);
+  return this;
+};
+
+/**
+ * Opens the transport.
+ *
+ * @api public
+ */
+
+Transport.prototype.open = function () {
+  if ('closed' === this.readyState || '' === this.readyState) {
+    this.readyState = 'opening';
+    this.doOpen();
+  }
+
+  return this;
+};
+
+/**
+ * Closes the transport.
+ *
+ * @api private
+ */
+
+Transport.prototype.close = function () {
+  if ('opening' === this.readyState || 'open' === this.readyState) {
+    this.doClose();
+    this.onClose();
+  }
+
+  return this;
+};
+
+/**
+ * Sends multiple packets.
+ *
+ * @param {Array} packets
+ * @api private
+ */
+
+Transport.prototype.send = function (packets) {
+  if ('open' === this.readyState) {
+    this.write(packets);
+  } else {
+    throw new Error('Transport not open');
+  }
+};
+
+/**
+ * Called upon open
+ *
+ * @api private
+ */
+
+Transport.prototype.onOpen = function () {
+  this.readyState = 'open';
+  this.writable = true;
+  this.emit('open');
+};
+
+/**
+ * Called with data.
+ *
+ * @param {String} data
+ * @api private
+ */
+
+Transport.prototype.onData = function (data) {
+  var packet = parser.decodePacket(data, this.socket.binaryType);
+  this.onPacket(packet);
+};
+
+/**
+ * Called with a decoded packet.
+ */
+
+Transport.prototype.onPacket = function (packet) {
+  this.emit('packet', packet);
+};
+
+/**
+ * Called upon close.
+ *
+ * @api private
+ */
+
+Transport.prototype.onClose = function () {
+  this.readyState = 'closed';
+  this.emit('close');
+};
+
+},{"component-emitter":358,"engine.io-parser":359}],352:[function(require,module,exports){
+(function (global){
+/**
+ * Module dependencies
+ */
+
+var XMLHttpRequest = require('xmlhttprequest-ssl');
+var XHR = require('./polling-xhr');
+var JSONP = require('./polling-jsonp');
+var websocket = require('./websocket');
+
+/**
+ * Export transports.
+ */
+
+exports.polling = polling;
+exports.websocket = websocket;
+
+/**
+ * Polling transport polymorphic constructor.
+ * Decides on xhr vs jsonp based on feature detection.
+ *
+ * @api private
+ */
+
+function polling (opts) {
+  var xhr;
+  var xd = false;
+  var xs = false;
+  var jsonp = false !== opts.jsonp;
+
+  if (global.location) {
+    var isSSL = 'https:' === location.protocol;
+    var port = location.port;
+
+    // some user agents have empty `location.port`
+    if (!port) {
+      port = isSSL ? 443 : 80;
+    }
+
+    xd = opts.hostname !== location.hostname || port !== opts.port;
+    xs = opts.secure !== isSSL;
+  }
+
+  opts.xdomain = xd;
+  opts.xscheme = xs;
+  xhr = new XMLHttpRequest(opts);
+
+  if ('open' in xhr && !opts.forceJSONP) {
+    return new XHR(opts);
+  } else {
+    if (!jsonp) throw new Error('JSONP disabled');
+    return new JSONP(opts);
+  }
+}
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"./polling-jsonp":353,"./polling-xhr":354,"./websocket":356,"xmlhttprequest-ssl":357}],353:[function(require,module,exports){
+(function (global){
+
+/**
+ * Module requirements.
+ */
+
+var Polling = require('./polling');
+var inherit = require('component-inherit');
+
+/**
+ * Module exports.
+ */
+
+module.exports = JSONPPolling;
+
+/**
+ * Cached regular expressions.
+ */
+
+var rNewline = /\n/g;
+var rEscapedNewline = /\\n/g;
+
+/**
+ * Global JSONP callbacks.
+ */
+
+var callbacks;
+
+/**
+ * Noop.
+ */
+
+function empty () { }
+
+/**
+ * JSONP Polling constructor.
+ *
+ * @param {Object} opts.
+ * @api public
+ */
+
+function JSONPPolling (opts) {
+  Polling.call(this, opts);
+
+  this.query = this.query || {};
+
+  // define global callbacks array if not present
+  // we do this here (lazily) to avoid unneeded global pollution
+  if (!callbacks) {
+    // we need to consider multiple engines in the same page
+    if (!global.___eio) global.___eio = [];
+    callbacks = global.___eio;
+  }
+
+  // callback identifier
+  this.index = callbacks.length;
+
+  // add callback to jsonp global
+  var self = this;
+  callbacks.push(function (msg) {
+    self.onData(msg);
+  });
+
+  // append to query string
+  this.query.j = this.index;
+
+  // prevent spurious errors from being emitted when the window is unloaded
+  if (global.document && global.addEventListener) {
+    global.addEventListener('beforeunload', function () {
+      if (self.script) self.script.onerror = empty;
+    }, false);
+  }
+}
+
+/**
+ * Inherits from Polling.
+ */
+
+inherit(JSONPPolling, Polling);
+
+/*
+ * JSONP only supports binary as base64 encoded strings
+ */
+
+JSONPPolling.prototype.supportsBinary = false;
+
+/**
+ * Closes the socket.
+ *
+ * @api private
+ */
+
+JSONPPolling.prototype.doClose = function () {
+  if (this.script) {
+    this.script.parentNode.removeChild(this.script);
+    this.script = null;
+  }
+
+  if (this.form) {
+    this.form.parentNode.removeChild(this.form);
+    this.form = null;
+    this.iframe = null;
+  }
+
+  Polling.prototype.doClose.call(this);
+};
+
+/**
+ * Starts a poll cycle.
+ *
+ * @api private
+ */
+
+JSONPPolling.prototype.doPoll = function () {
+  var self = this;
+  var script = document.createElement('script');
+
+  if (this.script) {
+    this.script.parentNode.removeChild(this.script);
+    this.script = null;
+  }
+
+  script.async = true;
+  script.src = this.uri();
+  script.onerror = function (e) {
+    self.onError('jsonp poll error', e);
+  };
+
+  var insertAt = document.getElementsByTagName('script')[0];
+  if (insertAt) {
+    insertAt.parentNode.insertBefore(script, insertAt);
+  } else {
+    (document.head || document.body).appendChild(script);
+  }
+  this.script = script;
+
+  var isUAgecko = 'undefined' !== typeof navigator && /gecko/i.test(navigator.userAgent);
+
+  if (isUAgecko) {
+    setTimeout(function () {
+      var iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+      document.body.removeChild(iframe);
+    }, 100);
+  }
+};
+
+/**
+ * Writes with a hidden iframe.
+ *
+ * @param {String} data to send
+ * @param {Function} called upon flush.
+ * @api private
+ */
+
+JSONPPolling.prototype.doWrite = function (data, fn) {
+  var self = this;
+
+  if (!this.form) {
+    var form = document.createElement('form');
+    var area = document.createElement('textarea');
+    var id = this.iframeId = 'eio_iframe_' + this.index;
+    var iframe;
+
+    form.className = 'socketio';
+    form.style.position = 'absolute';
+    form.style.top = '-1000px';
+    form.style.left = '-1000px';
+    form.target = id;
+    form.method = 'POST';
+    form.setAttribute('accept-charset', 'utf-8');
+    area.name = 'd';
+    form.appendChild(area);
+    document.body.appendChild(form);
+
+    this.form = form;
+    this.area = area;
+  }
+
+  this.form.action = this.uri();
+
+  function complete () {
+    initIframe();
+    fn();
+  }
+
+  function initIframe () {
+    if (self.iframe) {
+      try {
+        self.form.removeChild(self.iframe);
+      } catch (e) {
+        self.onError('jsonp polling iframe removal error', e);
+      }
+    }
+
+    try {
+      // ie6 dynamic iframes with target="" support (thanks Chris Lambacher)
+      var html = '<iframe src="javascript:0" name="' + self.iframeId + '">';
+      iframe = document.createElement(html);
+    } catch (e) {
+      iframe = document.createElement('iframe');
+      iframe.name = self.iframeId;
+      iframe.src = 'javascript:0';
+    }
+
+    iframe.id = self.iframeId;
+
+    self.form.appendChild(iframe);
+    self.iframe = iframe;
+  }
+
+  initIframe();
+
+  // escape \n to prevent it from being converted into \r\n by some UAs
+  // double escaping is required for escaped new lines because unescaping of new lines can be done safely on server-side
+  data = data.replace(rEscapedNewline, '\\\n');
+  this.area.value = data.replace(rNewline, '\\n');
+
+  try {
+    this.form.submit();
+  } catch (e) {}
+
+  if (this.iframe.attachEvent) {
+    this.iframe.onreadystatechange = function () {
+      if (self.iframe.readyState === 'complete') {
+        complete();
+      }
+    };
+  } else {
+    this.iframe.onload = complete;
+  }
+};
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"./polling":355,"component-inherit":345}],354:[function(require,module,exports){
+(function (global){
+/**
+ * Module requirements.
+ */
+
+var XMLHttpRequest = require('xmlhttprequest-ssl');
+var Polling = require('./polling');
+var Emitter = require('component-emitter');
+var inherit = require('component-inherit');
+var debug = require('debug')('engine.io-client:polling-xhr');
+
+/**
+ * Module exports.
+ */
+
+module.exports = XHR;
+module.exports.Request = Request;
+
+/**
+ * Empty function
+ */
+
+function empty () {}
+
+/**
+ * XHR Polling constructor.
+ *
+ * @param {Object} opts
+ * @api public
+ */
+
+function XHR (opts) {
+  Polling.call(this, opts);
+
+  if (global.location) {
+    var isSSL = 'https:' === location.protocol;
+    var port = location.port;
+
+    // some user agents have empty `location.port`
+    if (!port) {
+      port = isSSL ? 443 : 80;
+    }
+
+    this.xd = opts.hostname !== global.location.hostname ||
+      port !== opts.port;
+    this.xs = opts.secure !== isSSL;
+  } else {
+    this.extraHeaders = opts.extraHeaders;
+  }
+}
+
+/**
+ * Inherits from Polling.
+ */
+
+inherit(XHR, Polling);
+
+/**
+ * XHR supports binary
+ */
+
+XHR.prototype.supportsBinary = true;
+
+/**
+ * Creates a request.
+ *
+ * @param {String} method
+ * @api private
+ */
+
+XHR.prototype.request = function (opts) {
+  opts = opts || {};
+  opts.uri = this.uri();
+  opts.xd = this.xd;
+  opts.xs = this.xs;
+  opts.agent = this.agent || false;
+  opts.supportsBinary = this.supportsBinary;
+  opts.enablesXDR = this.enablesXDR;
+
+  // SSL options for Node.js client
+  opts.pfx = this.pfx;
+  opts.key = this.key;
+  opts.passphrase = this.passphrase;
+  opts.cert = this.cert;
+  opts.ca = this.ca;
+  opts.ciphers = this.ciphers;
+  opts.rejectUnauthorized = this.rejectUnauthorized;
+
+  // other options for Node.js client
+  opts.extraHeaders = this.extraHeaders;
+
+  return new Request(opts);
+};
+
+/**
+ * Sends data.
+ *
+ * @param {String} data to send.
+ * @param {Function} called upon flush.
+ * @api private
+ */
+
+XHR.prototype.doWrite = function (data, fn) {
+  var isBinary = typeof data !== 'string' && data !== undefined;
+  var req = this.request({ method: 'POST', data: data, isBinary: isBinary });
+  var self = this;
+  req.on('success', fn);
+  req.on('error', function (err) {
+    self.onError('xhr post error', err);
+  });
+  this.sendXhr = req;
+};
+
+/**
+ * Starts a poll cycle.
+ *
+ * @api private
+ */
+
+XHR.prototype.doPoll = function () {
+  debug('xhr poll');
+  var req = this.request();
+  var self = this;
+  req.on('data', function (data) {
+    self.onData(data);
+  });
+  req.on('error', function (err) {
+    self.onError('xhr poll error', err);
+  });
+  this.pollXhr = req;
+};
+
+/**
+ * Request constructor
+ *
+ * @param {Object} options
+ * @api public
+ */
+
+function Request (opts) {
+  this.method = opts.method || 'GET';
+  this.uri = opts.uri;
+  this.xd = !!opts.xd;
+  this.xs = !!opts.xs;
+  this.async = false !== opts.async;
+  this.data = undefined !== opts.data ? opts.data : null;
+  this.agent = opts.agent;
+  this.isBinary = opts.isBinary;
+  this.supportsBinary = opts.supportsBinary;
+  this.enablesXDR = opts.enablesXDR;
+
+  // SSL options for Node.js client
+  this.pfx = opts.pfx;
+  this.key = opts.key;
+  this.passphrase = opts.passphrase;
+  this.cert = opts.cert;
+  this.ca = opts.ca;
+  this.ciphers = opts.ciphers;
+  this.rejectUnauthorized = opts.rejectUnauthorized;
+
+  // other options for Node.js client
+  this.extraHeaders = opts.extraHeaders;
+
+  this.create();
+}
+
+/**
+ * Mix in `Emitter`.
+ */
+
+Emitter(Request.prototype);
+
+/**
+ * Creates the XHR object and sends the request.
+ *
+ * @api private
+ */
+
+Request.prototype.create = function () {
+  var opts = { agent: this.agent, xdomain: this.xd, xscheme: this.xs, enablesXDR: this.enablesXDR };
+
+  // SSL options for Node.js client
+  opts.pfx = this.pfx;
+  opts.key = this.key;
+  opts.passphrase = this.passphrase;
+  opts.cert = this.cert;
+  opts.ca = this.ca;
+  opts.ciphers = this.ciphers;
+  opts.rejectUnauthorized = this.rejectUnauthorized;
+
+  var xhr = this.xhr = new XMLHttpRequest(opts);
+  var self = this;
+
+  try {
+    debug('xhr open %s: %s', this.method, this.uri);
+    xhr.open(this.method, this.uri, this.async);
+    try {
+      if (this.extraHeaders) {
+        xhr.setDisableHeaderCheck(true);
+        for (var i in this.extraHeaders) {
+          if (this.extraHeaders.hasOwnProperty(i)) {
+            xhr.setRequestHeader(i, this.extraHeaders[i]);
+          }
+        }
+      }
+    } catch (e) {}
+    if (this.supportsBinary) {
+      // This has to be done after open because Firefox is stupid
+      // http://stackoverflow.com/questions/13216903/get-binary-data-with-xmlhttprequest-in-a-firefox-extension
+      xhr.responseType = 'arraybuffer';
+    }
+
+    if ('POST' === this.method) {
+      try {
+        if (this.isBinary) {
+          xhr.setRequestHeader('Content-type', 'application/octet-stream');
+        } else {
+          xhr.setRequestHeader('Content-type', 'text/plain;charset=UTF-8');
+        }
+      } catch (e) {}
+    }
+
+    try {
+      xhr.setRequestHeader('Accept', '*/*');
+    } catch (e) {}
+
+    // ie6 check
+    if ('withCredentials' in xhr) {
+      xhr.withCredentials = true;
+    }
+
+    if (this.hasXDR()) {
+      xhr.onload = function () {
+        self.onLoad();
+      };
+      xhr.onerror = function () {
+        self.onError(xhr.responseText);
+      };
+    } else {
+      xhr.onreadystatechange = function () {
+        if (4 !== xhr.readyState) return;
+        if (200 === xhr.status || 1223 === xhr.status) {
+          self.onLoad();
+        } else {
+          // make sure the `error` event handler that's user-set
+          // does not throw in the same tick and gets caught here
+          setTimeout(function () {
+            self.onError(xhr.status);
+          }, 0);
+        }
+      };
+    }
+
+    debug('xhr data %s', this.data);
+    xhr.send(this.data);
+  } catch (e) {
+    // Need to defer since .create() is called directly fhrom the constructor
+    // and thus the 'error' event can only be only bound *after* this exception
+    // occurs.  Therefore, also, we cannot throw here at all.
+    setTimeout(function () {
+      self.onError(e);
+    }, 0);
+    return;
+  }
+
+  if (global.document) {
+    this.index = Request.requestsCount++;
+    Request.requests[this.index] = this;
+  }
+};
+
+/**
+ * Called upon successful response.
+ *
+ * @api private
+ */
+
+Request.prototype.onSuccess = function () {
+  this.emit('success');
+  this.cleanup();
+};
+
+/**
+ * Called if we have data.
+ *
+ * @api private
+ */
+
+Request.prototype.onData = function (data) {
+  this.emit('data', data);
+  this.onSuccess();
+};
+
+/**
+ * Called upon error.
+ *
+ * @api private
+ */
+
+Request.prototype.onError = function (err) {
+  this.emit('error', err);
+  this.cleanup(true);
+};
+
+/**
+ * Cleans up house.
+ *
+ * @api private
+ */
+
+Request.prototype.cleanup = function (fromError) {
+  if ('undefined' === typeof this.xhr || null === this.xhr) {
+    return;
+  }
+  // xmlhttprequest
+  if (this.hasXDR()) {
+    this.xhr.onload = this.xhr.onerror = empty;
+  } else {
+    this.xhr.onreadystatechange = empty;
+  }
+
+  if (fromError) {
+    try {
+      this.xhr.abort();
+    } catch (e) {}
+  }
+
+  if (global.document) {
+    delete Request.requests[this.index];
+  }
+
+  this.xhr = null;
+};
+
+/**
+ * Called upon load.
+ *
+ * @api private
+ */
+
+Request.prototype.onLoad = function () {
+  var data;
+  try {
+    var contentType;
+    try {
+      contentType = this.xhr.getResponseHeader('Content-Type').split(';')[0];
+    } catch (e) {}
+    if (contentType === 'application/octet-stream') {
+      data = this.xhr.response || this.xhr.responseText;
+    } else {
+      if (!this.supportsBinary) {
+        data = this.xhr.responseText;
+      } else {
+        try {
+          data = String.fromCharCode.apply(null, new Uint8Array(this.xhr.response));
+        } catch (e) {
+          var ui8Arr = new Uint8Array(this.xhr.response);
+          var dataArray = [];
+          for (var idx = 0, length = ui8Arr.length; idx < length; idx++) {
+            dataArray.push(ui8Arr[idx]);
+          }
+
+          data = String.fromCharCode.apply(null, dataArray);
+        }
+      }
+    }
+  } catch (e) {
+    this.onError(e);
+  }
+  if (null != data) {
+    this.onData(data);
+  }
+};
+
+/**
+ * Check if it has XDomainRequest.
+ *
+ * @api private
+ */
+
+Request.prototype.hasXDR = function () {
+  return 'undefined' !== typeof global.XDomainRequest && !this.xs && this.enablesXDR;
+};
+
+/**
+ * Aborts the request.
+ *
+ * @api public
+ */
+
+Request.prototype.abort = function () {
+  this.cleanup();
+};
+
+/**
+ * Aborts pending requests when unloading the window. This is needed to prevent
+ * memory leaks (e.g. when using IE) and to ensure that no spurious error is
+ * emitted.
+ */
+
+Request.requestsCount = 0;
+Request.requests = {};
+
+if (global.document) {
+  if (global.attachEvent) {
+    global.attachEvent('onunload', unloadHandler);
+  } else if (global.addEventListener) {
+    global.addEventListener('beforeunload', unloadHandler, false);
+  }
+}
+
+function unloadHandler () {
+  for (var i in Request.requests) {
+    if (Request.requests.hasOwnProperty(i)) {
+      Request.requests[i].abort();
+    }
+  }
+}
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"./polling":355,"component-emitter":358,"component-inherit":345,"debug":346,"xmlhttprequest-ssl":357}],355:[function(require,module,exports){
+/**
+ * Module dependencies.
+ */
+
+var Transport = require('../transport');
+var parseqs = require('parseqs');
+var parser = require('engine.io-parser');
+var inherit = require('component-inherit');
+var yeast = require('yeast');
+var debug = require('debug')('engine.io-client:polling');
+
+/**
+ * Module exports.
+ */
+
+module.exports = Polling;
+
+/**
+ * Is XHR2 supported?
+ */
+
+var hasXHR2 = (function () {
+  var XMLHttpRequest = require('xmlhttprequest-ssl');
+  var xhr = new XMLHttpRequest({ xdomain: false });
+  return null != xhr.responseType;
+})();
+
+/**
+ * Polling interface.
+ *
+ * @param {Object} opts
+ * @api private
+ */
+
+function Polling (opts) {
+  var forceBase64 = (opts && opts.forceBase64);
+  if (!hasXHR2 || forceBase64) {
+    this.supportsBinary = false;
+  }
+  Transport.call(this, opts);
+}
+
+/**
+ * Inherits from Transport.
+ */
+
+inherit(Polling, Transport);
+
+/**
+ * Transport name.
+ */
+
+Polling.prototype.name = 'polling';
+
+/**
+ * Opens the socket (triggers polling). We write a PING message to determine
+ * when the transport is open.
+ *
+ * @api private
+ */
+
+Polling.prototype.doOpen = function () {
+  this.poll();
+};
+
+/**
+ * Pauses polling.
+ *
+ * @param {Function} callback upon buffers are flushed and transport is paused
+ * @api private
+ */
+
+Polling.prototype.pause = function (onPause) {
+  var self = this;
+
+  this.readyState = 'pausing';
+
+  function pause () {
+    debug('paused');
+    self.readyState = 'paused';
+    onPause();
+  }
+
+  if (this.polling || !this.writable) {
+    var total = 0;
+
+    if (this.polling) {
+      debug('we are currently polling - waiting to pause');
+      total++;
+      this.once('pollComplete', function () {
+        debug('pre-pause polling complete');
+        --total || pause();
+      });
+    }
+
+    if (!this.writable) {
+      debug('we are currently writing - waiting to pause');
+      total++;
+      this.once('drain', function () {
+        debug('pre-pause writing complete');
+        --total || pause();
+      });
+    }
+  } else {
+    pause();
+  }
+};
+
+/**
+ * Starts polling cycle.
+ *
+ * @api public
+ */
+
+Polling.prototype.poll = function () {
+  debug('polling');
+  this.polling = true;
+  this.doPoll();
+  this.emit('poll');
+};
+
+/**
+ * Overloads onData to detect payloads.
+ *
+ * @api private
+ */
+
+Polling.prototype.onData = function (data) {
+  var self = this;
+  debug('polling got data %s', data);
+  var callback = function (packet, index, total) {
+    // if its the first message we consider the transport open
+    if ('opening' === self.readyState) {
+      self.onOpen();
+    }
+
+    // if its a close packet, we close the ongoing requests
+    if ('close' === packet.type) {
+      self.onClose();
+      return false;
+    }
+
+    // otherwise bypass onData and handle the message
+    self.onPacket(packet);
+  };
+
+  // decode payload
+  parser.decodePayload(data, this.socket.binaryType, callback);
+
+  // if an event did not trigger closing
+  if ('closed' !== this.readyState) {
+    // if we got data we're not polling
+    this.polling = false;
+    this.emit('pollComplete');
+
+    if ('open' === this.readyState) {
+      this.poll();
+    } else {
+      debug('ignoring poll - transport state "%s"', this.readyState);
+    }
+  }
+};
+
+/**
+ * For polling, send a close packet.
+ *
+ * @api private
+ */
+
+Polling.prototype.doClose = function () {
+  var self = this;
+
+  function close () {
+    debug('writing close packet');
+    self.write([{ type: 'close' }]);
+  }
+
+  if ('open' === this.readyState) {
+    debug('transport open - closing');
+    close();
+  } else {
+    // in case we're trying to close while
+    // handshaking is in progress (GH-164)
+    debug('transport not open - deferring close');
+    this.once('open', close);
+  }
+};
+
+/**
+ * Writes a packets payload.
+ *
+ * @param {Array} data packets
+ * @param {Function} drain callback
+ * @api private
+ */
+
+Polling.prototype.write = function (packets) {
+  var self = this;
+  this.writable = false;
+  var callbackfn = function () {
+    self.writable = true;
+    self.emit('drain');
+  };
+
+  parser.encodePayload(packets, this.supportsBinary, function (data) {
+    self.doWrite(data, callbackfn);
+  });
+};
+
+/**
+ * Generates uri for connection.
+ *
+ * @api private
+ */
+
+Polling.prototype.uri = function () {
+  var query = this.query || {};
+  var schema = this.secure ? 'https' : 'http';
+  var port = '';
+
+  // cache busting is forced
+  if (false !== this.timestampRequests) {
+    query[this.timestampParam] = yeast();
+  }
+
+  if (!this.supportsBinary && !query.sid) {
+    query.b64 = 1;
+  }
+
+  query = parseqs.encode(query);
+
+  // avoid port if default for schema
+  if (this.port && (('https' === schema && this.port !== 443) ||
+     ('http' === schema && this.port !== 80))) {
+    port = ':' + this.port;
+  }
+
+  // prepend ? to query
+  if (query.length) {
+    query = '?' + query;
+  }
+
+  var ipv6 = this.hostname.indexOf(':') !== -1;
+  return schema + '://' + (ipv6 ? '[' + this.hostname + ']' : this.hostname) + port + this.path + query;
+};
+
+},{"../transport":351,"component-inherit":345,"debug":346,"engine.io-parser":359,"parseqs":482,"xmlhttprequest-ssl":357,"yeast":770}],356:[function(require,module,exports){
+(function (global){
+/**
+ * Module dependencies.
+ */
+
+var Transport = require('../transport');
+var parser = require('engine.io-parser');
+var parseqs = require('parseqs');
+var inherit = require('component-inherit');
+var yeast = require('yeast');
+var debug = require('debug')('engine.io-client:websocket');
+var BrowserWebSocket = global.WebSocket || global.MozWebSocket;
+
+/**
+ * Get either the `WebSocket` or `MozWebSocket` globals
+ * in the browser or try to resolve WebSocket-compatible
+ * interface exposed by `ws` for Node-like environment.
+ */
+
+var WebSocket = BrowserWebSocket;
+if (!WebSocket && typeof window === 'undefined') {
+  try {
+    WebSocket = require('ws');
+  } catch (e) { }
+}
+
+/**
+ * Module exports.
+ */
+
+module.exports = WS;
+
+/**
+ * WebSocket transport constructor.
+ *
+ * @api {Object} connection options
+ * @api public
+ */
+
+function WS (opts) {
+  var forceBase64 = (opts && opts.forceBase64);
+  if (forceBase64) {
+    this.supportsBinary = false;
+  }
+  this.perMessageDeflate = opts.perMessageDeflate;
+  Transport.call(this, opts);
+}
+
+/**
+ * Inherits from Transport.
+ */
+
+inherit(WS, Transport);
+
+/**
+ * Transport name.
+ *
+ * @api public
+ */
+
+WS.prototype.name = 'websocket';
+
+/*
+ * WebSockets support binary
+ */
+
+WS.prototype.supportsBinary = true;
+
+/**
+ * Opens socket.
+ *
+ * @api private
+ */
+
+WS.prototype.doOpen = function () {
+  if (!this.check()) {
+    // let probe timeout
+    return;
+  }
+
+  var uri = this.uri();
+  var protocols = void (0);
+  var opts = {
+    agent: this.agent,
+    perMessageDeflate: this.perMessageDeflate
+  };
+
+  // SSL options for Node.js client
+  opts.pfx = this.pfx;
+  opts.key = this.key;
+  opts.passphrase = this.passphrase;
+  opts.cert = this.cert;
+  opts.ca = this.ca;
+  opts.ciphers = this.ciphers;
+  opts.rejectUnauthorized = this.rejectUnauthorized;
+  if (this.extraHeaders) {
+    opts.headers = this.extraHeaders;
+  }
+
+  try {
+    this.ws = BrowserWebSocket ? new WebSocket(uri) : new WebSocket(uri, protocols, opts);
+  } catch (err) {
+    return this.emit('error', err);
+  }
+
+  if (this.ws.binaryType === undefined) {
+    this.supportsBinary = false;
+  }
+
+  if (this.ws.supports && this.ws.supports.binary) {
+    this.supportsBinary = true;
+    this.ws.binaryType = 'nodebuffer';
+  } else {
+    this.ws.binaryType = 'arraybuffer';
+  }
+
+  this.addEventListeners();
+};
+
+/**
+ * Adds event listeners to the socket
+ *
+ * @api private
+ */
+
+WS.prototype.addEventListeners = function () {
+  var self = this;
+
+  this.ws.onopen = function () {
+    self.onOpen();
+  };
+  this.ws.onclose = function () {
+    self.onClose();
+  };
+  this.ws.onmessage = function (ev) {
+    self.onData(ev.data);
+  };
+  this.ws.onerror = function (e) {
+    self.onError('websocket error', e);
+  };
+};
+
+/**
+ * Writes data to socket.
+ *
+ * @param {Array} array of packets.
+ * @api private
+ */
+
+WS.prototype.write = function (packets) {
+  var self = this;
+  this.writable = false;
+
+  // encodePacket efficient as it uses WS framing
+  // no need for encodePayload
+  var total = packets.length;
+  for (var i = 0, l = total; i < l; i++) {
+    (function (packet) {
+      parser.encodePacket(packet, self.supportsBinary, function (data) {
+        if (!BrowserWebSocket) {
+          // always create a new object (GH-437)
+          var opts = {};
+          if (packet.options) {
+            opts.compress = packet.options.compress;
+          }
+
+          if (self.perMessageDeflate) {
+            var len = 'string' === typeof data ? global.Buffer.byteLength(data) : data.length;
+            if (len < self.perMessageDeflate.threshold) {
+              opts.compress = false;
+            }
+          }
+        }
+
+        // Sometimes the websocket has already been closed but the browser didn't
+        // have a chance of informing us about it yet, in that case send will
+        // throw an error
+        try {
+          if (BrowserWebSocket) {
+            // TypeError is thrown when passing the second argument on Safari
+            self.ws.send(data);
+          } else {
+            self.ws.send(data, opts);
+          }
+        } catch (e) {
+          debug('websocket closed before onclose event');
+        }
+
+        --total || done();
+      });
+    })(packets[i]);
+  }
+
+  function done () {
+    self.emit('flush');
+
+    // fake drain
+    // defer to next tick to allow Socket to clear writeBuffer
+    setTimeout(function () {
+      self.writable = true;
+      self.emit('drain');
+    }, 0);
+  }
+};
+
+/**
+ * Called upon close
+ *
+ * @api private
+ */
+
+WS.prototype.onClose = function () {
+  Transport.prototype.onClose.call(this);
+};
+
+/**
+ * Closes socket.
+ *
+ * @api private
+ */
+
+WS.prototype.doClose = function () {
+  if (typeof this.ws !== 'undefined') {
+    this.ws.close();
+  }
+};
+
+/**
+ * Generates uri for connection.
+ *
+ * @api private
+ */
+
+WS.prototype.uri = function () {
+  var query = this.query || {};
+  var schema = this.secure ? 'wss' : 'ws';
+  var port = '';
+
+  // avoid port if default for schema
+  if (this.port && (('wss' === schema && this.port !== 443) ||
+    ('ws' === schema && this.port !== 80))) {
+    port = ':' + this.port;
+  }
+
+  // append timestamp to URI
+  if (this.timestampRequests) {
+    query[this.timestampParam] = yeast();
+  }
+
+  // communicate binary support capabilities
+  if (!this.supportsBinary) {
+    query.b64 = 1;
+  }
+
+  query = parseqs.encode(query);
+
+  // prepend ? to query
+  if (query.length) {
+    query = '?' + query;
+  }
+
+  var ipv6 = this.hostname.indexOf(':') !== -1;
+  return schema + '://' + (ipv6 ? '[' + this.hostname + ']' : this.hostname) + port + this.path + query;
+};
+
+/**
+ * Feature detection for WebSocket.
+ *
+ * @return {Boolean} whether this transport is available.
+ * @api public
+ */
+
+WS.prototype.check = function () {
+  return !!WebSocket && !('__initialize' in WebSocket && this.name === WS.prototype.name);
+};
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"../transport":351,"component-inherit":345,"debug":346,"engine.io-parser":359,"parseqs":482,"ws":342,"yeast":770}],357:[function(require,module,exports){
+(function (global){
+// browser shim for xmlhttprequest module
+
+var hasCORS = require('has-cors');
+
+module.exports = function (opts) {
+  var xdomain = opts.xdomain;
+
+  // scheme must be same when usign XDomainRequest
+  // http://blogs.msdn.com/b/ieinternals/archive/2010/05/13/xdomainrequest-restrictions-limitations-and-workarounds.aspx
+  var xscheme = opts.xscheme;
+
+  // XDomainRequest has a flow of not sending cookie, therefore it should be disabled as a default.
+  // https://github.com/Automattic/engine.io-client/pull/217
+  var enablesXDR = opts.enablesXDR;
+
+  // XMLHttpRequest can be disabled on IE
+  try {
+    if ('undefined' !== typeof XMLHttpRequest && (!xdomain || hasCORS)) {
+      return new XMLHttpRequest();
+    }
+  } catch (e) { }
+
+  // Use XDomainRequest for IE8 if enablesXDR is true
+  // because loading bar keeps flashing when using jsonp-polling
+  // https://github.com/yujiosaka/socke.io-ie8-loading-example
+  try {
+    if ('undefined' !== typeof XDomainRequest && !xscheme && enablesXDR) {
+      return new XDomainRequest();
+    }
+  } catch (e) { }
+
+  if (!xdomain) {
+    try {
+      return new global[['Active'].concat('Object').join('X')]('Microsoft.XMLHTTP');
+    } catch (e) { }
+  }
+};
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"has-cors":363}],358:[function(require,module,exports){
+
+/**
+ * Expose `Emitter`.
+ */
+
+module.exports = Emitter;
+
+/**
+ * Initialize a new `Emitter`.
+ *
+ * @api public
+ */
+
+function Emitter(obj) {
+  if (obj) return mixin(obj);
+};
+
+/**
+ * Mixin the emitter properties.
+ *
+ * @param {Object} obj
+ * @return {Object}
+ * @api private
+ */
+
+function mixin(obj) {
+  for (var key in Emitter.prototype) {
+    obj[key] = Emitter.prototype[key];
+  }
+  return obj;
+}
+
+/**
+ * Listen on the given `event` with `fn`.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.on =
+Emitter.prototype.addEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+  (this._callbacks[event] = this._callbacks[event] || [])
+    .push(fn);
+  return this;
+};
+
+/**
+ * Adds an `event` listener that will be invoked a single
+ * time then automatically removed.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.once = function(event, fn){
+  var self = this;
+  this._callbacks = this._callbacks || {};
+
+  function on() {
+    self.off(event, on);
+    fn.apply(this, arguments);
+  }
+
+  on.fn = fn;
+  this.on(event, on);
+  return this;
+};
+
+/**
+ * Remove the given callback for `event` or all
+ * registered callbacks.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.off =
+Emitter.prototype.removeListener =
+Emitter.prototype.removeAllListeners =
+Emitter.prototype.removeEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+
+  // all
+  if (0 == arguments.length) {
+    this._callbacks = {};
+    return this;
+  }
+
+  // specific event
+  var callbacks = this._callbacks[event];
+  if (!callbacks) return this;
+
+  // remove all handlers
+  if (1 == arguments.length) {
+    delete this._callbacks[event];
+    return this;
+  }
+
+  // remove specific handler
+  var cb;
+  for (var i = 0; i < callbacks.length; i++) {
+    cb = callbacks[i];
+    if (cb === fn || cb.fn === fn) {
+      callbacks.splice(i, 1);
+      break;
+    }
+  }
+  return this;
+};
+
+/**
+ * Emit `event` with the given args.
+ *
+ * @param {String} event
+ * @param {Mixed} ...
+ * @return {Emitter}
+ */
+
+Emitter.prototype.emit = function(event){
+  this._callbacks = this._callbacks || {};
+  var args = [].slice.call(arguments, 1)
+    , callbacks = this._callbacks[event];
+
+  if (callbacks) {
+    callbacks = callbacks.slice(0);
+    for (var i = 0, len = callbacks.length; i < len; ++i) {
+      callbacks[i].apply(this, args);
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return array of callbacks for `event`.
+ *
+ * @param {String} event
+ * @return {Array}
+ * @api public
+ */
+
+Emitter.prototype.listeners = function(event){
+  this._callbacks = this._callbacks || {};
+  return this._callbacks[event] || [];
+};
+
+/**
+ * Check if this emitter has `event` handlers.
+ *
+ * @param {String} event
+ * @return {Boolean}
+ * @api public
+ */
+
+Emitter.prototype.hasListeners = function(event){
+  return !! this.listeners(event).length;
+};
+
+},{}],359:[function(require,module,exports){
+(function (global){
+/**
+ * Module dependencies.
+ */
+
+var keys = require('./keys');
+var hasBinary = require('has-binary');
+var sliceBuffer = require('arraybuffer.slice');
+var after = require('after');
+var utf8 = require('wtf-8');
+
+var base64encoder;
+if (global && global.ArrayBuffer) {
+  base64encoder = require('base64-arraybuffer');
+}
+
+/**
+ * Check if we are running an android browser. That requires us to use
+ * ArrayBuffer with polling transports...
+ *
+ * http://ghinda.net/jpeg-blob-ajax-android/
+ */
+
+var isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+
+/**
+ * Check if we are running in PhantomJS.
+ * Uploading a Blob with PhantomJS does not work correctly, as reported here:
+ * https://github.com/ariya/phantomjs/issues/11395
+ * @type boolean
+ */
+var isPhantomJS = typeof navigator !== 'undefined' && /PhantomJS/i.test(navigator.userAgent);
+
+/**
+ * When true, avoids using Blobs to encode payloads.
+ * @type boolean
+ */
+var dontSendBlobs = isAndroid || isPhantomJS;
+
+/**
+ * Current protocol version.
+ */
+
+exports.protocol = 3;
+
+/**
+ * Packet types.
+ */
+
+var packets = exports.packets = {
+    open:     0    // non-ws
+  , close:    1    // non-ws
+  , ping:     2
+  , pong:     3
+  , message:  4
+  , upgrade:  5
+  , noop:     6
+};
+
+var packetslist = keys(packets);
+
+/**
+ * Premade error packet.
+ */
+
+var err = { type: 'error', data: 'parser error' };
+
+/**
+ * Create a blob api even for blob builder when vendor prefixes exist
+ */
+
+var Blob = require('blob');
+
+/**
+ * Encodes a packet.
+ *
+ *     <packet type id> [ <data> ]
+ *
+ * Example:
+ *
+ *     5hello world
+ *     3
+ *     4
+ *
+ * Binary is encoded in an identical principle
+ *
+ * @api private
+ */
+
+exports.encodePacket = function (packet, supportsBinary, utf8encode, callback) {
+  if ('function' == typeof supportsBinary) {
+    callback = supportsBinary;
+    supportsBinary = false;
+  }
+
+  if ('function' == typeof utf8encode) {
+    callback = utf8encode;
+    utf8encode = null;
+  }
+
+  var data = (packet.data === undefined)
+    ? undefined
+    : packet.data.buffer || packet.data;
+
+  if (global.ArrayBuffer && data instanceof ArrayBuffer) {
+    return encodeArrayBuffer(packet, supportsBinary, callback);
+  } else if (Blob && data instanceof global.Blob) {
+    return encodeBlob(packet, supportsBinary, callback);
+  }
+
+  // might be an object with { base64: true, data: dataAsBase64String }
+  if (data && data.base64) {
+    return encodeBase64Object(packet, callback);
+  }
+
+  // Sending data as a utf-8 string
+  var encoded = packets[packet.type];
+
+  // data fragment is optional
+  if (undefined !== packet.data) {
+    encoded += utf8encode ? utf8.encode(String(packet.data)) : String(packet.data);
+  }
+
+  return callback('' + encoded);
+
+};
+
+function encodeBase64Object(packet, callback) {
+  // packet data is an object { base64: true, data: dataAsBase64String }
+  var message = 'b' + exports.packets[packet.type] + packet.data.data;
+  return callback(message);
+}
+
+/**
+ * Encode packet helpers for binary types
+ */
+
+function encodeArrayBuffer(packet, supportsBinary, callback) {
+  if (!supportsBinary) {
+    return exports.encodeBase64Packet(packet, callback);
+  }
+
+  var data = packet.data;
+  var contentArray = new Uint8Array(data);
+  var resultBuffer = new Uint8Array(1 + data.byteLength);
+
+  resultBuffer[0] = packets[packet.type];
+  for (var i = 0; i < contentArray.length; i++) {
+    resultBuffer[i+1] = contentArray[i];
+  }
+
+  return callback(resultBuffer.buffer);
+}
+
+function encodeBlobAsArrayBuffer(packet, supportsBinary, callback) {
+  if (!supportsBinary) {
+    return exports.encodeBase64Packet(packet, callback);
+  }
+
+  var fr = new FileReader();
+  fr.onload = function() {
+    packet.data = fr.result;
+    exports.encodePacket(packet, supportsBinary, true, callback);
+  };
+  return fr.readAsArrayBuffer(packet.data);
+}
+
+function encodeBlob(packet, supportsBinary, callback) {
+  if (!supportsBinary) {
+    return exports.encodeBase64Packet(packet, callback);
+  }
+
+  if (dontSendBlobs) {
+    return encodeBlobAsArrayBuffer(packet, supportsBinary, callback);
+  }
+
+  var length = new Uint8Array(1);
+  length[0] = packets[packet.type];
+  var blob = new Blob([length.buffer, packet.data]);
+
+  return callback(blob);
+}
+
+/**
+ * Encodes a packet with binary data in a base64 string
+ *
+ * @param {Object} packet, has `type` and `data`
+ * @return {String} base64 encoded message
+ */
+
+exports.encodeBase64Packet = function(packet, callback) {
+  var message = 'b' + exports.packets[packet.type];
+  if (Blob && packet.data instanceof global.Blob) {
+    var fr = new FileReader();
+    fr.onload = function() {
+      var b64 = fr.result.split(',')[1];
+      callback(message + b64);
+    };
+    return fr.readAsDataURL(packet.data);
+  }
+
+  var b64data;
+  try {
+    b64data = String.fromCharCode.apply(null, new Uint8Array(packet.data));
+  } catch (e) {
+    // iPhone Safari doesn't let you apply with typed arrays
+    var typed = new Uint8Array(packet.data);
+    var basic = new Array(typed.length);
+    for (var i = 0; i < typed.length; i++) {
+      basic[i] = typed[i];
+    }
+    b64data = String.fromCharCode.apply(null, basic);
+  }
+  message += global.btoa(b64data);
+  return callback(message);
+};
+
+/**
+ * Decodes a packet. Changes format to Blob if requested.
+ *
+ * @return {Object} with `type` and `data` (if any)
+ * @api private
+ */
+
+exports.decodePacket = function (data, binaryType, utf8decode) {
+  if (data === undefined) {
+    return err;
+  }
+  // String data
+  if (typeof data == 'string') {
+    if (data.charAt(0) == 'b') {
+      return exports.decodeBase64Packet(data.substr(1), binaryType);
+    }
+
+    if (utf8decode) {
+      data = tryDecode(data);
+      if (data === false) {
+        return err;
+      }
+    }
+    var type = data.charAt(0);
+
+    if (Number(type) != type || !packetslist[type]) {
+      return err;
+    }
+
+    if (data.length > 1) {
+      return { type: packetslist[type], data: data.substring(1) };
+    } else {
+      return { type: packetslist[type] };
+    }
+  }
+
+  var asArray = new Uint8Array(data);
+  var type = asArray[0];
+  var rest = sliceBuffer(data, 1);
+  if (Blob && binaryType === 'blob') {
+    rest = new Blob([rest]);
+  }
+  return { type: packetslist[type], data: rest };
+};
+
+function tryDecode(data) {
+  try {
+    data = utf8.decode(data);
+  } catch (e) {
+    return false;
+  }
+  return data;
+}
+
+/**
+ * Decodes a packet encoded in a base64 string
+ *
+ * @param {String} base64 encoded message
+ * @return {Object} with `type` and `data` (if any)
+ */
+
+exports.decodeBase64Packet = function(msg, binaryType) {
+  var type = packetslist[msg.charAt(0)];
+  if (!base64encoder) {
+    return { type: type, data: { base64: true, data: msg.substr(1) } };
+  }
+
+  var data = base64encoder.decode(msg.substr(1));
+
+  if (binaryType === 'blob' && Blob) {
+    data = new Blob([data]);
+  }
+
+  return { type: type, data: data };
+};
+
+/**
+ * Encodes multiple messages (payload).
+ *
+ *     <length>:data
+ *
+ * Example:
+ *
+ *     11:hello world2:hi
+ *
+ * If any contents are binary, they will be encoded as base64 strings. Base64
+ * encoded strings are marked with a b before the length specifier
+ *
+ * @param {Array} packets
+ * @api private
+ */
+
+exports.encodePayload = function (packets, supportsBinary, callback) {
+  if (typeof supportsBinary == 'function') {
+    callback = supportsBinary;
+    supportsBinary = null;
+  }
+
+  var isBinary = hasBinary(packets);
+
+  if (supportsBinary && isBinary) {
+    if (Blob && !dontSendBlobs) {
+      return exports.encodePayloadAsBlob(packets, callback);
+    }
+
+    return exports.encodePayloadAsArrayBuffer(packets, callback);
+  }
+
+  if (!packets.length) {
+    return callback('0:');
+  }
+
+  function setLengthHeader(message) {
+    return message.length + ':' + message;
+  }
+
+  function encodeOne(packet, doneCallback) {
+    exports.encodePacket(packet, !isBinary ? false : supportsBinary, true, function(message) {
+      doneCallback(null, setLengthHeader(message));
+    });
+  }
+
+  map(packets, encodeOne, function(err, results) {
+    return callback(results.join(''));
+  });
+};
+
+/**
+ * Async array map using after
+ */
+
+function map(ary, each, done) {
+  var result = new Array(ary.length);
+  var next = after(ary.length, done);
+
+  var eachWithIndex = function(i, el, cb) {
+    each(el, function(error, msg) {
+      result[i] = msg;
+      cb(error, result);
+    });
+  };
+
+  for (var i = 0; i < ary.length; i++) {
+    eachWithIndex(i, ary[i], next);
+  }
+}
+
+/*
+ * Decodes data when a payload is maybe expected. Possible binary contents are
+ * decoded from their base64 representation
+ *
+ * @param {String} data, callback method
+ * @api public
+ */
+
+exports.decodePayload = function (data, binaryType, callback) {
+  if (typeof data != 'string') {
+    return exports.decodePayloadAsBinary(data, binaryType, callback);
+  }
+
+  if (typeof binaryType === 'function') {
+    callback = binaryType;
+    binaryType = null;
+  }
+
+  var packet;
+  if (data == '') {
+    // parser error - ignoring payload
+    return callback(err, 0, 1);
+  }
+
+  var length = ''
+    , n, msg;
+
+  for (var i = 0, l = data.length; i < l; i++) {
+    var chr = data.charAt(i);
+
+    if (':' != chr) {
+      length += chr;
+    } else {
+      if ('' == length || (length != (n = Number(length)))) {
+        // parser error - ignoring payload
+        return callback(err, 0, 1);
+      }
+
+      msg = data.substr(i + 1, n);
+
+      if (length != msg.length) {
+        // parser error - ignoring payload
+        return callback(err, 0, 1);
+      }
+
+      if (msg.length) {
+        packet = exports.decodePacket(msg, binaryType, true);
+
+        if (err.type == packet.type && err.data == packet.data) {
+          // parser error in individual packet - ignoring payload
+          return callback(err, 0, 1);
+        }
+
+        var ret = callback(packet, i + n, l);
+        if (false === ret) return;
+      }
+
+      // advance cursor
+      i += n;
+      length = '';
+    }
+  }
+
+  if (length != '') {
+    // parser error - ignoring payload
+    return callback(err, 0, 1);
+  }
+
+};
+
+/**
+ * Encodes multiple messages (payload) as binary.
+ *
+ * <1 = binary, 0 = string><number from 0-9><number from 0-9>[...]<number
+ * 255><data>
+ *
+ * Example:
+ * 1 3 255 1 2 3, if the binary contents are interpreted as 8 bit integers
+ *
+ * @param {Array} packets
+ * @return {ArrayBuffer} encoded payload
+ * @api private
+ */
+
+exports.encodePayloadAsArrayBuffer = function(packets, callback) {
+  if (!packets.length) {
+    return callback(new ArrayBuffer(0));
+  }
+
+  function encodeOne(packet, doneCallback) {
+    exports.encodePacket(packet, true, true, function(data) {
+      return doneCallback(null, data);
+    });
+  }
+
+  map(packets, encodeOne, function(err, encodedPackets) {
+    var totalLength = encodedPackets.reduce(function(acc, p) {
+      var len;
+      if (typeof p === 'string'){
+        len = p.length;
+      } else {
+        len = p.byteLength;
+      }
+      return acc + len.toString().length + len + 2; // string/binary identifier + separator = 2
+    }, 0);
+
+    var resultArray = new Uint8Array(totalLength);
+
+    var bufferIndex = 0;
+    encodedPackets.forEach(function(p) {
+      var isString = typeof p === 'string';
+      var ab = p;
+      if (isString) {
+        var view = new Uint8Array(p.length);
+        for (var i = 0; i < p.length; i++) {
+          view[i] = p.charCodeAt(i);
+        }
+        ab = view.buffer;
+      }
+
+      if (isString) { // not true binary
+        resultArray[bufferIndex++] = 0;
+      } else { // true binary
+        resultArray[bufferIndex++] = 1;
+      }
+
+      var lenStr = ab.byteLength.toString();
+      for (var i = 0; i < lenStr.length; i++) {
+        resultArray[bufferIndex++] = parseInt(lenStr[i]);
+      }
+      resultArray[bufferIndex++] = 255;
+
+      var view = new Uint8Array(ab);
+      for (var i = 0; i < view.length; i++) {
+        resultArray[bufferIndex++] = view[i];
+      }
+    });
+
+    return callback(resultArray.buffer);
+  });
+};
+
+/**
+ * Encode as Blob
+ */
+
+exports.encodePayloadAsBlob = function(packets, callback) {
+  function encodeOne(packet, doneCallback) {
+    exports.encodePacket(packet, true, true, function(encoded) {
+      var binaryIdentifier = new Uint8Array(1);
+      binaryIdentifier[0] = 1;
+      if (typeof encoded === 'string') {
+        var view = new Uint8Array(encoded.length);
+        for (var i = 0; i < encoded.length; i++) {
+          view[i] = encoded.charCodeAt(i);
+        }
+        encoded = view.buffer;
+        binaryIdentifier[0] = 0;
+      }
+
+      var len = (encoded instanceof ArrayBuffer)
+        ? encoded.byteLength
+        : encoded.size;
+
+      var lenStr = len.toString();
+      var lengthAry = new Uint8Array(lenStr.length + 1);
+      for (var i = 0; i < lenStr.length; i++) {
+        lengthAry[i] = parseInt(lenStr[i]);
+      }
+      lengthAry[lenStr.length] = 255;
+
+      if (Blob) {
+        var blob = new Blob([binaryIdentifier.buffer, lengthAry.buffer, encoded]);
+        doneCallback(null, blob);
+      }
+    });
+  }
+
+  map(packets, encodeOne, function(err, results) {
+    return callback(new Blob(results));
+  });
+};
+
+/*
+ * Decodes data when a payload is maybe expected. Strings are decoded by
+ * interpreting each byte as a key code for entries marked to start with 0. See
+ * description of encodePayloadAsBinary
+ *
+ * @param {ArrayBuffer} data, callback method
+ * @api public
+ */
+
+exports.decodePayloadAsBinary = function (data, binaryType, callback) {
+  if (typeof binaryType === 'function') {
+    callback = binaryType;
+    binaryType = null;
+  }
+
+  var bufferTail = data;
+  var buffers = [];
+
+  var numberTooLong = false;
+  while (bufferTail.byteLength > 0) {
+    var tailArray = new Uint8Array(bufferTail);
+    var isString = tailArray[0] === 0;
+    var msgLength = '';
+
+    for (var i = 1; ; i++) {
+      if (tailArray[i] == 255) break;
+
+      if (msgLength.length > 310) {
+        numberTooLong = true;
+        break;
+      }
+
+      msgLength += tailArray[i];
+    }
+
+    if(numberTooLong) return callback(err, 0, 1);
+
+    bufferTail = sliceBuffer(bufferTail, 2 + msgLength.length);
+    msgLength = parseInt(msgLength);
+
+    var msg = sliceBuffer(bufferTail, 0, msgLength);
+    if (isString) {
+      try {
+        msg = String.fromCharCode.apply(null, new Uint8Array(msg));
+      } catch (e) {
+        // iPhone Safari doesn't let you apply to typed arrays
+        var typed = new Uint8Array(msg);
+        msg = '';
+        for (var i = 0; i < typed.length; i++) {
+          msg += String.fromCharCode(typed[i]);
+        }
+      }
+    }
+
+    buffers.push(msg);
+    bufferTail = sliceBuffer(bufferTail, msgLength);
+  }
+
+  var total = buffers.length;
+  buffers.forEach(function(buffer, i) {
+    callback(exports.decodePacket(buffer, binaryType, true), i, total);
+  });
+};
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"./keys":360,"after":337,"arraybuffer.slice":338,"base64-arraybuffer":340,"blob":341,"has-binary":361,"wtf-8":769}],360:[function(require,module,exports){
+
+/**
+ * Gets the keys for an object.
+ *
+ * @return {Array} keys
+ * @api private
+ */
+
+module.exports = Object.keys || function keys (obj){
+  var arr = [];
+  var has = Object.prototype.hasOwnProperty;
+
+  for (var i in obj) {
+    if (has.call(obj, i)) {
+      arr.push(i);
+    }
+  }
+  return arr;
+};
+
+},{}],361:[function(require,module,exports){
+(function (global){
+
+/*
+ * Module requirements.
+ */
+
+var isArray = require('isarray');
+
+/**
+ * Module exports.
+ */
+
+module.exports = hasBinary;
+
+/**
+ * Checks for binary data.
+ *
+ * Right now only Buffer and ArrayBuffer are supported..
+ *
+ * @param {Object} anything
+ * @api public
+ */
+
+function hasBinary(data) {
+
+  function _hasBinary(obj) {
+    if (!obj) return false;
+
+    if ( (global.Buffer && global.Buffer.isBuffer(obj)) ||
+         (global.ArrayBuffer && obj instanceof ArrayBuffer) ||
+         (global.Blob && obj instanceof Blob) ||
+         (global.File && obj instanceof File)
+        ) {
+      return true;
+    }
+
+    if (isArray(obj)) {
+      for (var i = 0; i < obj.length; i++) {
+          if (_hasBinary(obj[i])) {
+              return true;
+          }
+      }
+    } else if (obj && 'object' == typeof obj) {
+      if (obj.toJSON) {
+        obj = obj.toJSON();
+      }
+
+      for (var key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key) && _hasBinary(obj[key])) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  return _hasBinary(data);
+}
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"isarray":478}],362:[function(require,module,exports){
+(function (global){
+
+/*
+ * Module requirements.
+ */
+
+var isArray = require('isarray');
+
+/**
+ * Module exports.
+ */
+
+module.exports = hasBinary;
+
+/**
+ * Checks for binary data.
+ *
+ * Right now only Buffer and ArrayBuffer are supported..
+ *
+ * @param {Object} anything
+ * @api public
+ */
+
+function hasBinary(data) {
+
+  function _hasBinary(obj) {
+    if (!obj) return false;
+
+    if ( (global.Buffer && global.Buffer.isBuffer && global.Buffer.isBuffer(obj)) ||
+         (global.ArrayBuffer && obj instanceof ArrayBuffer) ||
+         (global.Blob && obj instanceof Blob) ||
+         (global.File && obj instanceof File)
+        ) {
+      return true;
+    }
+
+    if (isArray(obj)) {
+      for (var i = 0; i < obj.length; i++) {
+          if (_hasBinary(obj[i])) {
+              return true;
+          }
+      }
+    } else if (obj && 'object' == typeof obj) {
+      // see: https://github.com/Automattic/has-binary/pull/4
+      if (obj.toJSON && 'function' == typeof obj.toJSON) {
+        obj = obj.toJSON();
+      }
+
+      for (var key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key) && _hasBinary(obj[key])) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  return _hasBinary(data);
+}
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"isarray":478}],363:[function(require,module,exports){
+
+/**
+ * Module exports.
+ *
+ * Logic borrowed from Modernizr:
+ *
+ *   - https://github.com/Modernizr/Modernizr/blob/master/feature-detects/cors.js
+ */
+
+try {
+  module.exports = typeof XMLHttpRequest !== 'undefined' &&
+    'withCredentials' in new XMLHttpRequest();
+} catch (err) {
+  // if XMLHttp support is disabled in IE then it will throw
+  // when trying to create
+  module.exports = false;
+}
+
+},{}],364:[function(require,module,exports){
+
+var indexOf = [].indexOf;
+
+module.exports = function(arr, obj){
+  if (indexOf) return arr.indexOf(obj);
+  for (var i = 0; i < arr.length; ++i) {
+    if (arr[i] === obj) return i;
+  }
+  return -1;
+};
+},{}],365:[function(require,module,exports){
 "use strict";
 var dom_1 = require('../util/dom');
 var util_1 = require('../util/util');
@@ -44977,7 +49280,7 @@ var CSS_VALUE_REGEX = /(^-?\d*\.?\d*)(.*)/;
 var SUPPORTS_WILL_CHANGE = (typeof document.documentElement.style['willChange'] !== 'undefined');
 var AnimationRegistry = {};
 
-},{"../util/dom":439,"../util/util":447}],336:[function(require,module,exports){
+},{"../util/dom":469,"../util/util":477}],366:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -45034,7 +49337,7 @@ var FadeOut = (function (_super) {
 }(animation_1.Animation));
 animation_1.Animation.register('fade-out', FadeOut);
 
-},{"./animation":335}],337:[function(require,module,exports){
+},{"./animation":365}],367:[function(require,module,exports){
 "use strict";
 var action_sheet_1 = require('./components/action-sheet/action-sheet');
 exports.ActionSheet = action_sheet_1.ActionSheet;
@@ -45161,7 +49464,7 @@ exports.Footer = toolbar_1.Footer;
 var virtual_scroll_1 = require('./components/virtual-scroll/virtual-scroll');
 exports.VirtualScroll = virtual_scroll_1.VirtualScroll;
 
-},{"./components/action-sheet/action-sheet":338,"./components/alert/alert":339,"./components/app/app":340,"./components/backdrop/backdrop":341,"./components/badge/badge":342,"./components/button/button":343,"./components/checkbox/checkbox":344,"./components/content/content":345,"./components/datetime/datetime":346,"./components/icon/icon":347,"./components/img/img":348,"./components/infinite-scroll/infinite-scroll":350,"./components/infinite-scroll/infinite-scroll-content":349,"./components/input/input":352,"./components/item/item":359,"./components/item/item-reorder":356,"./components/item/item-sliding":358,"./components/label/label":360,"./components/list/list":361,"./components/loading/loading":362,"./components/menu/menu":368,"./components/menu/menu-close":363,"./components/menu/menu-controller":364,"./components/menu/menu-toggle":366,"./components/menu/menu-types":367,"./components/modal/modal":369,"./components/nav/nav":376,"./components/nav/nav-controller":370,"./components/nav/nav-params":371,"./components/nav/nav-pop":372,"./components/nav/nav-push":374,"./components/nav/view-controller":378,"./components/navbar/navbar":379,"./components/option/option":380,"./components/picker/picker":381,"./components/popover/popover":382,"./components/radio/radio-button":383,"./components/radio/radio-group":384,"./components/range/range":385,"./components/refresher/refresher":387,"./components/refresher/refresher-content":386,"./components/scroll/scroll":388,"./components/searchbar/searchbar":389,"./components/segment/segment":390,"./components/select/select":391,"./components/show-hide-when/show-hide-when":392,"./components/slides/slides":393,"./components/spinner/spinner":395,"./components/tabs/tab":398,"./components/tabs/tabs":399,"./components/tap-click/tap-click":402,"./components/toast/toast":403,"./components/toggle/toggle":404,"./components/toolbar/toolbar":407,"./components/virtual-scroll/virtual-scroll":409}],338:[function(require,module,exports){
+},{"./components/action-sheet/action-sheet":368,"./components/alert/alert":369,"./components/app/app":370,"./components/backdrop/backdrop":371,"./components/badge/badge":372,"./components/button/button":373,"./components/checkbox/checkbox":374,"./components/content/content":375,"./components/datetime/datetime":376,"./components/icon/icon":377,"./components/img/img":378,"./components/infinite-scroll/infinite-scroll":380,"./components/infinite-scroll/infinite-scroll-content":379,"./components/input/input":382,"./components/item/item":389,"./components/item/item-reorder":386,"./components/item/item-sliding":388,"./components/label/label":390,"./components/list/list":391,"./components/loading/loading":392,"./components/menu/menu":398,"./components/menu/menu-close":393,"./components/menu/menu-controller":394,"./components/menu/menu-toggle":396,"./components/menu/menu-types":397,"./components/modal/modal":399,"./components/nav/nav":406,"./components/nav/nav-controller":400,"./components/nav/nav-params":401,"./components/nav/nav-pop":402,"./components/nav/nav-push":404,"./components/nav/view-controller":408,"./components/navbar/navbar":409,"./components/option/option":410,"./components/picker/picker":411,"./components/popover/popover":412,"./components/radio/radio-button":413,"./components/radio/radio-group":414,"./components/range/range":415,"./components/refresher/refresher":417,"./components/refresher/refresher-content":416,"./components/scroll/scroll":418,"./components/searchbar/searchbar":419,"./components/segment/segment":420,"./components/select/select":421,"./components/show-hide-when/show-hide-when":422,"./components/slides/slides":423,"./components/spinner/spinner":425,"./components/tabs/tab":428,"./components/tabs/tabs":429,"./components/tap-click/tap-click":432,"./components/toast/toast":433,"./components/toggle/toggle":434,"./components/toolbar/toolbar":437,"./components/virtual-scroll/virtual-scroll":439}],368:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -45606,7 +49909,7 @@ var ActionSheetWpSlideOut = (function (_super) {
 transition_1.Transition.register('action-sheet-wp-slide-out', ActionSheetWpSlideOut);
 var actionSheetIds = -1;
 
-},{"../../animations/animation":335,"../../config/config":412,"../../transitions/transition":432,"../../util/key":443,"../../util/util":447,"../nav/nav-params":371,"../nav/view-controller":378,"@angular/core":157}],339:[function(require,module,exports){
+},{"../../animations/animation":365,"../../config/config":442,"../../transitions/transition":462,"../../util/key":473,"../../util/util":477,"../nav/nav-params":401,"../nav/view-controller":408,"@angular/core":159}],369:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -46260,7 +50563,7 @@ var AlertWpPopOut = (function (_super) {
 transition_1.Transition.register('alert-wp-pop-out', AlertWpPopOut);
 var alertIds = -1;
 
-},{"../../animations/animation":335,"../../config/config":412,"../../transitions/transition":432,"../../util/key":443,"../../util/util":447,"../nav/nav-params":371,"../nav/view-controller":378,"@angular/core":157}],340:[function(require,module,exports){
+},{"../../animations/animation":365,"../../config/config":442,"../../transitions/transition":462,"../../util/key":473,"../../util/util":477,"../nav/nav-params":401,"../nav/view-controller":408,"@angular/core":159}],370:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -46473,7 +50776,7 @@ var App = (function () {
 }());
 exports.App = App;
 
-},{"../../config/config":412,"../../platform/platform":422,"../../util/click-block":436,"@angular/core":157,"@angular/platform-browser":277}],341:[function(require,module,exports){
+},{"../../config/config":442,"../../platform/platform":452,"../../util/click-block":466,"@angular/core":159,"@angular/platform-browser":279}],371:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -46549,7 +50852,7 @@ var Backdrop = (function () {
 }());
 exports.Backdrop = Backdrop;
 
-},{"../../util/util":447,"@angular/core":157}],342:[function(require,module,exports){
+},{"../../util/util":477,"@angular/core":159}],372:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -46609,7 +50912,7 @@ var Badge = (function () {
 }());
 exports.Badge = Badge;
 
-},{"../../config/config":412,"@angular/core":157}],343:[function(require,module,exports){
+},{"../../config/config":442,"@angular/core":159}],373:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -47035,7 +51338,7 @@ var IGNORE_ATTRS = /_ng|button|left|right/;
 var TEXT = 1;
 var ICON = 2;
 
-},{"../../config/config":412,"../../util/util":447,"@angular/core":157}],344:[function(require,module,exports){
+},{"../../config/config":442,"../../util/util":477,"@angular/core":159}],374:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -47253,7 +51556,7 @@ var Checkbox = (function () {
 }());
 exports.Checkbox = Checkbox;
 
-},{"../../util/form":442,"../../util/util":447,"../item/item":359,"@angular/common":11,"@angular/core":157}],345:[function(require,module,exports){
+},{"../../util/form":472,"../../util/util":477,"../item/item":389,"@angular/common":13,"@angular/core":159}],375:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -47784,7 +52087,7 @@ function parsePxUnit(val) {
     return (val.indexOf('px') > 0) ? parseInt(val, 10) : 0;
 }
 
-},{"../../config/config":412,"../../util/dom":439,"../../util/keyboard":444,"../../util/scroll-view":445,"../../util/util":447,"../app/app":340,"../ion":354,"../nav/view-controller":378,"../tabs/tabs":399,"@angular/core":157}],346:[function(require,module,exports){
+},{"../../config/config":442,"../../util/dom":469,"../../util/keyboard":474,"../../util/scroll-view":475,"../../util/util":477,"../app/app":370,"../ion":384,"../nav/view-controller":408,"../tabs/tabs":429,"@angular/core":159}],376:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -48611,7 +52914,7 @@ function convertToArrayOfStrings(input, type) {
     }
 }
 
-},{"../../config/config":412,"../../util/datetime-util":437,"../../util/form":442,"../../util/util":447,"../item/item":359,"../nav/nav-controller":370,"../picker/picker":381,"@angular/common":11,"@angular/core":157}],347:[function(require,module,exports){
+},{"../../config/config":442,"../../util/datetime-util":467,"../../util/form":472,"../../util/util":477,"../item/item":389,"../nav/nav-controller":400,"../picker/picker":411,"@angular/common":13,"@angular/core":159}],377:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -48796,7 +53099,7 @@ var Icon = (function () {
 }());
 exports.Icon = Icon;
 
-},{"../../config/config":412,"@angular/core":157}],348:[function(require,module,exports){
+},{"../../config/config":442,"@angular/core":159}],378:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -48984,7 +53287,7 @@ function getUnitValue(val) {
     return '';
 }
 
-},{"../../platform/platform":422,"../../util/dom":439,"../../util/util":447,"@angular/core":157}],349:[function(require,module,exports){
+},{"../../platform/platform":452,"../../util/dom":469,"../../util/util":477,"@angular/core":159}],379:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -49042,7 +53345,7 @@ var InfiniteScrollContent = (function () {
 }());
 exports.InfiniteScrollContent = InfiniteScrollContent;
 
-},{"../../config/config":412,"./infinite-scroll":350,"@angular/core":157}],350:[function(require,module,exports){
+},{"../../config/config":442,"./infinite-scroll":380,"@angular/core":159}],380:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -49308,7 +53611,7 @@ var STATE_ENABLED = 'enabled';
 var STATE_DISABLED = 'disabled';
 var STATE_LOADING = 'loading';
 
-},{"../content/content":345,"@angular/core":157}],351:[function(require,module,exports){
+},{"../content/content":375,"@angular/core":159}],381:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -49858,7 +54161,7 @@ function getScrollAssistDuration(distanceToScroll) {
     return Math.min(400, Math.max(150, duration));
 }
 
-},{"../../util/dom":439,"../../util/util":447,"./native-input":353,"@angular/core":157}],352:[function(require,module,exports){
+},{"../../util/dom":469,"../../util/util":477,"./native-input":383,"@angular/core":159}],382:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -50080,7 +54383,7 @@ var TextArea = (function (_super) {
 }(input_base_1.InputBase));
 exports.TextArea = TextArea;
 
-},{"../../config/config":412,"../../platform/platform":422,"../../util/form":442,"../app/app":340,"../content/content":345,"../item/item":359,"../nav/nav-controller":370,"./input-base":351,"./native-input":353,"@angular/common":11,"@angular/core":157}],353:[function(require,module,exports){
+},{"../../config/config":442,"../../platform/platform":452,"../../util/form":472,"../app/app":370,"../content/content":375,"../item/item":389,"../nav/nav-controller":400,"./input-base":381,"./native-input":383,"@angular/common":13,"@angular/core":159}],383:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -50309,7 +54612,7 @@ var NextInput = (function () {
 }());
 exports.NextInput = NextInput;
 
-},{"../../config/config":412,"../../util/dom":439,"@angular/common":11,"@angular/core":157}],354:[function(require,module,exports){
+},{"../../config/config":442,"../../util/dom":469,"@angular/common":13,"@angular/core":159}],384:[function(require,module,exports){
 "use strict";
 var dom_1 = require('../util/dom');
 var ids = 0;
@@ -50345,7 +54648,7 @@ var Ion = (function () {
 }());
 exports.Ion = Ion;
 
-},{"../util/dom":439}],355:[function(require,module,exports){
+},{"../util/dom":469}],385:[function(require,module,exports){
 "use strict";
 var ui_event_manager_1 = require('../../util/ui-event-manager');
 var dom_1 = require('../../util/dom');
@@ -50473,7 +54776,7 @@ function indexForItem(element) {
     return element['$ionIndex'];
 }
 
-},{"../../util/dom":439,"../../util/ui-event-manager":446}],356:[function(require,module,exports){
+},{"../../util/dom":469,"../../util/ui-event-manager":476}],386:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -50674,7 +54977,7 @@ var ItemReorder = (function () {
 }());
 exports.ItemReorder = ItemReorder;
 
-},{"../../util/dom":439,"../../util/util":447,"../content/content":345,"../item/item-reorder-gesture":355,"./item":359,"@angular/core":157}],357:[function(require,module,exports){
+},{"../../util/dom":469,"../../util/util":477,"../content/content":375,"../item/item-reorder-gesture":385,"./item":389,"@angular/core":159}],387:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -50788,7 +55091,7 @@ function isFromOptionButtons(ele) {
     return !!dom_1.closest(ele, 'ion-item-options', true);
 }
 
-},{"../../gestures/drag-gesture":416,"../../util/dom":439}],358:[function(require,module,exports){
+},{"../../gestures/drag-gesture":446,"../../util/dom":469}],388:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -51271,7 +55574,7 @@ function shouldClose(isCloseDirection, isMovingFast, isOnCloseZone) {
     return shouldClose;
 }
 
-},{"../../util/dom":439,"../../util/util":447,"../list/list":361,"./item":359,"@angular/core":157}],359:[function(require,module,exports){
+},{"../../util/dom":469,"../../util/util":477,"../list/list":391,"./item":389,"@angular/core":159}],389:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -51723,7 +56026,7 @@ var ItemContent = (function () {
 }());
 exports.ItemContent = ItemContent;
 
-},{"../../util/form":442,"../button/button":343,"../icon/icon":347,"../item/item-reorder":356,"../label/label":360,"@angular/core":157}],360:[function(require,module,exports){
+},{"../../util/form":472,"../button/button":373,"../icon/icon":377,"../item/item-reorder":386,"../label/label":390,"@angular/core":159}],390:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -51844,7 +56147,7 @@ var Label = (function () {
 }());
 exports.Label = Label;
 
-},{"@angular/core":157}],361:[function(require,module,exports){
+},{"@angular/core":159}],391:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -52012,7 +56315,7 @@ var ListHeader = (function () {
 }());
 exports.ListHeader = ListHeader;
 
-},{"../../util/util":447,"../ion":354,"../item/item-sliding-gesture":357,"@angular/core":157}],362:[function(require,module,exports){
+},{"../../util/util":477,"../ion":384,"../item/item-sliding-gesture":387,"@angular/core":159}],392:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -52341,7 +56644,7 @@ var LoadingWpPopOut = (function (_super) {
 transition_1.Transition.register('loading-wp-pop-out', LoadingWpPopOut);
 var loadingIds = -1;
 
-},{"../../animations/animation":335,"../../config/config":412,"../../transitions/transition":432,"../../util/util":447,"../nav/nav-params":371,"../nav/view-controller":378,"@angular/core":157}],363:[function(require,module,exports){
+},{"../../animations/animation":365,"../../config/config":442,"../../transitions/transition":462,"../../util/util":477,"../nav/nav-params":401,"../nav/view-controller":408,"@angular/core":159}],393:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -52409,7 +56712,7 @@ var MenuClose = (function () {
 }());
 exports.MenuClose = MenuClose;
 
-},{"./menu-controller":364,"@angular/core":157}],364:[function(require,module,exports){
+},{"./menu-controller":394,"@angular/core":159}],394:[function(require,module,exports){
 "use strict";
 /**
  * @name MenuController
@@ -52690,7 +56993,7 @@ var MenuController = (function () {
 exports.MenuController = MenuController;
 var menuTypes = {};
 
-},{}],365:[function(require,module,exports){
+},{}],395:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -52818,7 +57121,7 @@ var MenuTargetGesture = (function (_super) {
 }(MenuContentGesture));
 exports.MenuTargetGesture = MenuTargetGesture;
 
-},{"../../gestures/slide-edge-gesture":419,"../../util/util":447}],366:[function(require,module,exports){
+},{"../../gestures/slide-edge-gesture":449,"../../util/util":477}],396:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -52977,7 +57280,7 @@ var MenuToggle = (function () {
 }());
 exports.MenuToggle = MenuToggle;
 
-},{"../nav/view-controller":378,"../navbar/navbar":379,"./menu-controller":364,"@angular/core":157}],367:[function(require,module,exports){
+},{"../nav/view-controller":408,"../navbar/navbar":409,"./menu-controller":394,"@angular/core":159}],397:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -53123,7 +57426,7 @@ var MenuOverlayType = (function (_super) {
 }(MenuType));
 menu_controller_1.MenuController.registerType('overlay', MenuOverlayType);
 
-},{"../../animations/animation":335,"./menu-controller":364}],368:[function(require,module,exports){
+},{"../../animations/animation":365,"./menu-controller":394}],398:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -53731,7 +58034,7 @@ var Menu = (function (_super) {
 }(ion_1.Ion));
 exports.Menu = Menu;
 
-},{"../../config/config":412,"../../platform/platform":422,"../../util/keyboard":444,"../../util/util":447,"../backdrop/backdrop":341,"../ion":354,"./menu-controller":364,"./menu-gestures":365,"@angular/core":157}],369:[function(require,module,exports){
+},{"../../config/config":442,"../../platform/platform":452,"../../util/keyboard":474,"../../util/util":477,"../backdrop/backdrop":371,"../ion":384,"./menu-controller":394,"./menu-gestures":395,"@angular/core":159}],399:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -54070,7 +58373,7 @@ var ModalMDSlideOut = (function (_super) {
 }(page_transition_1.PageTransition));
 page_transition_1.PageTransition.register('modal-md-slide-out', ModalMDSlideOut);
 
-},{"../../animations/animation":335,"../../config/bootstrap":411,"../../transitions/page-transition":428,"../../util/dom":439,"../../util/key":443,"../../util/util":447,"../nav/nav-params":371,"../nav/view-controller":378,"@angular/core":157}],370:[function(require,module,exports){
+},{"../../animations/animation":365,"../../config/bootstrap":441,"../../transitions/page-transition":458,"../../util/dom":469,"../../util/key":473,"../../util/util":477,"../nav/nav-params":401,"../nav/view-controller":408,"@angular/core":159}],400:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -55689,7 +59992,7 @@ var INIT_ZINDEX = 100;
 var PORTAL_ZINDEX = 9999;
 var ctrlIds = -1;
 
-},{"../../config/bootstrap":411,"../../transitions/transition":432,"../../util/util":447,"../ion":354,"../menu/menu-controller":364,"./nav-params":371,"./swipe-back":377,"./view-controller":378,"@angular/core":157}],371:[function(require,module,exports){
+},{"../../config/bootstrap":441,"../../transitions/transition":462,"../../util/util":477,"../ion":384,"../menu/menu-controller":394,"./nav-params":401,"./swipe-back":407,"./view-controller":408,"@angular/core":159}],401:[function(require,module,exports){
 "use strict";
 /**
  * @name NavParams
@@ -55744,7 +60047,7 @@ var NavParams = (function () {
 }());
 exports.NavParams = NavParams;
 
-},{}],372:[function(require,module,exports){
+},{}],402:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -55806,7 +60109,7 @@ var NavPop = (function () {
 }());
 exports.NavPop = NavPop;
 
-},{"./nav-controller":370,"@angular/core":157}],373:[function(require,module,exports){
+},{"./nav-controller":400,"@angular/core":159}],403:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -55853,7 +60156,7 @@ var NavPortal = (function (_super) {
 }(nav_controller_1.NavController));
 exports.NavPortal = NavPortal;
 
-},{"../../config/config":412,"../../util/keyboard":444,"../app/app":340,"./nav-controller":370,"./view-controller":378,"@angular/core":157}],374:[function(require,module,exports){
+},{"../../config/config":442,"../../util/keyboard":474,"../app/app":370,"./nav-controller":400,"./view-controller":408,"@angular/core":159}],404:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -55957,7 +60260,7 @@ var NavPush = (function () {
 }());
 exports.NavPush = NavPush;
 
-},{"./nav-controller":370,"@angular/core":157}],375:[function(require,module,exports){
+},{"./nav-controller":400,"@angular/core":159}],405:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -55985,7 +60288,7 @@ var NavRouter = (function () {
 }());
 exports.NavRouter = NavRouter;
 
-},{"@angular/core":157}],376:[function(require,module,exports){
+},{"@angular/core":159}],406:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -56221,7 +60524,7 @@ var Nav = (function (_super) {
 }(nav_controller_1.NavController));
 exports.Nav = Nav;
 
-},{"../../config/config":412,"../../util/keyboard":444,"../../util/util":447,"../app/app":340,"./nav-controller":370,"./nav-portal":373,"./view-controller":378,"@angular/core":157}],377:[function(require,module,exports){
+},{"../../config/config":442,"../../util/keyboard":474,"../../util/util":477,"../app/app":370,"./nav-controller":400,"./nav-portal":403,"./view-controller":408,"@angular/core":159}],407:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -56275,7 +60578,7 @@ var SwipeBackGesture = (function (_super) {
 }(slide_edge_gesture_1.SlideEdgeGesture));
 exports.SwipeBackGesture = SwipeBackGesture;
 
-},{"../../gestures/slide-edge-gesture":419,"../../util/util":447}],378:[function(require,module,exports){
+},{"../../gestures/slide-edge-gesture":449,"../../util/util":477}],408:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -56812,7 +61115,7 @@ function ctrlFn(viewCtrl, fnName) {
     }
 }
 
-},{"../../util/util":447,"./nav-params":371,"@angular/core":157}],379:[function(require,module,exports){
+},{"../../util/util":477,"./nav-params":401,"@angular/core":159}],409:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -57063,7 +61366,7 @@ var NavbarTemplate = (function () {
 }());
 exports.NavbarTemplate = NavbarTemplate;
 
-},{"../../config/config":412,"../../util/util":447,"../app/app":340,"../ion":354,"../nav/nav-controller":370,"../nav/view-controller":378,"../toolbar/toolbar":407,"@angular/core":157}],380:[function(require,module,exports){
+},{"../../config/config":442,"../../util/util":477,"../app/app":370,"../ion":384,"../nav/nav-controller":400,"../nav/view-controller":408,"../toolbar/toolbar":437,"@angular/core":159}],410:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -57153,7 +61456,7 @@ var Option = (function () {
 }());
 exports.Option = Option;
 
-},{"../../util/util":447,"@angular/core":157}],381:[function(require,module,exports){
+},{"../../util/util":477,"@angular/core":159}],411:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -57720,7 +62023,7 @@ var pickerIds = -1;
 var DECELERATION_FRICTION = 0.97;
 var FRAME_MS = (1000 / 60);
 
-},{"../../animations/animation":335,"../../config/config":412,"../../transitions/transition":432,"../../util/dom":439,"../../util/key":443,"../../util/ui-event-manager":446,"../../util/util":447,"../nav/nav-params":371,"../nav/view-controller":378,"@angular/core":157,"@angular/platform-browser":277}],382:[function(require,module,exports){
+},{"../../animations/animation":365,"../../config/config":442,"../../transitions/transition":462,"../../util/dom":469,"../../util/key":473,"../../util/ui-event-manager":476,"../../util/util":477,"../nav/nav-params":401,"../nav/view-controller":408,"@angular/core":159,"@angular/platform-browser":279}],412:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -58175,7 +62478,7 @@ var PopoverMdPopOut = (function (_super) {
 page_transition_1.PageTransition.register('popover-md-pop-out', PopoverMdPopOut);
 var popoverIds = -1;
 
-},{"../../animations/animation":335,"../../config/bootstrap":411,"../../config/config":412,"../../transitions/page-transition":428,"../../util/dom":439,"../../util/key":443,"../../util/util":447,"../nav/nav-params":371,"../nav/view-controller":378,"@angular/core":157}],383:[function(require,module,exports){
+},{"../../animations/animation":365,"../../config/bootstrap":441,"../../config/config":442,"../../transitions/page-transition":458,"../../util/dom":469,"../../util/key":473,"../../util/util":477,"../nav/nav-params":401,"../nav/view-controller":408,"@angular/core":159}],413:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -58373,7 +62676,7 @@ var RadioButton = (function () {
 }());
 exports.RadioButton = RadioButton;
 
-},{"../../util/form":442,"../../util/util":447,"../item/item":359,"./radio-group":384,"@angular/core":157}],384:[function(require,module,exports){
+},{"../../util/form":472,"../../util/util":477,"../item/item":389,"./radio-group":414,"@angular/core":159}],414:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -58597,7 +62900,7 @@ var RadioGroup = (function () {
 exports.RadioGroup = RadioGroup;
 var radioGroupIds = -1;
 
-},{"../../util/util":447,"../list/list":361,"@angular/common":11,"@angular/core":157}],385:[function(require,module,exports){
+},{"../../util/util":477,"../list/list":391,"@angular/common":13,"@angular/core":159}],415:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -59288,7 +63591,7 @@ var Range = (function () {
 }());
 exports.Range = Range;
 
-},{"../../util/debouncer":438,"../../util/dom":439,"../../util/form":442,"../../util/ui-event-manager":446,"../../util/util":447,"../item/item":359,"@angular/common":11,"@angular/core":157}],386:[function(require,module,exports){
+},{"../../util/debouncer":468,"../../util/dom":469,"../../util/form":472,"../../util/ui-event-manager":476,"../../util/util":477,"../item/item":389,"@angular/common":13,"@angular/core":159}],416:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -59363,7 +63666,7 @@ var RefresherContent = (function () {
 }());
 exports.RefresherContent = RefresherContent;
 
-},{"../../config/config":412,"./refresher":387,"@angular/core":157}],387:[function(require,module,exports){
+},{"../../config/config":442,"./refresher":417,"@angular/core":159}],417:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -59840,7 +64143,7 @@ var STATE_REFRESHING = 'refreshing';
 var STATE_CANCELLING = 'cancelling';
 var STATE_COMPLETING = 'completing';
 
-},{"../../util/dom":439,"../../util/ui-event-manager":446,"../../util/util":447,"../content/content":345,"@angular/core":157}],388:[function(require,module,exports){
+},{"../../util/dom":469,"../../util/ui-event-manager":476,"../../util/util":477,"../content/content":375,"@angular/core":159}],418:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -59939,7 +64242,7 @@ var Scroll = (function (_super) {
 }(ion_1.Ion));
 exports.Scroll = Scroll;
 
-},{"../ion":354,"@angular/core":157}],389:[function(require,module,exports){
+},{"../ion":384,"@angular/core":159}],419:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -60350,7 +64653,7 @@ var Searchbar = (function () {
 }());
 exports.Searchbar = Searchbar;
 
-},{"../../config/config":412,"../../util/debouncer":438,"../../util/util":447,"@angular/common":11,"@angular/core":157}],390:[function(require,module,exports){
+},{"../../config/config":442,"../../util/debouncer":468,"../../util/util":477,"@angular/common":13,"@angular/core":159}],420:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -60648,7 +64951,7 @@ var Segment = (function () {
 }());
 exports.Segment = Segment;
 
-},{"../../util/util":447,"@angular/common":11,"@angular/core":157}],391:[function(require,module,exports){
+},{"../../util/util":477,"@angular/common":13,"@angular/core":159}],421:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -61130,7 +65433,7 @@ var Select = (function () {
 }());
 exports.Select = Select;
 
-},{"../../util/form":442,"../../util/util":447,"../action-sheet/action-sheet":338,"../alert/alert":339,"../item/item":359,"../nav/nav-controller":370,"../option/option":380,"@angular/common":11,"@angular/core":157}],392:[function(require,module,exports){
+},{"../../util/form":472,"../../util/util":477,"../action-sheet/action-sheet":368,"../alert/alert":369,"../item/item":389,"../nav/nav-controller":400,"../option/option":410,"@angular/common":13,"@angular/core":159}],422:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -61314,7 +65617,7 @@ var HideWhen = (function (_super) {
 }(DisplayWhen));
 exports.HideWhen = HideWhen;
 
-},{"../../platform/platform":422,"@angular/core":157}],393:[function(require,module,exports){
+},{"../../platform/platform":452,"@angular/core":159}],423:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -62077,7 +66380,7 @@ var SlideLazy = (function () {
 exports.SlideLazy = SlideLazy;
 var slidesId = -1;
 
-},{"../../animations/animation":335,"../../gestures/gesture":417,"../../util":435,"../../util/dom":439,"../../util/util":447,"../ion":354,"./swiper-widget":394,"@angular/core":157}],394:[function(require,module,exports){
+},{"../../animations/animation":365,"../../gestures/gesture":447,"../../util":465,"../../util/dom":469,"../../util/util":477,"../ion":384,"./swiper-widget":424,"@angular/core":159}],424:[function(require,module,exports){
 /**
  * Swiper 3.1.2
  * Most modern mobile touch slider and framework with hardware accelerated transitions
@@ -66033,7 +70336,7 @@ function Swiper(container, params) {
       }
   }
 
-},{}],395:[function(require,module,exports){
+},{}],425:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -66328,7 +70631,7 @@ var SPINNERS = {
     }
 };
 
-},{"../../config/config":412,"@angular/core":157}],396:[function(require,module,exports){
+},{"../../config/config":442,"@angular/core":159}],426:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -66407,7 +70710,7 @@ var TabButton = (function (_super) {
 }(ion_1.Ion));
 exports.TabButton = TabButton;
 
-},{"../../config/config":412,"../ion":354,"./tab":398,"@angular/core":157}],397:[function(require,module,exports){
+},{"../../config/config":442,"../ion":384,"./tab":428,"@angular/core":159}],427:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -66451,7 +70754,7 @@ var TabHighlight = (function () {
 }());
 exports.TabHighlight = TabHighlight;
 
-},{"../../util/dom":439,"@angular/core":157}],398:[function(require,module,exports){
+},{"../../util/dom":469,"@angular/core":159}],428:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -66805,7 +71108,7 @@ var Tab = (function (_super) {
 }(nav_controller_1.NavController));
 exports.Tab = Tab;
 
-},{"../../config/config":412,"../../util/keyboard":444,"../../util/util":447,"../app/app":340,"../nav/nav-controller":370,"./tabs":399,"@angular/core":157}],399:[function(require,module,exports){
+},{"../../config/config":442,"../../util/keyboard":474,"../../util/util":477,"../app/app":370,"../nav/nav-controller":400,"./tabs":429,"@angular/core":159}],429:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -67298,7 +71601,7 @@ var Tabs = (function (_super) {
 exports.Tabs = Tabs;
 var tabIds = -1;
 
-},{"../../config/config":412,"../../platform/platform":422,"../../util/dom":439,"../../util/util":447,"../app/app":340,"../content/content":345,"../ion":354,"../nav/nav-controller":370,"../nav/view-controller":378,"./tab-button":396,"./tab-highlight":397,"@angular/core":157}],400:[function(require,module,exports){
+},{"../../config/config":442,"../../platform/platform":452,"../../util/dom":469,"../../util/util":477,"../app/app":370,"../content/content":375,"../ion":384,"../nav/nav-controller":400,"../nav/view-controller":408,"./tab-button":426,"./tab-highlight":427,"@angular/core":159}],430:[function(require,module,exports){
 "use strict";
 var dom_1 = require('../../util/dom');
 var Activator = (function () {
@@ -67380,7 +71683,7 @@ var Activator = (function () {
 exports.Activator = Activator;
 var CLEAR_STATE_DEFERS = 5;
 
-},{"../../util/dom":439}],401:[function(require,module,exports){
+},{"../../util/dom":469}],431:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -67487,7 +71790,7 @@ var RippleActivator = (function (_super) {
 exports.RippleActivator = RippleActivator;
 var TOUCH_DOWN_ACCEL = 300;
 
-},{"../../util/dom":439,"./activator":400}],402:[function(require,module,exports){
+},{"../../util/dom":469,"./activator":430}],432:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -67683,7 +71986,7 @@ var POINTER_TOLERANCE = 4;
 var POINTER_MOVE_UNTIL_CANCEL = 10;
 var DISABLE_NATIVE_CLICK_AMOUNT = 2500;
 
-},{"../../config/config":412,"../../util/dom":439,"../app/app":340,"./activator":400,"./ripple":401,"@angular/core":157}],403:[function(require,module,exports){
+},{"../../config/config":442,"../../util/dom":469,"../app/app":370,"./activator":430,"./ripple":431,"@angular/core":159}],433:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -68074,7 +72377,7 @@ transition_1.Transition.register('toast-wp-slide-out', ToastWpPopOut);
 transition_1.Transition.register('toast-wp-slide-in', ToastWpPopIn);
 var toastIds = -1;
 
-},{"../../animations/animation":335,"../../config/config":412,"../../transitions/transition":432,"../../util/util":447,"../nav/nav-controller":370,"../nav/nav-params":371,"../nav/view-controller":378,"@angular/core":157}],404:[function(require,module,exports){
+},{"../../animations/animation":365,"../../config/config":442,"../../transitions/transition":462,"../../util/util":477,"../nav/nav-controller":400,"../nav/nav-params":401,"../nav/view-controller":408,"@angular/core":159}],434:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -68330,7 +72633,7 @@ var Toggle = (function () {
 }());
 exports.Toggle = Toggle;
 
-},{"../../util/dom":439,"../../util/form":442,"../../util/ui-event-manager":446,"../../util/util":447,"../item/item":359,"@angular/common":11,"@angular/core":157}],405:[function(require,module,exports){
+},{"../../util/dom":469,"../../util/form":472,"../../util/ui-event-manager":476,"../../util/util":477,"../item/item":389,"@angular/common":13,"@angular/core":159}],435:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -68384,7 +72687,7 @@ var ToolbarItem = (function () {
 }());
 exports.ToolbarItem = ToolbarItem;
 
-},{"../button/button":343,"../navbar/navbar":379,"./toolbar":407,"@angular/core":157}],406:[function(require,module,exports){
+},{"../button/button":373,"../navbar/navbar":409,"./toolbar":437,"@angular/core":159}],436:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -68474,7 +72777,7 @@ var ToolbarTitle = (function (_super) {
 }(ion_1.Ion));
 exports.ToolbarTitle = ToolbarTitle;
 
-},{"../ion":354,"../navbar/navbar":379,"./toolbar":407,"@angular/core":157}],407:[function(require,module,exports){
+},{"../ion":384,"../navbar/navbar":409,"./toolbar":437,"@angular/core":159}],437:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -68715,7 +73018,7 @@ var Toolbar = (function (_super) {
 }(ToolbarBase));
 exports.Toolbar = Toolbar;
 
-},{"../../config/config":412,"../ion":354,"../nav/view-controller":378,"@angular/core":157}],408:[function(require,module,exports){
+},{"../../config/config":442,"../ion":384,"../nav/view-controller":408,"@angular/core":159}],438:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -68771,7 +73074,7 @@ var VirtualItem = (function () {
 }());
 exports.VirtualItem = VirtualItem;
 
-},{"@angular/core":157}],409:[function(require,module,exports){
+},{"@angular/core":159}],439:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -69376,7 +73679,7 @@ var SCROLL_END_TIMEOUT_MS = 140;
 var SCROLL_DIFFERENCE_MINIMUM = 20;
 var QUEUE_CHANGE_DETECTION = 0;
 
-},{"../../config/config":412,"../../platform/platform":422,"../../util/dom":439,"../../util/util":447,"../content/content":345,"../img/img":348,"../nav/view-controller":378,"./virtual-item":408,"./virtual-util":410,"@angular/core":157}],410:[function(require,module,exports){
+},{"../../config/config":442,"../../platform/platform":452,"../../util/dom":469,"../../util/util":477,"../content/content":375,"../img/img":378,"../nav/view-controller":408,"./virtual-item":438,"./virtual-util":440,"@angular/core":159}],440:[function(require,module,exports){
 "use strict";
 var dom_1 = require('../../util/dom');
 /**
@@ -69909,7 +74212,7 @@ var TEMPLATE_FOOTER = 2;
 var VIEWABLE_RENDERED_PADDING = 3;
 var REQUIRED_DOM_READS = 2;
 
-},{"../../util/dom":439}],411:[function(require,module,exports){
+},{"../../util/dom":469}],441:[function(require,module,exports){
 "use strict";
 var platform_browser_dynamic_1 = require('@angular/platform-browser-dynamic');
 var core_1 = require('@angular/core');
@@ -70128,7 +74431,7 @@ function addSelector(type, selector) {
 }
 exports.addSelector = addSelector;
 
-},{"../components/app/app":340,"../components/menu/menu-controller":364,"../components/tap-click/tap-click":402,"../platform/platform":422,"../translation/translate":433,"../util/click-block":436,"../util/dom":439,"../util/events":440,"../util/feature-detect":441,"../util/form":442,"../util/keyboard":444,"../util/scroll-view":445,"../util/util":447,"./config":412,"./directives":413,"@angular/core":157,"@angular/http":245,"@angular/platform-browser-dynamic":266}],412:[function(require,module,exports){
+},{"../components/app/app":370,"../components/menu/menu-controller":394,"../components/tap-click/tap-click":432,"../platform/platform":452,"../translation/translate":463,"../util/click-block":466,"../util/dom":469,"../util/events":470,"../util/feature-detect":471,"../util/form":472,"../util/keyboard":474,"../util/scroll-view":475,"../util/util":477,"./config":442,"./directives":443,"@angular/core":159,"@angular/http":247,"@angular/platform-browser-dynamic":268}],442:[function(require,module,exports){
 /**
 * @ngdoc service
 * @name Config
@@ -70460,7 +74763,7 @@ var Config = (function () {
 exports.Config = Config;
 var modeConfigs = {};
 
-},{"../platform/platform":422,"../util/util":447}],413:[function(require,module,exports){
+},{"../platform/platform":452,"../util/util":477}],443:[function(require,module,exports){
 "use strict";
 var common_1 = require('@angular/common');
 var menu_1 = require('../components/menu/menu');
@@ -70651,7 +74954,7 @@ exports.IONIC_DIRECTIVES = [
     show_hide_when_1.HideWhen
 ];
 
-},{"../components/backdrop/backdrop":341,"../components/badge/badge":342,"../components/button/button":343,"../components/checkbox/checkbox":344,"../components/content/content":345,"../components/datetime/datetime":346,"../components/icon/icon":347,"../components/img/img":348,"../components/infinite-scroll/infinite-scroll":350,"../components/infinite-scroll/infinite-scroll-content":349,"../components/input/input":352,"../components/item/item":359,"../components/item/item-reorder":356,"../components/item/item-sliding":358,"../components/label/label":360,"../components/list/list":361,"../components/menu/menu":368,"../components/menu/menu-close":363,"../components/menu/menu-toggle":366,"../components/nav/nav":376,"../components/nav/nav-pop":372,"../components/nav/nav-push":374,"../components/nav/nav-router":375,"../components/navbar/navbar":379,"../components/option/option":380,"../components/radio/radio-button":383,"../components/radio/radio-group":384,"../components/range/range":385,"../components/refresher/refresher":387,"../components/refresher/refresher-content":386,"../components/scroll/scroll":388,"../components/searchbar/searchbar":389,"../components/segment/segment":390,"../components/select/select":391,"../components/show-hide-when/show-hide-when":392,"../components/slides/slides":393,"../components/spinner/spinner":395,"../components/tabs/tab":398,"../components/tabs/tabs":399,"../components/toggle/toggle":404,"../components/toolbar/toolbar":407,"../components/toolbar/toolbar-item":405,"../components/toolbar/toolbar-title":406,"../components/virtual-scroll/virtual-item":408,"../components/virtual-scroll/virtual-scroll":409,"@angular/common":11}],414:[function(require,module,exports){
+},{"../components/backdrop/backdrop":371,"../components/badge/badge":372,"../components/button/button":373,"../components/checkbox/checkbox":374,"../components/content/content":375,"../components/datetime/datetime":376,"../components/icon/icon":377,"../components/img/img":378,"../components/infinite-scroll/infinite-scroll":380,"../components/infinite-scroll/infinite-scroll-content":379,"../components/input/input":382,"../components/item/item":389,"../components/item/item-reorder":386,"../components/item/item-sliding":388,"../components/label/label":390,"../components/list/list":391,"../components/menu/menu":398,"../components/menu/menu-close":393,"../components/menu/menu-toggle":396,"../components/nav/nav":406,"../components/nav/nav-pop":402,"../components/nav/nav-push":404,"../components/nav/nav-router":405,"../components/navbar/navbar":409,"../components/option/option":410,"../components/radio/radio-button":413,"../components/radio/radio-group":414,"../components/range/range":415,"../components/refresher/refresher":417,"../components/refresher/refresher-content":416,"../components/scroll/scroll":418,"../components/searchbar/searchbar":419,"../components/segment/segment":420,"../components/select/select":421,"../components/show-hide-when/show-hide-when":422,"../components/slides/slides":423,"../components/spinner/spinner":425,"../components/tabs/tab":428,"../components/tabs/tabs":429,"../components/toggle/toggle":434,"../components/toolbar/toolbar":437,"../components/toolbar/toolbar-item":435,"../components/toolbar/toolbar-title":436,"../components/virtual-scroll/virtual-item":438,"../components/virtual-scroll/virtual-scroll":439,"@angular/common":13}],444:[function(require,module,exports){
 "use strict";
 var config_1 = require('./config');
 // iOS Mode Settings
@@ -70741,7 +75044,7 @@ config_1.Config.setModeConfig('wp', {
     toastLeave: 'toast-wp-slide-out',
 });
 
-},{"./config":412}],415:[function(require,module,exports){
+},{"./config":442}],445:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var _reflect = Reflect;
@@ -70764,7 +75067,7 @@ function Page(config) {
 }
 exports.Page = Page;
 
-},{"@angular/core":157}],416:[function(require,module,exports){
+},{"@angular/core":159}],446:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -70812,7 +75115,7 @@ var DragGesture = (function (_super) {
 }(gesture_1.Gesture));
 exports.DragGesture = DragGesture;
 
-},{"../util":435,"./gesture":417}],417:[function(require,module,exports){
+},{"../util":465,"./gesture":447}],447:[function(require,module,exports){
 "use strict";
 var util_1 = require('../util');
 var hammer_1 = require('./hammer');
@@ -70880,7 +75183,7 @@ var Gesture = (function () {
 }());
 exports.Gesture = Gesture;
 
-},{"../util":435,"./hammer":418}],418:[function(require,module,exports){
+},{"../util":465,"./hammer":448}],448:[function(require,module,exports){
 "use strict";
 /* tslint:disable */
 var util_1 = require('../util/util');
@@ -73034,7 +77337,7 @@ util_1.assign(Hammer, {
 });
 win.Hammer = Hammer;
 
-},{"../util/util":447}],419:[function(require,module,exports){
+},{"../util/util":477}],449:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -73082,7 +77385,7 @@ var SlideEdgeGesture = (function (_super) {
 }(slide_gesture_1.SlideGesture));
 exports.SlideEdgeGesture = SlideEdgeGesture;
 
-},{"../util/dom":439,"../util/util":447,"./slide-gesture":420}],420:[function(require,module,exports){
+},{"../util/dom":469,"../util/util":477,"./slide-gesture":450}],450:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -73159,7 +77462,7 @@ var SlideGesture = (function (_super) {
 }(drag_gesture_1.DragGesture));
 exports.SlideGesture = SlideGesture;
 
-},{"../util":435,"./drag-gesture":416}],421:[function(require,module,exports){
+},{"../util":465,"./drag-gesture":446}],451:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
@@ -73194,7 +77497,7 @@ require('./transitions/transition-ios');
 require('./transitions/transition-md');
 require('./transitions/transition-wp');
 
-},{"./animations/animation":335,"./animations/builtins":336,"./components":337,"./config/bootstrap":411,"./config/config":412,"./config/directives":413,"./config/modes":414,"./decorators/page":415,"./gestures/drag-gesture":416,"./gestures/gesture":417,"./gestures/slide-edge-gesture":419,"./gestures/slide-gesture":420,"./platform/platform":422,"./platform/registry":423,"./platform/storage":424,"./transitions/page-transition":428,"./transitions/transition":432,"./transitions/transition-ios":429,"./transitions/transition-md":430,"./transitions/transition-wp":431,"./translation/translate":433,"./translation/translate_pipe":434,"./util/click-block":436,"./util/events":440,"./util/form":442,"./util/keyboard":444,"./util/util":447}],422:[function(require,module,exports){
+},{"./animations/animation":365,"./animations/builtins":366,"./components":367,"./config/bootstrap":441,"./config/config":442,"./config/directives":443,"./config/modes":444,"./decorators/page":445,"./gestures/drag-gesture":446,"./gestures/gesture":447,"./gestures/slide-edge-gesture":449,"./gestures/slide-gesture":450,"./platform/platform":452,"./platform/registry":453,"./platform/storage":454,"./transitions/page-transition":458,"./transitions/transition":462,"./transitions/transition-ios":459,"./transitions/transition-md":460,"./transitions/transition-wp":461,"./translation/translate":463,"./translation/translate_pipe":464,"./util/click-block":466,"./util/events":470,"./util/form":472,"./util/keyboard":474,"./util/util":477}],452:[function(require,module,exports){
 "use strict";
 var core_1 = require('@angular/core');
 var util_1 = require('../util/util');
@@ -73905,7 +78208,7 @@ var PlatformNode = (function () {
 var platformRegistry = {};
 var platformDefault = null;
 
-},{"../util/dom":439,"../util/util":447,"@angular/core":157}],423:[function(require,module,exports){
+},{"../util/dom":469,"../util/util":477,"@angular/core":159}],453:[function(require,module,exports){
 "use strict";
 var platform_1 = require('./platform');
 var dom_1 = require('../util/dom');
@@ -74094,7 +78397,7 @@ function isIOSDevice(p) {
     return p.testNavigatorPlatform('iphone|ipad|ipod');
 }
 
-},{"../util/dom":439,"./platform":422}],424:[function(require,module,exports){
+},{"../util/dom":469,"./platform":452}],454:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
@@ -74103,7 +78406,7 @@ __export(require('./storage/storage'));
 __export(require('./storage/local-storage'));
 __export(require('./storage/sql'));
 
-},{"./storage/local-storage":425,"./storage/sql":426,"./storage/storage":427}],425:[function(require,module,exports){
+},{"./storage/local-storage":455,"./storage/sql":456,"./storage/storage":457}],455:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -74214,7 +78517,7 @@ var LocalStorage = (function (_super) {
 }(storage_1.StorageEngine));
 exports.LocalStorage = LocalStorage;
 
-},{"./storage":427}],426:[function(require,module,exports){
+},{"./storage":457}],456:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -74363,7 +78666,7 @@ var SqlStorage = (function (_super) {
 }(storage_1.StorageEngine));
 exports.SqlStorage = SqlStorage;
 
-},{"../../util/util":447,"./storage":427}],427:[function(require,module,exports){
+},{"../../util/util":477,"./storage":457}],457:[function(require,module,exports){
 "use strict";
 /**
  * Storage is an easy way to store key/value pairs and other complicated
@@ -74444,7 +78747,7 @@ var StorageEngine = (function () {
 }());
 exports.StorageEngine = StorageEngine;
 
-},{}],428:[function(require,module,exports){
+},{}],458:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -74496,7 +78799,7 @@ function parsePxUnit(val) {
     return (val.indexOf('px') > 0) ? parseInt(val, 10) : 0;
 }
 
-},{"../animations/animation":335,"../components/content/content":345,"./transition":432}],429:[function(require,module,exports){
+},{"../animations/animation":365,"../components/content/content":375,"./transition":462}],459:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -74666,7 +78969,7 @@ var IOSTransition = (function (_super) {
 }(page_transition_1.PageTransition));
 page_transition_1.PageTransition.register('ios-transition', IOSTransition);
 
-},{"../animations/animation":335,"./page-transition":428}],430:[function(require,module,exports){
+},{"../animations/animation":365,"./page-transition":458}],460:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -74723,7 +79026,7 @@ var MDTransition = (function (_super) {
 }(page_transition_1.PageTransition));
 page_transition_1.PageTransition.register('md-transition', MDTransition);
 
-},{"../animations/animation":335,"./page-transition":428}],431:[function(require,module,exports){
+},{"../animations/animation":365,"./page-transition":458}],461:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -74778,7 +79081,7 @@ var WPTransition = (function (_super) {
 }(page_transition_1.PageTransition));
 page_transition_1.PageTransition.register('wp-transition', WPTransition);
 
-},{"../animations/animation":335,"./page-transition":428}],432:[function(require,module,exports){
+},{"../animations/animation":365,"./page-transition":458}],462:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -74825,7 +79128,7 @@ var Transition = (function (_super) {
 exports.Transition = Transition;
 var TransitionRegistry = {};
 
-},{"../animations/animation":335}],433:[function(require,module,exports){
+},{"../animations/animation":365}],463:[function(require,module,exports){
 "use strict";
 /**
  * @private
@@ -74890,7 +79193,7 @@ var Translate = (function () {
 }());
 exports.Translate = Translate;
 
-},{}],434:[function(require,module,exports){
+},{}],464:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -74936,7 +79239,7 @@ var TranslatePipe = (function () {
 }());
 exports.TranslatePipe = TranslatePipe;
 
-},{"./translate":433,"@angular/core":157}],435:[function(require,module,exports){
+},{"./translate":463,"@angular/core":159}],465:[function(require,module,exports){
 "use strict";
 function __export(m) {
     for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
@@ -74946,7 +79249,7 @@ exports.dom = domUtil;
 __export(require('./util/util'));
 __export(require('./util/datetime-util'));
 
-},{"./util/datetime-util":437,"./util/dom":439,"./util/util":447}],436:[function(require,module,exports){
+},{"./util/datetime-util":467,"./util/dom":469,"./util/util":477}],466:[function(require,module,exports){
 "use strict";
 var dom_1 = require('./dom');
 var CSS_CLICK_BLOCK = 'click-block-active';
@@ -74999,7 +79302,7 @@ function hide() {
     }
 }
 
-},{"./dom":439}],437:[function(require,module,exports){
+},{"./dom":469}],467:[function(require,module,exports){
 "use strict";
 var util_1 = require('./util');
 function renderDateTime(template, value, locale) {
@@ -75425,7 +79728,7 @@ var MONTH_SHORT_NAMES = [
     'Dec',
 ];
 
-},{"./util":447}],438:[function(require,module,exports){
+},{"./util":477}],468:[function(require,module,exports){
 "use strict";
 var Debouncer = (function () {
     function Debouncer(wait) {
@@ -75452,7 +79755,7 @@ var Debouncer = (function () {
 }());
 exports.Debouncer = Debouncer;
 
-},{}],439:[function(require,module,exports){
+},{}],469:[function(require,module,exports){
 "use strict";
 // RequestAnimationFrame Polyfill (Android 4.3 and below)
 /*! @author Paul Irish */
@@ -75719,7 +80022,7 @@ function flushDimensionCache() {
 exports.flushDimensionCache = flushDimensionCache;
 var dimensionCache = {};
 
-},{}],440:[function(require,module,exports){
+},{}],470:[function(require,module,exports){
 "use strict";
 /**
  * @name Events
@@ -75828,7 +80131,7 @@ var Events = (function () {
 }());
 exports.Events = Events;
 
-},{}],441:[function(require,module,exports){
+},{}],471:[function(require,module,exports){
 "use strict";
 var FeatureDetect = (function () {
     function FeatureDetect() {
@@ -75869,7 +80172,7 @@ FeatureDetect.add('hairlines', function (window, document, body) {
     return canDo;
 });
 
-},{}],442:[function(require,module,exports){
+},{}],472:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -75955,7 +80258,7 @@ var Form = (function () {
 }());
 exports.Form = Form;
 
-},{"@angular/core":157}],443:[function(require,module,exports){
+},{"@angular/core":159}],473:[function(require,module,exports){
 "use strict";
 (function (Key) {
     Key[Key["ENTER"] = 13] = "ENTER";
@@ -75965,7 +80268,7 @@ exports.Form = Form;
 var Key = exports.Key;
 ;
 
-},{}],444:[function(require,module,exports){
+},{}],474:[function(require,module,exports){
 "use strict";
 var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
     var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -76150,7 +80453,7 @@ exports.Keyboard = Keyboard;
 var KEYBOARD_CLOSE_POLLING = 150;
 var KEYBOARD_POLLING_CHECKS_MAX = 100;
 
-},{"../config/config":412,"./dom":439,"./form":442,"./key":443,"@angular/core":157}],445:[function(require,module,exports){
+},{"../config/config":442,"./dom":469,"./form":472,"./key":473,"@angular/core":159}],475:[function(require,module,exports){
 "use strict";
 var dom_1 = require('../util/dom');
 var ScrollView = (function () {
@@ -76377,7 +80680,7 @@ var MIN_VELOCITY_CONTINUE_DECELERATION = 0.12;
 var DECELERATION_FRICTION = 0.97;
 var FRAME_MS = (1000 / 60);
 
-},{"../util/dom":439}],446:[function(require,module,exports){
+},{"../util/dom":469}],476:[function(require,module,exports){
 "use strict";
 /**
  * @private
@@ -76525,7 +80828,7 @@ function listenEvent(ele, eventName, zoneWrapped, option, callback) {
     }
 }
 
-},{}],447:[function(require,module,exports){
+},{}],477:[function(require,module,exports){
 "use strict";
 /**
  * Given a min and max, restrict the given number
@@ -76723,9505 +81026,1162 @@ function reorderArray(array, indexes) {
 }
 exports.reorderArray = reorderArray;
 
-},{}],448:[function(require,module,exports){
-"use strict";
-function __export(m) {
-    for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
-}
-var ng1_1 = require('./ng1');
-var DEVICE_READY_TIMEOUT = 2000;
-var actionsheet_1 = require('./plugins/actionsheet');
-exports.ActionSheet = actionsheet_1.ActionSheet;
-var admob_1 = require('./plugins/admob');
-exports.AdMob = admob_1.AdMob;
-var appavailability_1 = require('./plugins/appavailability');
-exports.AppAvailability = appavailability_1.AppAvailability;
-var apprate_1 = require('./plugins/apprate');
-exports.AppRate = apprate_1.AppRate;
-var appversion_1 = require('./plugins/appversion');
-exports.AppVersion = appversion_1.AppVersion;
-var badge_1 = require('./plugins/badge');
-exports.Badge = badge_1.Badge;
-var background_geolocation_1 = require('./plugins/background-geolocation');
-var barcodescanner_1 = require('./plugins/barcodescanner');
-exports.BarcodeScanner = barcodescanner_1.BarcodeScanner;
-var base64togallery_1 = require('./plugins/base64togallery');
-exports.Base64ToGallery = base64togallery_1.Base64ToGallery;
-var batterystatus_1 = require('./plugins/batterystatus');
-exports.BatteryStatus = batterystatus_1.BatteryStatus;
-var brightness_1 = require('./plugins/brightness');
-exports.Brightness = brightness_1.Brightness;
-var ble_1 = require('./plugins/ble');
-exports.BLE = ble_1.BLE;
-var bluetoothserial_1 = require('./plugins/bluetoothserial');
-exports.BluetoothSerial = bluetoothserial_1.BluetoothSerial;
-var calendar_1 = require('./plugins/calendar');
-var camera_1 = require('./plugins/camera');
-var card_io_1 = require('./plugins/card-io');
-var clipboard_1 = require('./plugins/clipboard');
-exports.Clipboard = clipboard_1.Clipboard;
-var contacts_1 = require('./plugins/contacts');
-var datepicker_1 = require('./plugins/datepicker');
-var dbmeter_1 = require('./plugins/dbmeter');
-exports.DBMeter = dbmeter_1.DBMeter;
-var deeplinks_1 = require('./plugins/deeplinks');
-exports.Deeplinks = deeplinks_1.Deeplinks;
-var device_1 = require('./plugins/device');
-var deviceaccounts_1 = require('./plugins/deviceaccounts');
-exports.DeviceAccounts = deviceaccounts_1.DeviceAccounts;
-var devicemotion_1 = require('./plugins/devicemotion');
-var deviceorientation_1 = require('./plugins/deviceorientation');
-var diagnostic_1 = require('./plugins/diagnostic');
-exports.Diagnostic = diagnostic_1.Diagnostic;
-var dialogs_1 = require('./plugins/dialogs');
-exports.Dialogs = dialogs_1.Dialogs;
-var emailcomposer_1 = require('./plugins/emailcomposer');
-exports.EmailComposer = emailcomposer_1.EmailComposer;
-var facebook_1 = require('./plugins/facebook');
-exports.Facebook = facebook_1.Facebook;
-var file_1 = require('./plugins/file');
-exports.File = file_1.File;
-var filetransfer_1 = require('./plugins/filetransfer');
-exports.Transfer = filetransfer_1.Transfer;
-var flashlight_1 = require('./plugins/flashlight');
-exports.Flashlight = flashlight_1.Flashlight;
-var geolocation_1 = require('./plugins/geolocation');
-exports.Geolocation = geolocation_1.Geolocation;
-var globalization_1 = require('./plugins/globalization');
-exports.Globalization = globalization_1.Globalization;
-var google_plus_1 = require('./plugins/google-plus');
-exports.GooglePlus = google_plus_1.GooglePlus;
-var googlemaps_1 = require('./plugins/googlemaps');
-var googleanalytics_1 = require('./plugins/googleanalytics');
-exports.GoogleAnalytics = googleanalytics_1.GoogleAnalytics;
-var hotspot_1 = require('./plugins/hotspot');
-exports.Hotspot = hotspot_1.Hotspot;
-var httpd_1 = require('./plugins/httpd');
-var imagepicker_1 = require('./plugins/imagepicker');
-var inappbrowser_1 = require('./plugins/inappbrowser');
-var insomnia_1 = require('./plugins/insomnia');
-exports.Insomnia = insomnia_1.Insomnia;
-var keyboard_1 = require('./plugins/keyboard');
-exports.Keyboard = keyboard_1.Keyboard;
-var launchnavigator_1 = require('./plugins/launchnavigator');
-var localnotifications_1 = require('./plugins/localnotifications');
-var media_1 = require('./plugins/media');
-var network_1 = require('./plugins/network');
-exports.Network = network_1.Network;
-exports.Connection = network_1.Connection;
-var printer_1 = require('./plugins/printer');
-var push_1 = require('./plugins/push');
-var safari_view_controller_1 = require('./plugins/safari-view-controller');
-var screenshot_1 = require('./plugins/screenshot');
-exports.Screenshot = screenshot_1.Screenshot;
-var sms_1 = require('./plugins/sms');
-var socialsharing_1 = require('./plugins/socialsharing');
-exports.SocialSharing = socialsharing_1.SocialSharing;
-var spinnerdialog_1 = require('./plugins/spinnerdialog');
-var splashscreen_1 = require('./plugins/splashscreen');
-exports.Splashscreen = splashscreen_1.Splashscreen;
-var sqlite_1 = require('./plugins/sqlite');
-exports.SQLite = sqlite_1.SQLite;
-var statusbar_1 = require('./plugins/statusbar');
-exports.StatusBar = statusbar_1.StatusBar;
-var _3dtouch_1 = require('./plugins/3dtouch');
-var toast_1 = require('./plugins/toast');
-var touchid_1 = require('./plugins/touchid');
-exports.TouchID = touchid_1.TouchID;
-var vibration_1 = require('./plugins/vibration');
-exports.Vibration = vibration_1.Vibration;
-var webintent_1 = require('./plugins/webintent');
-exports.WebIntent = webintent_1.WebIntent;
-__export(require('./plugins/3dtouch'));
-__export(require('./plugins/background-geolocation'));
-__export(require('./plugins/backgroundmode'));
-__export(require('./plugins/batterystatus'));
-__export(require('./plugins/calendar'));
-__export(require('./plugins/camera'));
-__export(require('./plugins/card-io'));
-__export(require('./plugins/contacts'));
-__export(require('./plugins/datepicker'));
-__export(require('./plugins/device'));
-__export(require('./plugins/devicemotion'));
-__export(require('./plugins/deviceorientation'));
-__export(require('./plugins/googlemaps'));
-__export(require('./plugins/httpd'));
-__export(require('./plugins/imagepicker'));
-__export(require('./plugins/inappbrowser'));
-__export(require('./plugins/launchnavigator'));
-__export(require('./plugins/localnotifications'));
-__export(require('./plugins/media'));
-__export(require('./plugins/printer'));
-__export(require('./plugins/push'));
-__export(require('./plugins/safari-view-controller'));
-__export(require('./plugins/sms'));
-__export(require('./plugins/spinnerdialog'));
-__export(require('./plugins/toast'));
-__export(require('./plugins/plugin'));
-// Window export to use outside of a module loading system
-window['IonicNative'] = {
-    ActionSheet: actionsheet_1.ActionSheet,
-    AdMob: admob_1.AdMob,
-    AppAvailability: appavailability_1.AppAvailability,
-    AppRate: apprate_1.AppRate,
-    AppVersion: appversion_1.AppVersion,
-    Badge: badge_1.Badge,
-    BackgroundGeolocation: background_geolocation_1.BackgroundGeolocation,
-    BarcodeScanner: barcodescanner_1.BarcodeScanner,
-    Base64ToGallery: base64togallery_1.Base64ToGallery,
-    BatteryStatus: batterystatus_1.BatteryStatus,
-    Brightness: brightness_1.Brightness,
-    BLE: ble_1.BLE,
-    BluetoothSerial: bluetoothserial_1.BluetoothSerial,
-    Calendar: calendar_1.Calendar,
-    Camera: camera_1.Camera,
-    CardIO: card_io_1.CardIO,
-    Clipboard: clipboard_1.Clipboard,
-    Connection: network_1.Connection,
-    Contacts: contacts_1.Contacts,
-    DatePicker: datepicker_1.DatePicker,
-    DBMeter: dbmeter_1.DBMeter,
-    Deeplinks: deeplinks_1.Deeplinks,
-    Device: device_1.Device,
-    DeviceAccounts: deviceaccounts_1.DeviceAccounts,
-    DeviceMotion: devicemotion_1.DeviceMotion,
-    DeviceOrientation: deviceorientation_1.DeviceOrientation,
-    Dialogs: dialogs_1.Dialogs,
-    Diagnostic: diagnostic_1.Diagnostic,
-    EmailComposer: emailcomposer_1.EmailComposer,
-    Facebook: facebook_1.Facebook,
-    File: file_1.File,
-    Flashlight: flashlight_1.Flashlight,
-    Geolocation: geolocation_1.Geolocation,
-    Globalization: globalization_1.Globalization,
-    GooglePlus: google_plus_1.GooglePlus,
-    GoogleMap: googlemaps_1.GoogleMap,
-    GoogleAnalytics: googleanalytics_1.GoogleAnalytics,
-    Hotspot: hotspot_1.Hotspot,
-    Httpd: httpd_1.Httpd,
-    ImagePicker: imagepicker_1.ImagePicker,
-    InAppBrowser: inappbrowser_1.InAppBrowser,
-    Keyboard: keyboard_1.Keyboard,
-    LaunchNavigator: launchnavigator_1.LaunchNavigator,
-    LocalNotifications: localnotifications_1.LocalNotifications,
-    MediaPlugin: media_1.MediaPlugin,
-    Network: network_1.Network,
-    Printer: printer_1.Printer,
-    Push: push_1.Push,
-    SafariViewController: safari_view_controller_1.SafariViewController,
-    Screenshot: screenshot_1.Screenshot,
-    SMS: sms_1.SMS,
-    SocialSharing: socialsharing_1.SocialSharing,
-    SpinnerDialog: spinnerdialog_1.SpinnerDialog,
-    Splashscreen: splashscreen_1.Splashscreen,
-    SQLite: sqlite_1.SQLite,
-    StatusBar: statusbar_1.StatusBar,
-    ThreeDeeTouch: _3dtouch_1.ThreeDeeTouch,
-    Toast: toast_1.Toast,
-    TouchID: touchid_1.TouchID,
-    Transfer: filetransfer_1.Transfer,
-    Vibration: vibration_1.Vibration,
-    WebIntent: webintent_1.WebIntent
+},{}],478:[function(require,module,exports){
+module.exports = Array.isArray || function (arr) {
+  return Object.prototype.toString.call(arr) == '[object Array]';
 };
-ng1_1.initAngular1(window['IonicNative']);
-// To help developers using cordova, we listen for the device ready event and
-// log an error if it didn't fire in a reasonable amount of time. Generally,
-// when this happens, developers should remove and reinstall plugins, since
-// an inconsistent plugin is often the culprit.
-var before = +new Date;
-var didFireReady = false;
-document.addEventListener('deviceready', function () {
-    console.log('DEVICE READY FIRED AFTER', (+new Date - before), 'ms');
-    didFireReady = true;
-});
-setTimeout(function () {
-    if (!didFireReady && window.cordova) {
-        console.warn('Native: deviceready did not fire within ' + DEVICE_READY_TIMEOUT + 'ms. This can happen when plugins are in an inconsistent state. Try removing plugins from plugins/ and reinstalling them.');
-    }
-}, DEVICE_READY_TIMEOUT);
 
-},{"./ng1":449,"./plugins/3dtouch":450,"./plugins/actionsheet":451,"./plugins/admob":452,"./plugins/appavailability":453,"./plugins/apprate":454,"./plugins/appversion":455,"./plugins/background-geolocation":456,"./plugins/backgroundmode":457,"./plugins/badge":458,"./plugins/barcodescanner":459,"./plugins/base64togallery":460,"./plugins/batterystatus":461,"./plugins/ble":462,"./plugins/bluetoothserial":463,"./plugins/brightness":464,"./plugins/calendar":465,"./plugins/camera":466,"./plugins/card-io":467,"./plugins/clipboard":468,"./plugins/contacts":469,"./plugins/datepicker":470,"./plugins/dbmeter":471,"./plugins/deeplinks":472,"./plugins/device":473,"./plugins/deviceaccounts":474,"./plugins/devicemotion":475,"./plugins/deviceorientation":476,"./plugins/diagnostic":477,"./plugins/dialogs":478,"./plugins/emailcomposer":479,"./plugins/facebook":480,"./plugins/file":481,"./plugins/filetransfer":482,"./plugins/flashlight":483,"./plugins/geolocation":484,"./plugins/globalization":485,"./plugins/google-plus":486,"./plugins/googleanalytics":487,"./plugins/googlemaps":488,"./plugins/hotspot":489,"./plugins/httpd":490,"./plugins/imagepicker":491,"./plugins/inappbrowser":492,"./plugins/insomnia":493,"./plugins/keyboard":494,"./plugins/launchnavigator":495,"./plugins/localnotifications":496,"./plugins/media":497,"./plugins/network":498,"./plugins/plugin":499,"./plugins/printer":500,"./plugins/push":501,"./plugins/safari-view-controller":502,"./plugins/screenshot":503,"./plugins/sms":504,"./plugins/socialsharing":505,"./plugins/spinnerdialog":506,"./plugins/splashscreen":507,"./plugins/sqlite":508,"./plugins/statusbar":509,"./plugins/toast":510,"./plugins/touchid":511,"./plugins/vibration":512,"./plugins/webintent":513}],449:[function(require,module,exports){
-"use strict";
-/**
- * Initialize the ionic.native Angular module if we're running in ng1.
- * This iterates through the list of registered plugins and dynamically
- * creates Angular 1 services of the form $cordovaSERVICE, ex: $cordovStatusBar.
- */
-function initAngular1(plugins) {
-    if (window.angular) {
-        window.angular.module('ionic.native', []);
-        for (var name in plugins) {
-            var serviceName = '$cordova' + name;
-            var cls = plugins[name];
-            (function (serviceName, cls, name) {
-                window.angular.module('ionic.native').service(serviceName, [function () {
-                        var funcs = {};
-                        for (var k in cls) {
-                            funcs[k] = cls[k];
-                        }
-                        funcs['name'] = name;
-                        return funcs;
-                    }]);
-            })(serviceName, cls, name);
-        }
-    }
-}
-exports.initAngular1 = initAngular1;
+},{}],479:[function(require,module,exports){
+(function (global){
+/*! JSON v3.3.2 | http://bestiejs.github.io/json3 | Copyright 2012-2014, Kit Cambridge | http://kit.mit-license.org */
+;(function () {
+  // Detect the `define` function exposed by asynchronous module loaders. The
+  // strict `define` check is necessary for compatibility with `r.js`.
+  var isLoader = typeof define === "function" && define.amd;
 
-},{}],450:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-var Observable_1 = require('rxjs/Observable');
-/**
- * @name 3DTouch
- * @description
- * @usage
- * Please do refer to the original plugin's repo for detailed usage. The usage example here might not be sufficient.
- * ```
- * import {ThreeDeeTouch, ThreeDeeTouchQuickAction, ThreeDeeTouchForceTouch} from 'ionic-native';
- *
- * ...
- *
- * ThreeDeeTouch.isAvailable().then(isAvailable => console.log("3D Touch available? " + isAvailable)):
- *
- * ThreeDeeTouch.watchForceTouches()
- *   .subscribe(
- *     (data: ThreeDeeTouchForceTouch) => {
- *       console.log("Force touch %" + data.force);
- *       console.log("Force touch timestamp: " + data.timestamp);
- *       console.log("Force touch x: " + data.x);
- *       console.log("Force touch y: " + data.y);
- *     }
- *   );
- *
- *
- * let actions: Array<ThreeDeeTouchQuickAction> = [
- *   {
- *     type: 'checkin',
- *     title: 'Check in',
- *     subtitle: 'Quickly check in',
- *     iconType: 'Compose'
- *   },
- *   {
- *     type: 'share',
- *     title: 'Share',
- *     subtitle: 'Share like you care',
- *     iconType: 'Share'
- *   },
- *   {
- *     type: 'search',
- *     title: 'Search',
- *     iconType: 'Search'
- *   },
- *   {
- *     title: 'Show favorites',
- *     iconTemplate: 'HeartTemplate'
- *   }
- * ];
- * ThreeDeeTouch.configureQuickActions(actions);
- * ```
- */
-var ThreeDeeTouch = (function () {
-    function ThreeDeeTouch() {
-    }
-    /**
-     * You need an iPhone 6S or some future tech to use the features of this plugin, so you can check at runtime if the user's device is supported.
-     * @returns {Promise<boolean>} returns a promise that resolves with a boolean that indicates whether the plugin is available or not
-     */
-    ThreeDeeTouch.isAvailable = function () { return; };
-    /**
-     * You can get a notification when the user force touches the webview. The plugin defines a Force Touch when at least 75% of the maximum force is applied to the screen. Your app will receive the x and y coordinates, so you have to figure out which UI element was touched.
-     * @returns {Observable<ThreeDeeTouchForceTouch>} Returns an observable that sends a `ThreeDeeTouchForceTouch` object
-     */
-    ThreeDeeTouch.watchForceTouches = function () { return; };
-    ThreeDeeTouch.configureQuickActions = function (quickActions) { };
-    /**
-     * When a home icon is pressed, your app launches and this JS callback is invoked.
-     * @returns {Observable<any>} returns an observable that notifies you when he user presses on the home screen icon
-     */
-    ThreeDeeTouch.onHomeIconPressed = function () {
-        return new Observable_1.Observable(function (observer) {
-            if (window.ThreeDeeTouch && window.ThreeDeeTouch.onHomeIconPressed)
-                window.ThreeDeeTouch.onHomeIconPressed = observer.next.bind(observer);
-            else {
-                observer.error('3dTouch plugin is not available.');
-                observer.complete();
-            }
-        });
-    };
-    /**
-     * UIWebView and WKWebView (the webviews powering Cordova apps) don't allow the fancy new link preview feature of iOS9.
-     */
-    ThreeDeeTouch.enableLinkPreview = function () { };
-    /**
-     * Disabled the link preview feature, if enabled.
-     */
-    ThreeDeeTouch.disableLinkPreview = function () { };
-    __decorate([
-        plugin_1.Cordova()
-    ], ThreeDeeTouch, "isAvailable", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true
-        })
-    ], ThreeDeeTouch, "watchForceTouches", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], ThreeDeeTouch, "configureQuickActions", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true
-        })
-    ], ThreeDeeTouch, "onHomeIconPressed", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], ThreeDeeTouch, "enableLinkPreview", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], ThreeDeeTouch, "disableLinkPreview", null);
-    ThreeDeeTouch = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-3dtouch',
-            pluginRef: 'ThreeDeeTouch',
-            repo: 'https://github.com/EddyVerbruggen/cordova-plugin-3dtouch',
-            platforms: ['iOS']
-        })
-    ], ThreeDeeTouch);
-    return ThreeDeeTouch;
-}());
-exports.ThreeDeeTouch = ThreeDeeTouch;
+  // A set of types used to distinguish objects from primitives.
+  var objectTypes = {
+    "function": true,
+    "object": true
+  };
 
-},{"./plugin":499,"rxjs/Observable":519}],451:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Action Sheet
- * @description
- * The ActionSheet plugin shows a native list of options the user can choose from.
- *
- * Requires Cordova plugin: `cordova-plugin-actionsheet`. For more info, please see the [ActionSheet plugin docs](https://github.com/EddyVerbruggen/cordova-plugin-actionsheet).
- *
- * @usage
- * ```ts
- * import {ActionSheet} from 'ionic-native';
- *
- * let buttonLabels = ['Share via Facebook', 'Share via Twitter'];
- * ActionSheet.show({
- *   'title': 'What do you want with this image?',
- *   'buttonLabels': buttonLabels,
- *   'addCancelButtonWithLabel': 'Cancel',
- *   'addDestructiveButtonWithLabel' : 'Delete'
- * }).then(buttonIndex => {
- *   console.log('Button pressed: ' + buttonLabels[buttonIndex - 1]);
- * });
- * ```
- *
- */
-var ActionSheet = (function () {
-    function ActionSheet() {
-    }
-    /**
-     * Show the ActionSheet. The ActionSheet's options is an object with the following propterties.
-     *
-     * | Option                        | Type      | Description                                  |
-     * |-------------------------------|-----------|----------------------------------------------|
-     * | title                         |`string`   | The title for the actionsheet                |
-     * | buttonLabels                  |`string[]` | the labels for the buttons. Uses the index x |
-     * | androidTheme                  |`number`   | Theme to be used on Android                  |
-     * | androidEnableCancelButton     |`boolean`  | Enable a cancel on Android                   |
-     * | winphoneEnableCancelButton    |`boolean`  | Enable a cancel on Windows Phone             |
-     * | addCancelButtonWithLabel      |`string`   | Add a cancel button with text                |
-     * | addDestructiveButtonWithLabel |`string`   | Add a destructive button with text           |
-     * | position                      |`number[]` | On an iPad, set the X,Y position             |
-     *
-     * @param {options} Options See table above
-     * @returns {Promise} Returns a Promise that resolves with the index of the
-     *   button pressed (1 based, so 1, 2, 3, etc.)
-     */
-    ActionSheet.show = function (options) { return; };
-    /**
-     * Hide the ActionSheet.
-     */
-    ActionSheet.hide = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], ActionSheet, "show", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], ActionSheet, "hide", null);
-    ActionSheet = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-actionsheet',
-            pluginRef: 'plugins.actionsheet',
-            repo: 'https://github.com/EddyVerbruggen/cordova-plugin-actionsheet',
-            platforms: ['Android', 'iOS', 'Windows Phone 8']
-        })
-    ], ActionSheet);
-    return ActionSheet;
-}());
-exports.ActionSheet = ActionSheet;
+  // Detect the `exports` object exposed by CommonJS implementations.
+  var freeExports = objectTypes[typeof exports] && exports && !exports.nodeType && exports;
 
-},{"./plugin":499}],452:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name AdMob
- * @description Plugin for Google Ads, including AdMob / DFP (doubleclick for publisher) and mediations to other Ad networks.
- * @usage
- * Please refer the the plugin's original repository for detailed usage.
- */
-var AdMob = (function () {
-    function AdMob() {
-    }
-    // Static Methods
-    /**
-     *
-     * @param adIdOrOptions
-     */
-    AdMob.createBanner = function (adIdOrOptions) { return; };
-    /**
-     *
-     */
-    AdMob.removeBanner = function () { };
-    /**
-     *
-     * @param position
-     */
-    AdMob.showBanner = function (position) { };
-    /**
-     *
-     * @param x
-     * @param y
-     */
-    AdMob.showBannerAtXY = function (x, y) { };
-    /**
-     *
-     */
-    AdMob.hideBanner = function () { };
-    /**
-     *
-     * @param adIdOrOptions
-     */
-    AdMob.prepareInterstitial = function (adIdOrOptions) { return; };
-    /**
-     * Show interstitial
-     */
-    AdMob.showInterstitial = function () { };
-    /**
-     *
-     */
-    AdMob.isInterstitialReady = function () { return; };
-    /**
-     * Prepare a reward video ad
-     * @param adIdOrOptions
-     */
-    AdMob.prepareRewardVideoAd = function (adIdOrOptions) { return; };
-    /**
-     * Show a reward video ad
-     */
-    AdMob.showRewardVideoAd = function () { };
-    /**
-     * Sets the values for configuration and targeting
-     * @param options Returns a promise that resolves if the options are set successfully
-     */
-    AdMob.setOptions = function (options) { return; };
-    /**
-     * Get user ad settings
-     * @returns {Promise<any>} Returns a promise that resolves with the ad settings
-     */
-    AdMob.getAdSettings = function () { return; };
-    // Events
-    AdMob.onBannerFailedToReceive = function () { return; };
-    AdMob.onBannerReceive = function () { return; };
-    AdMob.onBannerPresent = function () { return; };
-    AdMob.onBannerLeaveApp = function () { return; };
-    AdMob.onBannerDismiss = function () { return; };
-    AdMob.onInterstitialFailedToReceive = function () { return; };
-    AdMob.onInterstitialReceive = function () { return; };
-    AdMob.onInterstitialPresent = function () { return; };
-    AdMob.onInterstitialLeaveApp = function () { return; };
-    AdMob.onInterstitialDismiss = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], AdMob, "createBanner", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], AdMob, "removeBanner", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], AdMob, "showBanner", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], AdMob, "showBannerAtXY", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], AdMob, "hideBanner", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], AdMob, "prepareInterstitial", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], AdMob, "showInterstitial", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], AdMob, "isInterstitialReady", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], AdMob, "prepareRewardVideoAd", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], AdMob, "showRewardVideoAd", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], AdMob, "setOptions", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], AdMob, "getAdSettings", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'onBannerFailedToReceive'
-        })
-    ], AdMob, "onBannerFailedToReceive", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'onBannerReceive'
-        })
-    ], AdMob, "onBannerReceive", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'onBannerPresent'
-        })
-    ], AdMob, "onBannerPresent", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'onBannerLeaveApp'
-        })
-    ], AdMob, "onBannerLeaveApp", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'onBannerDismiss'
-        })
-    ], AdMob, "onBannerDismiss", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'onInterstitialFailedToReceive'
-        })
-    ], AdMob, "onInterstitialFailedToReceive", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'onInterstitialReceive'
-        })
-    ], AdMob, "onInterstitialReceive", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'onInterstitialPresent'
-        })
-    ], AdMob, "onInterstitialPresent", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'onInterstitialLeaveApp'
-        })
-    ], AdMob, "onInterstitialLeaveApp", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'onInterstitialDismiss'
-        })
-    ], AdMob, "onInterstitialDismiss", null);
-    AdMob = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-admobpro',
-            pluginRef: 'AdMob',
-            repo: 'https://github.com/floatinghotpot/cordova-admob-pro',
-            platforms: ['Android', 'iOS', 'Windows Phone 8']
-        })
-    ], AdMob);
-    return AdMob;
-}());
-exports.AdMob = AdMob;
+  // Use the `global` object exposed by Node (including Browserify via
+  // `insert-module-globals`), Narwhal, and Ringo as the default context,
+  // and the `window` object in browsers. Rhino exports a `global` function
+  // instead.
+  var root = objectTypes[typeof window] && window || this,
+      freeGlobal = freeExports && objectTypes[typeof module] && module && !module.nodeType && typeof global == "object" && global;
 
-},{"./plugin":499}],453:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name App Availability
- * @description
- * This plugin allows you to check if an app is installed on the user's device. It requires an URI Scheme (e.g. twitter://) on iOS or a Package Name (e.g com.twitter.android) on Android.
- *
- * Requires Cordova plugin: cordova-plugin-appavailability. For more info, please see the [AppAvailability plugin docs](https://github.com/ohh2ahh/AppAvailability).
- *
- * @usage
- * ```js
- * import {AppAvailability} from 'ionic-native';
- *
- *
- * var app;
- *
- * if(device.platform === 'iOS') {
- *   app = 'twitter://';
- * }else if(device.platform === 'Android'){
- *   app = 'com.twitter.android';
- * }
- *
- * AppAvailability.check(app)
- *   .then(
- *     yes => console.log(app + " is available"),
- *     no => console.log(app + " is NOT available")
- *   );
- * ```
- */
-var AppAvailability = (function () {
-    function AppAvailability() {
-    }
-    /**
-     * Checks if an app is available on device
-     * @param app Package name on android, or URI scheme on iOS
-     * @returns {Promise<boolean>}
-     */
-    AppAvailability.check = function (app) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], AppAvailability, "check", null);
-    AppAvailability = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-appavailability',
-            pluginRef: 'appAvailability',
-            repo: 'https://github.com/ohh2ahh/AppAvailability',
-            platforms: ['Android', 'iOS']
-        })
-    ], AppAvailability);
-    return AppAvailability;
-}());
-exports.AppAvailability = AppAvailability;
+  if (freeGlobal && (freeGlobal["global"] === freeGlobal || freeGlobal["window"] === freeGlobal || freeGlobal["self"] === freeGlobal)) {
+    root = freeGlobal;
+  }
 
-},{"./plugin":499}],454:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name App Rate
- * @description
- * The AppRate plugin makes it easy to prompt the user to rate your app, either now, later, or never.
- *
- * Requires Cordova plugin: cordova-plugin-apprate. For more info, please see the [AppRate plugin docs](https://github.com/pushandplay/cordova-plugin-apprate).
- *
- * @usage
- * ```js
- * import {AppRate} from 'ionic-native';
- *
- *
- * AppRate.preferences.storeAppURL.ios = '<my_app_id>';
- * AppRate.preferences.storeAppURL.android = 'market://details?id=<package_name>';
- * AppRate.preferences.storeAppURL.blackberry = 'appworld://content/[App Id]/';
- * AppRate.preferences.storeAppURL.windows8 = 'ms-windows-store:Review?name=<the Package Family Name of the application>';
- * AppRate.promptForRating();
- * ```
- */
-var AppRate = (function () {
-    function AppRate() {
-    }
-    Object.defineProperty(AppRate, "preferences", {
-        /**
-         * Rating dialog preferences
-         *
-         * | Option                       | Type       | Default | Description                                                                            |
-         * |------------------------------|------------|---------|----------------------------------------------------------------------------------------|
-         * | useLanguage                  | `String`   | null    | custom BCP 47 language tag                                                             |
-         * | displayAppName               | `String`   | ''      | custom application title                                                               |
-         * | promptAgainForEachNewVersion | `Boolean`  | true    | show dialog again when application version will be updated                             |
-         * | usesUntilPrompt              | `Integer`  | 3       | count of runs of application before dialog will be displayed                           |
-         * | openStoreInApp               | `Boolean`  | false   | leave app or no when application page opened in app store (now supported only for iOS) |
-         * | useCustomRateDialog          | `Boolean`  | false   | use custom view for rate dialog                                                        |
-         * | callbacks.onButtonClicked    | `Function` | null    | call back function. called when user clicked on rate-dialog buttons                    |
-         * | callbacks.onRateDialogShow   | `Function` | null    | call back function. called when rate-dialog showing                                    |
-         * | storeAppURL.ios              | `String`   | null    | application id in AppStore                                                             |
-         * | storeAppURL.android          | `String`   | null    | application URL in GooglePlay                                                          |
-         * | storeAppURL.blackberry       | `String`   | null    | application URL in AppWorld                                                            |
-         * | storeAppURL.windows8         | `String`   | null    | application URL in WindowsStore                                                        |
-         * | customLocale                 | `Object`   | null    | custom locale object                                                                   |
-         * @type {{}}
-         */
-        get: function () { return window.AppRate.preferences; },
-        enumerable: true,
-        configurable: true
-    });
-    /**
-     * Prompts the user for rating
-     *
-     * @param {boolean} immediately  Show the rating prompt immediately.
-     */
-    AppRate.promptForRating = function (immediately) { };
-    ;
-    __decorate([
-        plugin_1.CordovaProperty
-    ], AppRate, "preferences", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], AppRate, "promptForRating", null);
-    AppRate = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-apprate',
-            pluginRef: 'AppRate',
-            repo: 'https://github.com/pushandplay/cordova-plugin-apprate',
-            platforms: ['Android', 'iOS']
-        })
-    ], AppRate);
-    return AppRate;
-}());
-exports.AppRate = AppRate;
+  // Public: Initializes JSON 3 using the given `context` object, attaching the
+  // `stringify` and `parse` functions to the specified `exports` object.
+  function runInContext(context, exports) {
+    context || (context = root["Object"]());
+    exports || (exports = root["Object"]());
 
-},{"./plugin":499}],455:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name App Version
- * @description
- * Reads the version of your app from the target build settings.
- *
- * Requires Cordova plugin: `cordova-plugin-app-version`. For more info, please see the [Cordova App Version docs](https://github.com/whiteoctober/cordova-plugin-app-version).
- *
- * @usage
- * ```js
- * import {AppVersion} from 'ionic-native';
- *
- *
- *  AppVersion.getAppName();
- *  AppVersion.getPackageName();
- *  AppVersion.getVersionCode();
- *  AppVersion.getVersionNumber();
- * ```
- */
-var AppVersion = (function () {
-    function AppVersion() {
-    }
-    /**
-     * Returns the name of the app
-     * @returns {Promise}
-     */
-    AppVersion.getAppName = function () { return; };
-    /**
-     * Returns the package name of the app
-     * @returns {Promise}
-     */
-    AppVersion.getPackageName = function () { return; };
-    /**
-     * Returns the build identifier of the app
-     * @returns {Promise}
-     */
-    AppVersion.getVersionCode = function () { return; };
-    /**
-     * Returns the version of the app
-     * @returns {Promise}
-     */
-    AppVersion.getVersionNumber = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], AppVersion, "getAppName", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], AppVersion, "getPackageName", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], AppVersion, "getVersionCode", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], AppVersion, "getVersionNumber", null);
-    AppVersion = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-app-version',
-            pluginRef: 'cordova.getAppVersion',
-            repo: 'https://github.com/whiteoctober/cordova-plugin-app-version',
-            platforms: ['Android', 'iOS']
-        })
-    ], AppVersion);
-    return AppVersion;
-}());
-exports.AppVersion = AppVersion;
+    // Native constructor aliases.
+    var Number = context["Number"] || root["Number"],
+        String = context["String"] || root["String"],
+        Object = context["Object"] || root["Object"],
+        Date = context["Date"] || root["Date"],
+        SyntaxError = context["SyntaxError"] || root["SyntaxError"],
+        TypeError = context["TypeError"] || root["TypeError"],
+        Math = context["Math"] || root["Math"],
+        nativeJSON = context["JSON"] || root["JSON"];
 
-},{"./plugin":499}],456:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name BackgroundGeolocation
- * @description
- * This plugin provides foreground and background geolocation with battery-saving "circular region monitoring" and "stop detection". For
- * more detail, please see https://github.com/mauron85/cordova-plugin-background-geolocation
- *
- * @usage
- *
- * ```ts
- * import {BackgroundGeolocation} from 'ionic-native';
- *
- *
- *
- * // When device is ready :
- * platform.ready().then(() => {
- *
- *     // BackgroundGeolocation is highly configurable. See platform specific configuration options
- *     let config = {
- *             desiredAccuracy: 10,
- *             stationaryRadius: 20,
- *             distanceFilter: 30,
- *             debug: true, //  enable this hear sounds for background-geolocation life-cycle.
- *             stopOnTerminate: false, // enable this to clear background location settings when the app terminates
- *     };
- *
- *     BackgroundGeolocation.configure(config)
- *        .then((location) => {
- *             console.log('[js] BackgroundGeolocation callback:  ' + location.latitude + ',' + location.longitude);
- *
- *             // IMPORTANT:  You must execute the finish method here to inform the native plugin that you're finished,
- *             // and the background-task may be completed.  You must do this regardless if your HTTP request is successful or not.
- *             // IF YOU DON'T, ios will CRASH YOUR APP for spending too much time in the background.
- *             BackgroundGeolocation.finish(); // FOR IOS ONLY
- *         })
- *        .catch((error) => {
- *             console.log('BackgroundGeolocation error');
- *         });
- *
- *     // Turn ON the background-geolocation system.  The user will be tracked whenever they suspend the app.
- *     BackgroundGeolocation.start();
- * }
- *
- * // If you wish to turn OFF background-tracking, call the #stop method.
- * BackgroundGeolocation.stop();
- *
- * ```
- */
-var BackgroundGeolocation = (function () {
-    function BackgroundGeolocation() {
+    // Delegate to the native `stringify` and `parse` implementations.
+    if (typeof nativeJSON == "object" && nativeJSON) {
+      exports.stringify = nativeJSON.stringify;
+      exports.parse = nativeJSON.parse;
     }
-    /**
-     * Configure the plugin.
-     * Success callback will be called with one argument - Location object, which tries to mimic w3c Coordinates interface.
-     * See http://dev.w3.org/geo/api/spec-source.html#coordinates_interface
-     * Callback to be executed every time a geolocation is recorded in the background.
-     *
-     * Fail callback to be executed every time a geolocation error occurs.
-     *
-     * Options a json object of type Config
-     */
-    BackgroundGeolocation.configure = function (options) { return; };
-    /**
-     * Turn ON the background-geolocation system.
-     * The user will be tracked whenever they suspend the app.
-     */
-    BackgroundGeolocation.start = function () { return; };
-    /**
-     * Turn OFF background-tracking
-     */
-    BackgroundGeolocation.stop = function () { return; };
-    /**
-     * Inform the native plugin that you're finished, the background-task may be completed
-     * NOTE: IOS, WP only
-     */
-    BackgroundGeolocation.finish = function () { };
-    /**
-     * Force the plugin to enter "moving" or "stationary" state
-     * NOTE: IOS, WP only
-     */
-    BackgroundGeolocation.changePace = function (isMoving) { };
-    /**
-     * Setup configuration
-     */
-    BackgroundGeolocation.setConfig = function (options) { return; };
-    /**
-     * Returns current stationaryLocation if available. null if not
-     * NOTE: IOS, WP only
-     */
-    BackgroundGeolocation.getStationaryLocation = function () { return; };
-    /**
-     * Add a stationary-region listener. Whenever the devices enters "stationary-mode",
-     * your #success callback will be executed with #location param containing #radius of region
-     * NOTE: IOS, WP only
-     */
-    BackgroundGeolocation.onStationary = function () { return; };
-    /**
-     * Check if location is enabled on the device
-     * @returns {Promise<number>} Returns a promise with int argument that takes values 0, 1 (true).
-     * NOTE: ANDROID only
-     */
-    BackgroundGeolocation.isLocationEnabled = function () { return; };
-    /**
-     * Display device location settings
-     */
-    BackgroundGeolocation.showLocationSettings = function () { };
-    /**
-     * Method can be used to detect user changes in location services settings.
-     * If user enable or disable location services then success callback will be executed.
-     * In case or error (SettingNotFoundException) fail callback will be executed.
-     * NOTE: ANDROID only
-     */
-    BackgroundGeolocation.watchLocationMode = function () { return; };
-    /**
-     * Stop watching for location mode changes.
-     * NOTE: ANDROID only
-     */
-    BackgroundGeolocation.stopWatchingLocationMode = function () { };
-    /**
-     * Method will return all stored locations.
-     * Locations are stored when:
-     *  - config.stopOnTerminate is false and main activity was killed
-     *    by the system
-     *  or
-     *  - option.debug is true
-     * NOTE: ANDROID only
-     */
-    BackgroundGeolocation.getLocations = function () { return; };
-    /**
-     * Delete stored location by given locationId.
-     * NOTE: ANDROID only
-     */
-    BackgroundGeolocation.deleteLocation = function (locationId) { return; };
-    /**
-     * Delete all stored locations.
-     * NOTE: ANDROID only
-     */
-    BackgroundGeolocation.deleteAllLocations = function () { return; };
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse'
-        })
-    ], BackgroundGeolocation, "configure", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "start", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "stop", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "finish", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "changePace", null);
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse'
-        })
-    ], BackgroundGeolocation, "setConfig", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "getStationaryLocation", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "onStationary", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "isLocationEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "showLocationSettings", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "watchLocationMode", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "stopWatchingLocationMode", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "getLocations", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "deleteLocation", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundGeolocation, "deleteAllLocations", null);
-    BackgroundGeolocation = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-mauron85-background-geolocation',
-            pluginRef: 'plugins.backgroundGeoLocation',
-            repo: 'https://github.com/mauron85/cordova-plugin-background-geolocation',
-            platforms: ['iOS', 'Android', 'Windows Phone 8']
-        })
-    ], BackgroundGeolocation);
-    return BackgroundGeolocation;
-}());
-exports.BackgroundGeolocation = BackgroundGeolocation;
 
-},{"./plugin":499}],457:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
-* @name Background Mode
-* @description
-* Cordova plugin to prevent the app from going to sleep while in background.
-*  Requires Cordova plugin: cordova-plugin-background-mode. For more info about plugin, vist: https://github.com/katzer/cordova-plugin-background-mode#android-customization
-*@usage
-* ```js
-* import {BackgroundMode} from 'ionic-native';
-*
-* BackgroundMode.enable();
-* ```
-*/
-var BackgroundMode = (function () {
-    function BackgroundMode() {
-    }
-    /**
-    * Enable the background mode.
-    * Once called, prevents the app from being paused while in background.
-    */
-    BackgroundMode.enable = function () { };
-    /**
-    * Disable the background mode.
-    * Once the background mode has been disabled, the app will be paused when in background.
-    */
-    BackgroundMode.disable = function () { };
-    /**
-    * Checks if background mode is enabled or not.
-    */
-    BackgroundMode.isEnabled = function () { return; };
-    /**
-    * Can be used to get the information if the background mode is active.
-    */
-    BackgroundMode.isActive = function () { return; };
-    /**
-    * Override the default title, ticker and text.
-    * Available only for Android platform.
-    */
-    BackgroundMode.setDefaults = function (options) { };
-    /**
-    * Modify the displayed information.
-    * Available only for Android platform.
-    */
-    BackgroundMode.update = function (options) { };
-    /**
-    * Sets a callback for a specific event
-    * Can be used to get notified or run function when the background mode has been activated, deactivated or failed.
-    * @param eventName The name of the event. Available events: activate, deactivate, failure
-    */
-    BackgroundMode.on = function (eventName, callback) { };
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], BackgroundMode, "enable", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundMode, "disable", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundMode, "isEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BackgroundMode, "isActive", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android']
-        })
-    ], BackgroundMode, "setDefaults", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android']
-        })
-    ], BackgroundMode, "update", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], BackgroundMode, "on", null);
-    BackgroundMode = __decorate([
-        plugin_1.Plugin({
-            plugin: 'de.appplant.cordova.plugin.background-mode',
-            pluginRef: 'cordova.plugins.backgroundMode',
-            repo: 'https://github.com/katzer/cordova-plugin-background-mode',
-            platforms: ['Android', 'iOS', 'Windows Phone 8']
-        })
-    ], BackgroundMode);
-    return BackgroundMode;
-}());
-exports.BackgroundMode = BackgroundMode;
+    // Convenience aliases.
+    var objectProto = Object.prototype,
+        getClass = objectProto.toString,
+        isProperty, forEach, undef;
 
-},{"./plugin":499}],458:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Badge
- * @description
- * The essential purpose of badge numbers is to enable an application to inform its users that it has something for them — for example, unread messages — when the application isn’t running in the foreground.
- *
- * Requires Cordova plugin: cordova-plugin-badge. For more info, please see the [Badge plugin docs](https://github.com/katzer/cordova-plugin-badge).
- *
- * @usage
- * ```js
- * import {Badge} from 'ionic-native';
- *
- *
- * Badge.set(10);
- * Badge.increase();
- * Badge.clear();
- * ```
- */
-var Badge = (function () {
-    function Badge() {
-    }
-    /**
-     * Clear the badge of the app icon.
-     */
-    Badge.clear = function () { return; };
-    /**
-     * Set the badge of the app icon.
-     * @param {number} badgeNumber  The new badge number.
-     * @returns {Promise}
-     */
-    Badge.set = function (badgeNumber) { return; };
-    /**
-     * Get the badge of the app icon.
-     * @returns {Promise}
-     */
-    Badge.get = function () { return; };
-    /**
-     * Increase the badge number.
-     * @param {number} increaseBy  Count to add to the current badge number
-     * @returns {Promise}
-     */
-    Badge.increase = function (increaseBy) { return; };
-    /**
-     * Decrease the badge number.
-     * @param {number} decreaseBy  Count to subtract from the current badge number
-     * @returns {Promise}
-     */
-    Badge.decrease = function (decreaseBy) { return; };
-    /**
-     * Determine if the app has permission to show badges.
-     */
-    Badge.hasPermission = function () { return; };
-    /**
-     * Register permission to set badge notifications
-     * @returns {Promise}
-     */
-    Badge.registerPermission = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], Badge, "clear", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Badge, "set", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Badge, "get", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Badge, "increase", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Badge, "decrease", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Badge, "hasPermission", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Badge, "registerPermission", null);
-    Badge = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-badge',
-            pluginRef: 'cordova.plugins.notification.badge',
-            repo: 'https://github.com/katzer/cordova-plugin-badge',
-            platforms: ['Android', 'iOS', 'Browser', 'Windows', 'Amazon FireOS', 'Windows Phone 8']
-        })
-    ], Badge);
-    return Badge;
-}());
-exports.Badge = Badge;
+    // Test the `Date#getUTC*` methods. Based on work by @Yaffle.
+    var isExtended = new Date(-3509827334573292);
+    try {
+      // The `getUTCFullYear`, `Month`, and `Date` methods return nonsensical
+      // results for certain dates in Opera >= 10.53.
+      isExtended = isExtended.getUTCFullYear() == -109252 && isExtended.getUTCMonth() === 0 && isExtended.getUTCDate() === 1 &&
+        // Safari < 2.0.2 stores the internal millisecond time value correctly,
+        // but clips the values returned by the date methods to the range of
+        // signed 32-bit integers ([-2 ** 31, 2 ** 31 - 1]).
+        isExtended.getUTCHours() == 10 && isExtended.getUTCMinutes() == 37 && isExtended.getUTCSeconds() == 6 && isExtended.getUTCMilliseconds() == 708;
+    } catch (exception) {}
 
-},{"./plugin":499}],459:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Barcode Scanner
- * @description
- * The Barcode Scanner Plugin opens a camera view and automatically scans a barcode, returning the data back to you.
- *
- * Requires Cordova plugin: `phonegap-plugin-barcodescanner`. For more info, please see the [BarcodeScanner plugin docs](https://github.com/phonegap/phonegap-plugin-barcodescanner).
- *
- * @usage
- * ```js
- * import {BarcodeScanner} from 'ionic-native';
- *
- *
- * BarcodeScanner.scan().then((barcodeData) => {
- *  // Success! Barcode data is here
- * }, (err) => {
- * 	// An error occurred
- * });
- * ```
- */
-var BarcodeScanner = (function () {
-    function BarcodeScanner() {
-    }
-    /**
-     * Open the barcode scanner.
-     * @return Returns a Promise that resolves with scanner data, or rejects with an error.
-     */
-    BarcodeScanner.scan = function (options) { return; };
-    /**
-     * Encodes data into a barcode.
-     * NOTE: not well supported on Android
-     * @param type
-     * @param data
-     */
-    BarcodeScanner.encode = function (type, data) { return; };
-    BarcodeScanner.Encode = {
-        TEXT_TYPE: 'TEXT_TYPE',
-        EMAIL_TYPE: 'EMAIL_TYPE',
-        PHONE_TYPE: 'PHONE_TYPE',
-        SMS_TYPE: 'SMS_TYPE'
-    };
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse'
-        })
-    ], BarcodeScanner, "scan", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BarcodeScanner, "encode", null);
-    BarcodeScanner = __decorate([
-        plugin_1.Plugin({
-            plugin: 'phonegap-plugin-barcodescanner',
-            pluginRef: 'cordova.plugins.barcodeScanner',
-            repo: 'https://github.com/phonegap/phonegap-plugin-barcodescanner',
-            platforms: ['Android', 'iOS', 'Windows Phone 8', 'Windows 10', 'Windows 8', 'BlackBerry 10', 'Browser']
-        })
-    ], BarcodeScanner);
-    return BarcodeScanner;
-}());
-exports.BarcodeScanner = BarcodeScanner;
-
-},{"./plugin":499}],460:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Base64 To Gallery
- * @description This plugin allows you to save base64 data as a png image into the device
- * @usage
- * ```ts
- * import {Base64ToGallery} from 'ionic-native';
- *
- *
- * Base64ToGallery.base64ToGallery(base64Data, 'img_').then(
- *   res => console.log("Saved image to gallery ", res),
- *   err => console.log("Error saving image to gallery ", err)
- * );
- * ```
- */
-var Base64ToGallery = (function () {
-    function Base64ToGallery() {
-    }
-    /**
-     * Converts a base64 string to an image file in the device gallery
-     * @param data
-     * @param prefix
-     */
-    Base64ToGallery.base64ToGallery = function (data, prefix) {
-        return;
-    };
-    __decorate([
-        plugin_1.Cordova()
-    ], Base64ToGallery, "base64ToGallery", null);
-    Base64ToGallery = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-base64-to-gallery',
-            pluginRef: 'cordova',
-            repo: 'https://github.com/Nexxa/cordova-base64-to-gallery',
-            platforms: ['Android', 'iOS', 'Windows Phone 8']
-        })
-    ], Base64ToGallery);
-    return Base64ToGallery;
-}());
-exports.Base64ToGallery = Base64ToGallery;
-
-},{"./plugin":499}],461:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Battery Status
- * @description
- * Requires Cordova plugin: cordova-plugin-batterystatus. For more info, please see the [BatteryStatus plugin docs](https://github.com/apache/cordova-plugin-battery-status).
- *
- * @usage
- * ```js
- * import {BatteryStatus} from 'ionic-native';
- *
- *
- *
- * // watch change in battery status
- * let subscription = BatteryStatus.onChange().subscribe(
- *  status => {
- *    console.log(status.level, status.isPlugged);
- *  }
- * );
- *
- * // stop watch
- * subscription.unsubscribe();
- *
- * ```
- */
-var BatteryStatus = (function () {
-    function BatteryStatus() {
-    }
-    /**
-     * Watch the change in battery level
-     * @returns {Observable} Returns an observable that pushes a status object
-     */
-    BatteryStatus.onChange = function () { return; };
-    /**
-     * Watch when the battery level goes low
-     * @returns {Observable<StatusObject>} Returns an observable that pushes a status object
-     */
-    BatteryStatus.onLow = function () { return; };
-    /**
-     * Watch when the battery level goes to critial
-     * @returns {Observable<StatusObject>} Returns an observable that pushes a status object
-     */
-    BatteryStatus.onCritical = function () { return; };
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'batterystatus'
-        })
-    ], BatteryStatus, "onChange", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'batterylow'
-        })
-    ], BatteryStatus, "onLow", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'batterycritical'
-        })
-    ], BatteryStatus, "onCritical", null);
-    BatteryStatus = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-battery-status',
-            repo: 'https://github.com/apache/cordova-plugin-battery-status',
-            platforms: ['Amazon Fire OS', 'iOS', 'Android', 'BlackBerry 10', 'Windows Phone 7', 'Windows Phone 8', 'Windows', 'Firefox OS', 'Browser']
-        })
-    ], BatteryStatus);
-    return BatteryStatus;
-}());
-exports.BatteryStatus = BatteryStatus;
-
-},{"./plugin":499}],462:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name BLE
- * @description
- * This plugin enables communication between a phone and Bluetooth Low Energy (BLE) peripherals.
- *
- * The plugin provides a simple JavaScript API for iOS and Android.
- *
- * - Scan for peripherals
- * - Connect to a peripheral
- * - Read the value of a characteristic
- * - Write new value to a characteristic
- * - Get notified when characteristic's value changes
- *
- * Advertising information is returned when scanning for peripherals. Service, characteristic, and property info is returned when connecting to a peripheral. All access is via service and characteristic UUIDs. The plugin manages handles internally.
- *
- * Simultaneous connections to multiple peripherals are supported.
- *
- * @usage
- *
- * ## Peripheral Data
- *
- * Peripheral Data is passed to the success callback when scanning and connecting. Limited data is passed when scanning.
- *
- * ```ts
- *   {
- *       "name": "Battery Demo",
- *       "id": "20:FF:D0:FF:D1:C0",
- *       "advertising": [2,1,6,3,3,15,24,8,9,66,97,116,116,101,114,121],
- *       "rssi": -55
- *   }
- * ```
- * After connecting, the peripheral object also includes service, characteristic and descriptor information.
- *
- * ```ts
- *   {
- *       "name": "Battery Demo",
- *       "id": "20:FF:D0:FF:D1:C0",
- *       "advertising": [2,1,6,3,3,15,24,8,9,66,97,116,116,101,114,121],
- *       "rssi": -55,
- *       "services": [
- *           "1800",
- *           "1801",
- *           "180f"
- *       ],
- *       "characteristics": [
- *           {
- *               "service": "1800",
- *               "characteristic": "2a00",
- *               "properties": [
- *                   "Read"
- *               ]
- *           },
- *           {
- *               "service": "1800",
- *               "characteristic": "2a01",
- *               "properties": [
- *                   "Read"
- *               ]
- *           },
- *           {
- *               "service": "1801",
- *               "characteristic": "2a05",
- *               "properties": [
- *                   "Read"
- *               ]
- *           },
- *           {
- *               "service": "180f",
- *               "characteristic": "2a19",
- *               "properties": [
- *                   "Read"
- *               ],
- *               "descriptors": [
- *                   {
- *                       "uuid": "2901"
- *                   },
- *                   {
- *                       "uuid": "2904"
- *                   }
- *               ]
- *           }
- *       ]
- *   }
- * ```
- *
- * ## Advertising Data
- * Bluetooth advertising data is returned in when scanning for devices. The format format varies depending on your platform. On Android advertising data will be the raw advertising bytes. iOS does not allow access to raw advertising data, so a dictionary of data is returned.
- *
- * The advertising information for both Android and iOS appears to be a combination of advertising data and scan response data.
- *
- * ### Android
- *
- * ```ts
- *   {
- *       "name": "demo",
- *       "id": "00:1A:7D:DA:71:13",
- *       "advertising": ArrayBuffer,
- *      "rssi": -37
- *  }
- * ```
- *
- * Convert the advertising info to a Uint8Array for processing. `var adData = new Uint8Array(peripheral.advertising)`
- *
- * ### iOS
- *
- * Note that iOS uses the string value of the constants for the [Advertisement Data Retrieval Keys](https://developer.apple.com/library/ios/documentation/CoreBluetooth/Reference/CBCentralManagerDelegate_Protocol/index.html#//apple_ref/doc/constant_group/Advertisement_Data_Retrieval_Keys). This will likely change in the future.
- *
- * ```ts
- *   {
- *       "name": "demo",
- *       "id": "D8479A4F-7517-BCD3-91B5-3302B2F81802",
- *       "advertising": {
- *           "kCBAdvDataChannel": 37,
- *           "kCBAdvDataServiceData": {
- *               "FED8": {
- *                   "byteLength": 7 // data not shown
- *               }
- *           },
- *           "kCBAdvDataLocalName": "demo",
- *           "kCBAdvDataServiceUUIDs": ["FED8"],
- *           "kCBAdvDataManufacturerData": {
- *               "byteLength": 7  // data not shown
- *           },
- *           "kCBAdvDataTxPowerLevel": 32,
- *           "kCBAdvDataIsConnectable": true
- *       },
- *       "rssi": -53
- *   }
- * ```
- *
- * ## Typed Arrays
- *
- * This plugin uses typed Arrays or ArrayBuffers for sending and receiving data.
- *
- * This means that you need convert your data to ArrayBuffers before sending and from ArrayBuffers when receiving.
- *
- * ```ts
- *   // ASCII only
- *   function stringToBytes(string) {
- *      var array = new Uint8Array(string.length);
- *      for (var i = 0, l = string.length; i < l; i++) {
- *          array[i] = string.charCodeAt(i);
- *       }
- *       return array.buffer;
- *   }
- *
- *   // ASCII only
- *   function bytesToString(buffer) {
- *       return String.fromCharCode.apply(null, new Uint8Array(buffer));
- *   }
- * ```
- * You can read more about typed arrays in these articles on [MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Typed_arrays) and [HTML5 Rocks](http://www.html5rocks.com/en/tutorials/webgl/typed_arrays/).
- *
- * ## UUIDs
- *
- * UUIDs are always strings and not numbers. Some 16-bit UUIDs, such as '2220' look like integers, but they're not. (The integer 2220 is 0x8AC in hex.) This isn't a problem with 128 bit UUIDs since they look like strings 82b9e6e1-593a-456f-be9b-9215160ebcac. All 16-bit UUIDs should also be passed to methods as strings.
- *
- */
-var BLE = (function () {
-    function BLE() {
-    }
-    /**
-     * Scan and discover BLE peripherals for the specified amount of time.
-     *
-     * @usage
-     * ```
-     * BLE.scan([], 5).subscribe(device => {
-     *   console.log(JSON.stringify(device));
-     * });
-     * ```
-     * @param {string[]} services  List of service UUIDs to discover, or `[]` to find all devices
-     * @param {number} seconds  Number of seconds to run discovery
-     * @return Returns an Observable that notifies of each peripheral that is discovered during the specified time.
-     */
-    BLE.scan = function (services, seconds) { return; };
-    /**
-     * Scan and discover BLE peripherals until `stopScan` is called.
-     *
-     * @usage
-     * ```
-     * BLE.startScan([]).subscribe(device => {
-     *   console.log(JSON.stringify(device));
-     * });
-     *
-     * setTimeout(() => {
-     *   BLE.stopScan();
-     * }, 5000);
-     * ```
-     * @param {string[]} services  List of service UUIDs to discover, or `[]` to find all devices
-     * @return Returns an Observable that notifies of each peripheral discovered.
-     */
-    BLE.startScan = function (services) { return; };
-    /**
-     * Stop a scan started by `startScan`.
-     *
-     * @usage
-     * ```
-     * BLE.startScan([]).subscribe(device => {
-     *   console.log(JSON.stringify(device));
-     * });
-     * setTimeout(() => {
-     *   BLE.stopScan().then(() => { console.log('scan stopped'); });
-     * }, 5000);
-     * ```
-     * @return returns a Promise.
-     */
-    BLE.stopScan = function () { return; };
-    /**
-     * Connect to a peripheral.
-     * @usage
-     * ```
-     *   BLE.connect('12:34:56:78:9A:BC').subscribe(peripheralData => {
-     *     console.log(peripheralData);
-     *   },
-     *   peripheralData => {
-     *     console.log('disconnected');
-     *   });
-     * ```
-     * @param deviceId {string}  UUID or MAC address of the peripheral
-     * @return Returns an Observable that notifies of connect/disconnect.
-     */
-    BLE.connect = function (deviceId) { return; };
-    /**
-     * Disconnect from a peripheral.
-     * @usage
-     * ```
-     *   BLE.disconnect('12:34:56:78:9A:BC').then(() => {
-     *     console.log('Disconnected');
-     *   });
-     * ```
-     * @param deviceId {string}  UUID or MAC address of the peripheral
-     * @return Returns a Promise
-     */
-    BLE.disconnect = function (deviceId) { return; };
-    /**
-     * Read the value of a characteristic.
-     *
-     * @param {string} deviceId  UUID or MAC address of the peripheral
-     * @param {string} serviceUUID  UUID of the BLE service
-     * @param {string} characteristicUUID  UUID of the BLE characteristic
-     * @return Returns a Promise
-     */
-    BLE.read = function (deviceId, serviceUUID, characteristicUUID) { return; };
-    ;
-    /**
-     * Write the value of a characteristic.
-     * @usage
-     * ```
-     * // send 1 byte to switch a light on
-     * var data = new Uint8Array(1);
-     * data[0] = 1;
-     * BLE.write(device_id, "FF10", "FF11", data.buffer);
-     *
-     * // send a 3 byte value with RGB color
-     * var data = new Uint8Array(3);
-     * data[0] = 0xFF;  // red
-     * data[0] = 0x00; // green
-     * data[0] = 0xFF; // blue
-     * BLE.write(device_id, "ccc0", "ccc1", data.buffer);
-     *
-     * // send a 32 bit integer
-     * var data = new Uint32Array(1);
-     * data[0] = counterInput.value;
-     * BLE.write(device_id, SERVICE, CHARACTERISTIC, data.buffer);
-     *
-     * ```
-     * @param {string} deviceId  UUID or MAC address of the peripheral
-     * @param {string} serviceUUID  UUID of the BLE service
-     * @param {string} characteristicUUID  UUID of the BLE characteristic
-     * @param {ArrayBuffer} value  Data to write to the characteristic, as an ArrayBuffer.
-     * @return Returns a Promise
-     */
-    BLE.write = function (deviceId, serviceUUID, characteristicUUID, value) { return; };
-    /**
-     * Write the value of a characteristic without waiting for confirmation from the peripheral.
-     *
-     * @param {string} deviceId  UUID or MAC address of the peripheral
-     * @param {string} serviceUUID  UUID of the BLE service
-     * @param {string} characteristicUUID  UUID of the BLE characteristic
-     * @param {ArrayBuffer} value  Data to write to the characteristic, as an ArrayBuffer.
-     * @return Returns a Promise
-     */
-    BLE.writeWithoutResponse = function (deviceId, serviceUUID, characteristicUUID, value) { return; };
-    /**
-     * Register to be notified when the value of a characteristic changes.
-     *
-     * @usage
-     * ```
-     * BLE.startNotification(device_id, "FF10", "FF11").subscribe(buffer => {
-     *   console.log(String.fromCharCode.apply(null, new Uint8Array(buffer));
-     * });
-     * ```
-     *
-     * @param {string} deviceId  UUID or MAC address of the peripheral
-     * @param {string} serviceUUID  UUID of the BLE service
-     * @param {string} characteristicUUID  UUID of the BLE characteristic
-     * @return Returns an Observable that notifies of characteristic changes.
-     */
-    BLE.startNotification = function (deviceId, serviceUUID, characteristicUUID) { return; };
-    /**
-     * Stop being notified when the value of a characteristic changes.
-     *
-     * @param {string} deviceId  UUID or MAC address of the peripheral
-     * @param {string} serviceUUID  UUID of the BLE service
-     * @param {string} characteristicUUID  UUID of the BLE characteristic
-     * @return Returns a Promise.
-     */
-    BLE.stopNotification = function (deviceId, serviceUUID, characteristicUUID) { return; };
-    /**
-     * Report the connection status.
-     *
-     * @usage
-     * ```
-     * BLE.isConnected('FFCA0B09-CB1D-4DC0-A1EF-31AFD3EDFB53').then(
-     *   () => { console.log('connected'); },
-     *   () => { console.log('not connected'); }
-     * );
-     * ```
-     * @param {string} deviceId  UUID or MAC address of the peripheral
-     * @return Returns a Promise.
-     */
-    BLE.isConnected = function (deviceId) { return; };
-    /**
-     * Report if bluetooth is enabled.
-     *
-     * @usage
-     * ```
-     * BLE.isEnabled().then(
-     *   () => { console.log('enabled'); },
-     *   () => { console.log('not enabled'); }
-     * );
-     * ```
-     * @return Returns a Promise.
-     */
-    BLE.isEnabled = function () { return; };
-    /**
-     * Open System Bluetooth settings (Android only).
-     *
-     * @return Returns a Promise.
-     */
-    BLE.showBluetoothSettings = function () { return; };
-    /**
-     * Enable Bluetooth on the device (Android only).
-     *
-     * @return Returns a Promise.
-     */
-    BLE.enable = function () { return; };
-    __decorate([
-        plugin_1.Cordova({
-            observable: true
-        })
-    ], BLE, "scan", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'stopScan',
-            clearWithArgs: true
-        })
-    ], BLE, "startScan", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BLE, "stopScan", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'disconnect',
-            clearWithArgs: true
-        })
-    ], BLE, "connect", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BLE, "disconnect", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BLE, "read", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BLE, "write", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BLE, "writeWithoutResponse", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'stopNotification',
-            clearWithArgs: true
-        })
-    ], BLE, "startNotification", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BLE, "stopNotification", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BLE, "isConnected", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BLE, "isEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BLE, "showBluetoothSettings", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], BLE, "enable", null);
-    BLE = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-ble-central',
-            pluginRef: 'ble',
-            repo: 'https://github.com/don/cordova-plugin-ble-central',
-            platforms: ['iOS', 'Android']
-        })
-    ], BLE);
-    return BLE;
-}());
-exports.BLE = BLE;
-
-},{"./plugin":499}],463:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Bluetooth Serial
- * @description This plugin enables serial communication over Bluetooth. It was written for communicating between Android or iOS and an Arduino.
- * @usage
- */
-var BluetoothSerial = (function () {
-    function BluetoothSerial() {
-    }
-    /**
-     * Connect to a Bluetooth device
-     * Returns an Observable. Subscribe to connect, unsubscribe to disconnect.
-     * @param macAddress_or_uuid Identifier of the remote device
-     */
-    BluetoothSerial.connect = function (macAddress_or_uuid) { return; };
-    /**
-     * Connect insecurely to a Bluetooth device
-     * Returns an Observable. Subscribe to connect, unsubscribe to disconnect.
-     * @param macAddress Identifier of the remote device
-     */
-    BluetoothSerial.connectInsecure = function (macAddress) { return; };
-    /**
-     * Writes data to the serial port
-     * @param data ArrayBuffer of data
-     * @usage
-     * ```ts
-     * // Write a string
-     * Bluetooth.write("hello world").then(success, failure);
-     *
-     * // Array of int or bytes
-     * Bluetooth.write([186, 220, 222]).then(success, failure);
-     *
-     * // Typed Array
-     * var data = new Uint8Array(4);
-     * data[0] = 0x41;
-     * data[1] = 0x42;
-     * data[2] = 0x43;
-     * data[3] = 0x44;
-     * Bluetooth.write(data).then(success, failure);
-     *
-     * // Array Buffer
-     * Bluetooth.write(data.buffer).then(success, failure);
-     * ```
-     */
-    BluetoothSerial.write = function (data) { return; };
-    /**
-     * Gets the number of bytes of data available
-     */
-    BluetoothSerial.available = function () { return; };
-    /**
-     * Reads data from the buffer
-     */
-    BluetoothSerial.read = function () { return; };
-    /**
-     * Reads data from the buffer until it reaches a delimiter
-     * @param delimiter
-     */
-    BluetoothSerial.readUntil = function (delimiter) { return; };
-    /**
-     * Subscribe to be notified when data is received
-     * @param delimiter
-     */
-    BluetoothSerial.subscribe = function (delimiter) { return; };
-    /**
-     * Subscribe to be notified when data is received
-     */
-    BluetoothSerial.subscribeRawData = function () { return; };
-    /**
-     * Clears data in buffer
-     */
-    BluetoothSerial.clear = function () { return; };
-    /**
-     * Lists bonded devices
-     */
-    BluetoothSerial.list = function () { return; };
-    /**
-     * Reports if bluetooth is enabled
-     */
-    BluetoothSerial.isEnabled = function () { return; };
-    /**
-     * Reports the connection status
-     */
-    BluetoothSerial.isConnected = function () { return; };
-    /**
-     * Reads the RSSI from the connected peripheral
-     */
-    BluetoothSerial.readRSSI = function () { return; };
-    /**
-     * Show the Bluetooth settings on the device
-     */
-    BluetoothSerial.showBluetoothSettings = function () { return; };
-    /**
-     * Enable Bluetooth on the device
-     */
-    BluetoothSerial.enable = function () { return; };
-    /**
-     * Discover unpaired devices
-     * @usage
-     * ```ts
-     * [{
-     *    "class": 276,
-     *    "id": "10:BF:48:CB:00:00",
-     *    "address": "10:BF:48:CB:00:00",
-     *    "name": "Nexus 7"
-     * }, {
-     *    "class": 7936,
-     *    "id": "00:06:66:4D:00:00",
-     *    "address": "00:06:66:4D:00:00",
-     *    "name": "RN42"
-     * }]
-     * ```
-     */
-    BluetoothSerial.discoverUnpaired = function () { return; };
-    /**
-     * Subscribe to be notified on Bluetooth device discovery. Discovery process must be initiated with the `discoverUnpaired` function.
-     */
-    BluetoothSerial.setDeviceDiscoveredListener = function () { return; };
-    /**
-     * Sets the human readable device name that is broadcasted to other devices
-     * @param newName Desired name of device
-     */
-    BluetoothSerial.setName = function (newName) { };
-    /**
-     * Makes the device discoverable by other devices
-     * @param discoverableDuration Desired number of seconds device should be discoverable for
-     */
-    BluetoothSerial.setDiscoverable = function (discoverableDuration) { };
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone'],
-            observable: true,
-            clearFunction: 'disconnect'
-        })
-    ], BluetoothSerial, "connect", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android'],
-            observable: true,
-            clearFunction: 'disconnect'
-        })
-    ], BluetoothSerial, "connectInsecure", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "write", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "available", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "read", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "readUntil", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone'],
-            observable: true,
-            clearFunction: 'unsubscribe'
-        })
-    ], BluetoothSerial, "subscribe", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone'],
-            observable: true,
-            clearFunction: 'unsubscribeRawData'
-        })
-    ], BluetoothSerial, "subscribeRawData", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "clear", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "list", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "isEnabled", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "isConnected", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "readRSSI", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "showBluetoothSettings", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "enable", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone']
-        })
-    ], BluetoothSerial, "discoverUnpaired", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android', 'iOS', 'Windows Phone'],
-            observable: true,
-            clearFunction: 'clearDeviceDiscoveredListener'
-        })
-    ], BluetoothSerial, "setDeviceDiscoveredListener", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android'],
-            sync: true
-        })
-    ], BluetoothSerial, "setName", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['Android'],
-            sync: true
-        })
-    ], BluetoothSerial, "setDiscoverable", null);
-    BluetoothSerial = __decorate([
-        plugin_1.Plugin({
-            repo: 'https://github.com/don/BluetoothSerial',
-            plugin: 'cordova-plugin-bluetooth-serial',
-            pluginRef: 'bluetoothSerial',
-            platforms: ['Android', 'iOS', 'Windows Phone', 'Browser']
-        })
-    ], BluetoothSerial);
-    return BluetoothSerial;
-}());
-exports.BluetoothSerial = BluetoothSerial;
-
-},{"./plugin":499}],464:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Brightness
- * @description
- * The Brightness plugin let you control the display brightness of your device.
- *
- * Requires Cordova plugin: `cordova-plugin-brightness`. For more info, please see the [Brightness plugin docs](https://github.com/mgcrea/cordova-plugin-brightness).
- *
- * @usage
- * ```ts
- * import {Brightness} from 'ionic-native';
- *
- * let brightnessValue: number = 0.8;
- * Brightness.setBrightness(brightnessValue);
- * ```
- *
- */
-var Brightness = (function () {
-    function Brightness() {
-    }
-    /**
-     * Sets the brightness of the display.
-     *
-     * @param {value} Floating number between 0 and 1 in which case 1 means 100% brightness and 0 means 0% brightness.
-     * @returns {Promise} Returns a Promise that resolves if setting brightness was successful.
-     */
-    Brightness.setBrightness = function (value) { return; };
-    /**
-     * Reads the current brightness of the device display.
-     *
-     * @returns {Promise} Returns a Promise that resolves with the
-     * brightness value of the device display (floating number between 0 and 1).
-     */
-    Brightness.getBrightness = function () { return; };
-    /**
-    * Keeps the screen on. Prevents the device from setting the screen to sleep.
-    */
-    Brightness.setKeepScreenOn = function (value) { };
-    __decorate([
-        plugin_1.Cordova()
-    ], Brightness, "setBrightness", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Brightness, "getBrightness", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Brightness, "setKeepScreenOn", null);
-    Brightness = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-brightness',
-            pluginRef: 'plugins.brightness',
-            repo: 'https://github.com/mgcrea/cordova-plugin-brightness',
-            platforms: ['Android', 'iOS']
-        })
-    ], Brightness);
-    return Brightness;
-}());
-exports.Brightness = Brightness;
-
-},{"./plugin":499}],465:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Calendar
- * @description
- * This plugin allows you to add events to the Calendar of the mobile device.
- *
- * Requires Cordova plugin: `cordova-plugin-calendar`. For more info, please see the [Calendar plugin docs](https://github.com/EddyVerbruggen/Calendar-PhoneGap-Plugin).
- *
- * @usage
- *
- */
-var Calendar = (function () {
-    function Calendar() {
-    }
-    /**
-     * This function checks if we have permission to read/write from/to the calendar.
-     * The promise will resolve with `true` when:
-     * - You're running on iOS, or
-     * - You're targetting API level lower than 23, or
-     * - You're using Android < 6, or
-     * - You've already granted permission
-     *
-     * If this returns false, you should call `requestReadWritePermissions` function
-     * @returns {Promise<boolean>}
-     */
-    Calendar.hasReadWritePermission = function () { return; };
-    /**
-     * Check if we have read permission
-     * @returns {Promise<boolean>}
-     */
-    Calendar.hasReadPermission = function () { return; };
-    /**
-     * Check if we have write permission
-     * @returns {Promise<boolean>}
-     */
-    Calendar.hasWritePermission = function () { return; };
-    /**
-     * Request write permission
-     * @returns {Promise<any>}
-     */
-    Calendar.requestWritePermission = function () { return; };
-    /**
-     * Request read permission
-     * @returns {Promise<any>}
-     */
-    Calendar.requestReadPermission = function () { return; };
-    /**
-     * Requests read/write permissions
-     * @returns {Promise<any>}
-     */
-    Calendar.requestReadWritePermission = function () { return; };
-    /**
-     * Create a calendar. (iOS only)
-     *
-     * @usage
-     * ```
-     * import {Calendar} from 'ionic-native';
-     *
-     *
-     *
-     * Calendar.createCalendar('MyCalendar').then(
-     *   (msg) => { console.log(msg); },
-     *   (err) => { console.log(err); }
-     * );
-     * ```
-     *
-     * @param {string | Object} nameOrOptions  either a string name or a options object.
-     * options:
-     *   calendarName: string  the name of the calendar
-     *   calendarColor: string  the hex color of the calendar
-     * @return Returns a Promise
-     */
-    Calendar.createCalendar = function (nameOrOptions) { return; };
-    /**
-     * Delete a calendar. (iOS only)
-     *
-     * @usage
-     * ```
-     * Calendar.deleteCalendar('MyCalendar').then(
-     *   (msg) => { console.log(msg); },
-     *   (err) => { console.log(err); }
-     * );
-     * ```
-     *
-     * @param {string} name  Name of the calendar to delete.
-     * @return Returns a Promise
-     */
-    Calendar.deleteCalendar = function (name) { return; };
-    /**
-     * Returns the default calendar options.
-     *
-     * @return Returns an object with the default calendar options:
-     *   firstReminderMinutes: 60,
-     *   secondReminderMinutes: null,
-     *   recurrence: null, // options are: 'daily', 'weekly', 'monthly', 'yearly'
-     *   recurrenceInterval: 1, // only used when recurrence is set
-     *   recurrenceEndDate: null,
-     *   calendarName: null,
-     *   calendarId: null,
-     *   url: null
-     */
-    Calendar.getCalendarOptions = function () {
-        return {
-            firstReminderMinutes: 60,
-            secondReminderMinutes: null,
-            recurrence: null,
-            recurrenceInterval: 1,
-            recurrenceEndDate: null,
-            calendarName: null,
-            calendarId: null,
-            url: null
-        };
-    };
-    /**
-     * Silently create an event.
-     *
-     * @param {string} [title]  The event title
-     * @param {string} [location]  The event location
-     * @param {string} [notes]  The event notes
-     * @param {Date} [startDate]  The event start date
-     * @param {Date} [endDate]  The event end date
-     * @return Returns a Promise
-     */
-    Calendar.createEvent = function (title, location, notes, startDate, endDate) { return; };
-    /**
-     * Silently create an event with additional options.
-     *
-     * @param {string} [title]  The event title
-     * @param {string} [location]  The event location
-     * @param {string} [notes]  The event notes
-     * @param {Date} [startDate]  The event start date
-     * @param {Date} [endDate]  The event end date
-     * @param {CalendarOptions} [options]  Additional options, see `getCalendarOptions`
-     * @return Returns a Promise
-     */
-    Calendar.createEventWithOptions = function (title, location, notes, startDate, endDate, options) { return; };
-    /**
-     * Interactively create an event.
-     *
-     * @param {string} [title]  The event title
-     * @param {string} [location]  The event location
-     * @param {string} [notes]  The event notes
-     * @param {Date} [startDate]  The event start date
-     * @param {Date} [endDate]  The event end date
-     * @return Returns a Promise
-     */
-    Calendar.createEventInteractively = function (title, location, notes, startDate, endDate) { return; };
-    /**
-     * Interactively create an event with additional options.
-     *
-     * @param {string} [title]  The event title
-     * @param {string} [location]  The event location
-     * @param {string} [notes]  The event notes
-     * @param {Date} [startDate]  The event start date
-     * @param {Date} [endDate]  The event end date
-     * @param {CalendarOptions} [options]  Additional options, see `getCalendarOptions`
-     * @return Returns a Promise
-     */
-    Calendar.createEventInteractivelyWithOptions = function (title, location, notes, startDate, endDate, options) { return; };
-    // deprecated
-    // @Cordova()
-    // static createEventInNamedCalendar(
-    //   title?: string,
-    //   location?: string,
-    //   notes?: string,
-    //   startDate?: Date,
-    //   endDate?: Date,
-    //   calendarName?: string
-    // ) {}
-    /**
-     * Find an event.
-     *
-     * @param {string} [title]  The event title
-     * @param {string} [location]  The event location
-     * @param {string} [notes]  The event notes
-     * @param {Date} [startDate]  The event start date
-     * @param {Date} [endDate]  The event end date
-     * @return Returns a Promise
-     */
-    Calendar.findEvent = function (title, location, notes, startDate, endDate) { return; };
-    /**
-     * Find an event with additional options.
-     *
-     * @param {string} [title]  The event title
-     * @param {string} [location]  The event location
-     * @param {string} [notes]  The event notes
-     * @param {Date} [startDate]  The event start date
-     * @param {Date} [endDate]  The event end date
-     * @param {CalendarOptions} [options]  Additional options, see `getCalendarOptions`
-     * @return Returns a Promise that resolves with the event, or rejects with an error.
-     */
-    Calendar.findEventWithOptions = function (title, location, notes, startDate, endDate, options) { return; };
-    /**
-     * Find a list of events within the specified date range. (Android only)
-     *
-     * @param {Date} [startDate]  The start date
-     * @param {Date} [endDate]  The end date
-     * @return Returns a Promise that resolves with the list of events, or rejects with an error.
-     */
-    Calendar.listEventsInRange = function (startDate, endDate) { return; };
-    /**
-     * Get a list of all calendars.
-     * @return A Promise that resolves with the list of calendars, or rejects with an error.
-     */
-    Calendar.listCalendars = function () { return; };
-    /**
-     * Get a list of all future events in the specified calendar. (iOS only)
-     * @return Returns a Promise that resolves with the list of events, or rejects with an error.
-     */
-    Calendar.findAllEventsInNamedCalendar = function (calendarName) { return; };
-    /**
-     * Modify an event. (iOS only)
-     *
-     * @param {string} [title]  The event title
-     * @param {string} [location]  The event location
-     * @param {string} [notes]  The event notes
-     * @param {Date} [startDate]  The event start date
-     * @param {Date} [endDate]  The event end date
-     * @param {string} [newTitle]  The new event title
-     * @param {string} [newLocation]  The new event location
-     * @param {string} [newNotes]  The new event notes
-     * @param {Date} [newStartDate]  The new event start date
-     * @param {Date} [newEndDate]  The new event end date
-     * @return Returns a Promise
-     */
-    Calendar.modifyEvent = function (title, location, notes, startDate, endDate, newTitle, newLocation, newNotes, newStartDate, newEndDate) { return; };
-    /**
-     * Modify an event with additional options. (iOS only)
-     *
-     * @param {string} [title]  The event title
-     * @param {string} [location]  The event location
-     * @param {string} [notes]  The event notes
-     * @param {Date} [startDate]  The event start date
-     * @param {Date} [endDate]  The event end date
-     * @param {string} [newTitle]  The new event title
-     * @param {string} [newLocation]  The new event location
-     * @param {string} [newNotes]  The new event notes
-     * @param {Date} [newStartDate]  The new event start date
-     * @param {Date} [newEndDate]  The new event end date
-     * @param {CalendarOptions} [options]  Additional options, see `getCalendarOptions`
-     * @return Returns a Promise
-     */
-    Calendar.modifyEventWithOptions = function (title, location, notes, startDate, endDate, newTitle, newLocation, newNotes, newStartDate, newEndDate, options) { return; };
-    /**
-     * Delete an event.
-     *
-     * @param {string} [title]  The event title
-     * @param {string} [location]  The event location
-     * @param {string} [notes]  The event notes
-     * @param {Date} [startDate]  The event start date
-     * @param {Date} [endDate]  The event end date
-     * @return Returns a Promise
-     */
-    Calendar.deleteEvent = function (title, location, notes, startDate, endDate) { return; };
-    /**
-     * Delete an event from the specified Calendar. (iOS only)
-     *
-     * @param {string} [title]  The event title
-     * @param {string} [location]  The event location
-     * @param {string} [notes]  The event notes
-     * @param {Date} [startDate]  The event start date
-     * @param {Date} [endDate]  The event end date
-     * @param {string} calendarName
-     * @return Returns a Promise
-     */
-    Calendar.deleteEventFromNamedCalendar = function (title, location, notes, startDate, endDate, calendarName) { return; };
-    /**
-     * Open the calendar at the specified date.
-     * @return {Date} date
-     */
-    Calendar.openCalendar = function (date) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "hasReadWritePermission", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "hasReadPermission", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "hasWritePermission", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "requestWritePermission", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "requestReadPermission", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "requestReadWritePermission", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "createCalendar", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "deleteCalendar", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], Calendar, "getCalendarOptions", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "createEvent", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "createEventWithOptions", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "createEventInteractively", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "createEventInteractivelyWithOptions", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "findEvent", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "findEventWithOptions", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "listEventsInRange", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "listCalendars", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "findAllEventsInNamedCalendar", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "modifyEvent", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "modifyEventWithOptions", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "deleteEvent", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "deleteEventFromNamedCalendar", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Calendar, "openCalendar", null);
-    Calendar = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-calendar',
-            pluginRef: 'plugins.calendar',
-            repo: 'https://github.com/EddyVerbruggen/Calendar-PhoneGap-Plugin',
-            platforms: ['Android', 'iOS']
-        })
-    ], Calendar);
-    return Calendar;
-}());
-exports.Calendar = Calendar;
-
-},{"./plugin":499}],466:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Camera
- * @description
- * Take a photo or capture video.
- *
- * Requires {@link module:driftyco/ionic-native} and the Cordova plugin: `cordova-plugin-camera`. For more info, please see the [Cordova Camera Plugin Docs](https://github.com/apache/cordova-plugin-camera).
- *
- * @usage
- * ```js
- * import {Camera} from 'ionic-native';
- *
- * Camera.getPicture(options).then((imageData) => {
- *  // imageData is either a base64 encoded string or a file URI
- *  // If it's base64:
- *  let base64Image = "data:image/jpeg;base64," + imageData;
- * }, (err) => {
- * });
- * ```
- */
-var Camera = (function () {
-    function Camera() {
-    }
-    /**
-     * Take a picture or video, or load one from the library.
-     * @param {CameraOptions} options
-     * @return Returns a Promise that resolves with Base64 encoding of the image data, or the image file URI, depending on cameraOptions, otherwise rejects with an error.
-     */
-    Camera.getPicture = function (options) { return; };
-    /**
-     * Remove intermediate image files that are kept in temporary storage after calling camera.getPicture.
-     * Applies only when the value of Camera.sourceType equals Camera.PictureSourceType.CAMERA and the Camera.destinationType equals Camera.DestinationType.FILE_URI.
-     * @return Returns a Promise
-     */
-    Camera.cleanup = function () { };
-    ;
-    /**
-     * @enum {number}
-     */
-    Camera.DestinationType = {
-        /** Return base64 encoded string. DATA_URL can be very memory intensive and cause app crashes or out of memory errors. Use FILE_URI or NATIVE_URI if possible */
-        DATA_URL: 0,
-        /** Return file uri (content://media/external/images/media/2 for Android) */
-        FILE_URI: 1,
-        /** Return native uri (eg. asset-library://... for iOS) */
-        NATIVE_URI: 2
-    };
-    /**
-     * @enum {number}
-     */
-    Camera.EncodingType = {
-        /** Return JPEG encoded image */
-        JPEG: 0,
-        /** Return PNG encoded image */
-        PNG: 1
-    };
-    /**
-     * @enum {number}
-     */
-    Camera.MediaType = {
-        /** Allow selection of still pictures only. DEFAULT. Will return format specified via DestinationType */
-        PICTURE: 0,
-        /** Allow selection of video only, ONLY RETURNS URL */
-        VIDEO: 1,
-        /** Allow selection from all media types */
-        ALLMEDIA: 2
-    };
-    /**
-     * @enum {number}
-     */
-    Camera.PictureSourceType = {
-        /** Choose image from picture library (same as SAVEDPHOTOALBUM for Android) */
-        PHOTOLIBRARY: 0,
-        /** Take picture from camera */
-        CAMERA: 1,
-        /** Choose image from picture library (same as PHOTOLIBRARY for Android) */
-        SAVEDPHOTOALBUM: 2
-    };
-    /**
-     * Matches iOS UIPopoverArrowDirection constants to specify arrow location on popover.
-     * @enum {number}
-     */
-    Camera.PopoverArrowDirection = {
-        ARROW_UP: 1,
-        ARROW_DOWN: 2,
-        ARROW_LEFT: 4,
-        ARROW_RIGHT: 8,
-        ARROW_ANY: 15
-    };
-    /**
-     * @enum {number}
-     */
-    Camera.Direction = {
-        /** Use the back-facing camera */
-        BACK: 0,
-        /** Use the front-facing camera */
-        FRONT: 1
-    };
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse'
-        })
-    ], Camera, "getPicture", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['iOS']
-        })
-    ], Camera, "cleanup", null);
-    Camera = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-camera',
-            pluginRef: 'navigator.camera',
-            repo: 'https://github.com/apache/cordova-plugin-camera',
-            platforms: ['Android', 'BlackBerry', 'Browser', 'Firefox', 'FireOS', 'iOS', 'Windows', 'Windows Phone 8', 'Ubuntu']
-        })
-    ], Camera);
-    return Camera;
-}());
-exports.Camera = Camera;
-
-},{"./plugin":499}],467:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name CardIO
- * @description
- * @usage
- * ```
- * import {CardIO} from 'ionic-native';
- *
- * ...
- *
- * CardIO.canScan()
- *   .then(
- *     (res: boolean) => {
- *       if(res){
- *         let options = {
- *           requireExpiry: true,
- *           requireCCV: false,
- *           requirePostalCode: false
- *         };
- *         CardIO.scan(options);
- *       }
- *     }
- *   );
- * ```
- */
-var CardIO = (function () {
-    function CardIO() {
-    }
-    /**
-     * Check whether card scanning is currently available. (May vary by
-     * device, OS version, network connectivity, etc.)
-     *
-     */
-    CardIO.canScan = function () { return; };
-    /**
-     * Scan a credit card with card.io.
-     * @param options
-     */
-    CardIO.scan = function (options) { return; };
-    /**
-     * Retrieve the version of the card.io library. Useful when contacting support.
-     */
-    CardIO.version = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], CardIO, "canScan", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], CardIO, "scan", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], CardIO, "version", null);
-    CardIO = __decorate([
-        plugin_1.Plugin({
-            plugin: 'https://github.com/card-io/card.io-Cordova-Plugin',
-            pluginRef: 'CardIO',
-            repo: 'https://github.com/card-io/card.io-Cordova-Plugin',
-            platforms: ['iOS', 'Android']
-        })
-    ], CardIO);
-    return CardIO;
-}());
-exports.CardIO = CardIO;
-
-},{"./plugin":499}],468:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Clipboard
- * @description
- * Clipboard management plugin for Cordova that supports iOS, Android, and Windows Phone 8.
- *
- * Requires Cordova plugin: https://github.com/VersoSolutions/CordovaClipboard
- * For more info, please see the [Clipboard plugin docs](https://github.com/VersoSolutions/CordovaClipboard.git).
- *
- * @usage
- * ```js
- * import {Clipboard} from 'ionic-native';
- *
- *
- *
- * Clipboard.copy("Hello world");
- *
- * Clipboard.paste().then(
- *    (resolve : string) => {
-  *     alert(resolve);
-*     },
- *     (reject : string) => {
- *     alert("Error: " + reject);
- *     }
-*     );
- * );
- * ```
- */
-var Clipboard = (function () {
-    function Clipboard() {
-    }
-    /**
-     * Copies the given text
-     * @param text
-     * @returns {Promise<T>}
-     */
-    Clipboard.copy = function (text) { return; };
-    /**
-     * Pastes the text stored in clipboard
-     * @returns {Promise<T>}
-     */
-    Clipboard.paste = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], Clipboard, "copy", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Clipboard, "paste", null);
-    Clipboard = __decorate([
-        plugin_1.Plugin({
-            plugin: 'https://github.com/VersoSolutions/CordovaClipboard.git',
-            pluginRef: 'cordova.plugins.clipboard',
-            repo: 'https://github.com/VersoSolutions/CordovaClipboard',
-            platforms: ['Amazon Fire OS', 'iOS', 'Android', 'BlackBerry 10', 'Windows Phone 7', 'Windows Phone 8', 'Windows', 'Firefox OS', 'Browser']
-        })
-    ], Clipboard);
-    return Clipboard;
-}());
-exports.Clipboard = Clipboard;
-
-},{"./plugin":499}],469:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-var Contact = (function () {
-    function Contact() {
-        this._objectInstance = navigator.contacts.create();
-    }
-    Object.defineProperty(Contact.prototype, "id", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "displayName", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "nickname", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "phoneNumbers", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "emails", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "addresses", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "ims", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "organizations", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "birthday", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "note", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "photos", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "categories", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Contact.prototype, "urls", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Contact.prototype.clone = function () {
-        var newContact = new Contact();
-        for (var prop in this) {
-            if (prop === 'id')
-                return;
-            newContact[prop] = this[prop];
-        }
-        return newContact;
-    };
-    Contact.prototype.remove = function () { return; };
-    Contact.prototype.save = function () { return; };
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "id", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "displayName", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "nickname", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "phoneNumbers", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "emails", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "addresses", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "ims", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "organizations", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "birthday", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "note", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "photos", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "categories", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], Contact.prototype, "urls", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], Contact.prototype, "remove", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], Contact.prototype, "save", null);
-    return Contact;
-}());
-exports.Contact = Contact;
-var ContactName = (function () {
-    function ContactName(formatted, familyName, givenName, middleName, honorificPrefix, honorificSuffix) {
-        this._objectInstance = new window.ContactName(formatted, familyName, givenName, middleName, honorificPrefix, honorificSuffix);
-    }
-    Object.defineProperty(ContactName.prototype, "formatted", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactName.prototype, "familyName", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactName.prototype, "givenName", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactName.prototype, "middleName", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactName.prototype, "honorificPrefix", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactName.prototype, "honorificSuffix", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactName.prototype, "formatted", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactName.prototype, "familyName", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactName.prototype, "givenName", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactName.prototype, "middleName", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactName.prototype, "honorificPrefix", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactName.prototype, "honorificSuffix", null);
-    return ContactName;
-}());
-exports.ContactName = ContactName;
-var ContactField = (function () {
-    function ContactField(type, value, pref) {
-        this._objectInstance = new window.ContactField(type, value, pref);
-    }
-    Object.defineProperty(ContactField.prototype, "type", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactField.prototype, "value", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactField.prototype, "pref", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactField.prototype, "type", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactField.prototype, "value", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactField.prototype, "pref", null);
-    return ContactField;
-}());
-exports.ContactField = ContactField;
-var ContactAddress = (function () {
-    function ContactAddress(pref, type, formatted, streetAddress, locality, region, postalCode, country) {
-        this._objectInstance = new window.ContactAddress(pref, type, formatted, streetAddress, locality, region, postalCode, country);
-    }
-    Object.defineProperty(ContactAddress.prototype, "pref", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactAddress.prototype, "type", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactAddress.prototype, "formatted", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactAddress.prototype, "streetAddress", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactAddress.prototype, "locality", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactAddress.prototype, "region", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactAddress.prototype, "postalCode", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactAddress.prototype, "country", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactAddress.prototype, "pref", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactAddress.prototype, "type", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactAddress.prototype, "formatted", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactAddress.prototype, "streetAddress", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactAddress.prototype, "locality", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactAddress.prototype, "region", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactAddress.prototype, "postalCode", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactAddress.prototype, "country", null);
-    return ContactAddress;
-}());
-exports.ContactAddress = ContactAddress;
-var ContactOrganization = (function () {
-    function ContactOrganization() {
-        this._objectInstance = new window.ContactOrganization();
-    }
-    Object.defineProperty(ContactOrganization.prototype, "pref", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactOrganization.prototype, "type", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactOrganization.prototype, "name", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactOrganization.prototype, "department", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactOrganization.prototype, "title", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactOrganization.prototype, "pref", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactOrganization.prototype, "type", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactOrganization.prototype, "name", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactOrganization.prototype, "department", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactOrganization.prototype, "title", null);
-    return ContactOrganization;
-}());
-exports.ContactOrganization = ContactOrganization;
-var ContactFindOptions = (function () {
-    function ContactFindOptions() {
-        this._objectInstance = new window.ContactFindOptions();
-    }
-    Object.defineProperty(ContactFindOptions.prototype, "filter", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactFindOptions.prototype, "multiple", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactFindOptions.prototype, "desiredFields", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(ContactFindOptions.prototype, "hasPhoneNumber", {
-        get: function () { return; },
-        enumerable: true,
-        configurable: true
-    });
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactFindOptions.prototype, "filter", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactFindOptions.prototype, "multiple", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactFindOptions.prototype, "desiredFields", null);
-    __decorate([
-        plugin_1.InstanceProperty
-    ], ContactFindOptions.prototype, "hasPhoneNumber", null);
-    return ContactFindOptions;
-}());
-exports.ContactFindOptions = ContactFindOptions;
-/**
- * @name Contacts
- * @description
- * Access and manage Contacts on the device.
- *
- * @usage
- *
- * ```js
- * import {Contact} from 'ionic-native';
- *
- *
- *
- * let contact = new Contact();
- * contact.displayName = "Mr. Ionitron";
- * contact.save().then(
- *   () => console.log("Contact saved!", contact),
- *   (error: any) => console.error("Error saving contact.", error)
- * );
- * ```
- *
- *
- */
-var Contacts = (function () {
-    function Contacts() {
-    }
-    Contacts.create = function () {
-        return new Contact();
-    };
-    /**
-     * Search for contacts in the Contacts list.
-     *
-     * Example: Contacts.find(['*'], { filter: 'Max' }) // will search for a displayName of 'Max'
-     *
-     * @param fields {string[]}  Contact fields to be used as a search qualifier.
-     *  A zero-length contactFields parameter is invalid and results in ContactError.INVALID_ARGUMENT_ERROR.
-     *  A contactFields value of "*" searches all contact fields.
-     *
-     * @param options {Object} the options to query with:
-     *   filter: The search string used to find navigator.contacts. (string) (Default: "")
-     *   multiple: Determines if the find operation returns multiple navigator.contacts. (Boolean) (Default: false)
-     *   desiredFields: Contact fields to be returned back. If specified, the resulting Contact object only features values for these fields. (DOMString[]) [Optional]
-     *   hasPhoneNumber(Android only): Filters the search to only return contacts with a phone number informed. (Boolean) (Default: false)
-     *
-     * @return Returns a Promise that resolves with the search results (an array of Contact objects)
-     */
-    Contacts.find = function (fields, options) { return; };
-    /**
-     * Select a single Contact.
-     * @return Returns a Promise that resolves with the selected Contact
-     */
-    Contacts.pickContact = function () { return; };
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 1,
-            errorIndex: 2
-        })
-    ], Contacts, "find", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Contacts, "pickContact", null);
-    Contacts = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-contacts',
-            pluginRef: 'navigator.contacts',
-            repo: 'https://github.com/apache/cordova-plugin-contacts'
-        })
-    ], Contacts);
-    return Contacts;
-}());
-exports.Contacts = Contacts;
-
-},{"./plugin":499}],470:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Date Picker
- * @description
- * The DatePicker plugin allows the user to fetch date or time using native dialogs.
- *
- * Platforms supported: iOS, Android, Windows
- *
- * Requires Cordova plugin: `cordova-plugin-datepicker`. For more info, please see the [DatePicker plugin docs](https://github.com/VitaliiBlagodir/cordova-plugin-datepicker).
- *
- * @usage
- * ```js
- * import {DatePicker} from 'ionic-native';
- *
- *
- *
- * DatePicker.show({
- *   date: new Date(),
- *   mode: 'date'
- * }).then(
- *   date => console.log("Got date: ", date),
- *   err => console.log("Error occurred while getting date:", err)
- * );
- * ```
- *
- */
-var DatePicker = (function () {
-    function DatePicker() {
-    }
-    /**
-     * Shows the date and/or time picker dialog(s)
-     * @param options
-     * @returns {Promise<Date>} Returns a promise that resolves with the picked date and/or time, or rejects with an error.
-     */
-    DatePicker.show = function (options) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], DatePicker, "show", null);
-    DatePicker = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-datepicker',
-            pluginRef: 'datePicker',
-            repo: 'https://github.com/VitaliiBlagodir/cordova-plugin-datepicker'
-        })
-    ], DatePicker);
-    return DatePicker;
-}());
-exports.DatePicker = DatePicker;
-
-},{"./plugin":499}],471:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name DB Meter
- * @description This plugin defines a global DBMeter object, which permits to get the decibel values from the microphone.
- * @usage
- * ```ts
- * import {DBMeter} from 'ionic-native';
- *
- *
- *
- * // Start listening
- * let subscription = DBMeter.start().subscribe(
- *   data => console.log(data)
- * );
- *
- * // Check if we are listening
- * DBMeter.isListening().then(
- *   (isListening : boolean) => console.log(isListening)
- * );
- *
- * // Stop listening
- * subscription.unsubscribe();
- *
- * // Delete DBMeter instance from memory
- * DBMeter.delete().then(
- *   () => console.log("Deleted DB Meter instance"),
- *   error => console.log("Error occurred while deleting DB Meter instance")
- * );
- * ```
- */
-var DBMeter = (function () {
-    function DBMeter() {
-    }
-    /**
-     * Starts listening
-     * @return {Observable<string>} Returns an observable. Subscribe to start listening. Unsubscribe to stop listening.
-     */
-    DBMeter.start = function () { return; };
-    /**
-     * Stops listening
-     * @private
-     */
-    DBMeter.stop = function () { return; };
-    /**
-     * Check if the DB Meter is listening
-     * @return {Promise<boolean>} Returns a promise that resolves with a boolean that tells us whether the DB meter is listening
-     */
-    DBMeter.isListening = function () { return; };
-    /**
-     * Delete the DB Meter instance
-     * @return {Promise<any>} Returns a promise that will resolve if the instance has been deleted, and rejects if errors occur.
-     */
-    DBMeter.delete = function () { return; };
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'stop'
-        })
-    ], DBMeter, "start", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], DBMeter, "stop", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], DBMeter, "isListening", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], DBMeter, "delete", null);
-    DBMeter = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-dbmeter',
-            pluginRef: 'DBMeter',
-            repo: 'https://github.com/akofman/cordova-plugin-dbmeter',
-            platforms: ['iOS', 'Android']
-        })
-    ], DBMeter);
-    return DBMeter;
-}());
-exports.DBMeter = DBMeter;
-
-},{"./plugin":499}],472:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Ionic Deeplinks
- * @description This plugin handles deeplinks on iOS and Android for both custom URL scheme links
- * and Universal App Links.
- *
- * @usage
- * ```ts
- * import {IonicDeeplinks} from 'ionic-native';
- *
- * ```
- */
-var Deeplinks = (function () {
-    function Deeplinks() {
-    }
-    /**
-     * Define a set of paths to match against incoming deeplinks.
-     *
-     * @param {paths} Define a set of paths to match against incoming deeplinks.
-     * paths takes an object of the form { 'path': data }. If a deeplink
-     * matches the path, the resulting path-data pair will be returned in the
-     * promise result which you can then use to navigate in the app as you see fit.
-     * @returns {Promise} Returns a Promise that resolves when a deeplink comes through, and
-     * is rejected if a deeplink comes through that does not match a given path.
-     */
-    Deeplinks.route = function (paths) { return; };
-    /**
-     *
-     * This is a convenience version of `route` that takes a reference to a NavController
-     * from Ionic 2, or a custom class that conforms to this protocol:
-     *
-     * NavController.push = function(View, Params){}
-     *
-     * This handler will automatically navigate when a route matches. If you need finer-grained
-     * control over the behavior of a matching deeplink, use the plain `route` method.
-     *
-     * @param {paths} Define a set of paths to match against incoming deeplinks.
-     * paths takes an object of the form { 'path': data }. If a deeplink
-     * matches the path, the resulting path-data pair will be returned in the
-     * promise result which you can then use to navigate in the app as you see fit.
-     *
-     * @returns {Promise} Returns a Promise that resolves when a deeplink comes through, and
-     * is rejected if a deeplink comes through that does not match a given path.
-     */
-    Deeplinks.routeWithNavController = function (navController, paths) { return; };
-    __decorate([
-        plugin_1.Cordova({
-            observable: true
-        })
-    ], Deeplinks, "route", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true
-        })
-    ], Deeplinks, "routeWithNavController", null);
-    Deeplinks = __decorate([
-        plugin_1.Plugin({
-            plugin: 'ionic-plugin-deeplinks',
-            pluginRef: 'IonicDeeplink',
-            repo: 'https://github.com/driftyco/ionic-plugin-deeplinks',
-            platforms: ['iOS', 'Android']
-        })
-    ], Deeplinks);
-    return Deeplinks;
-}());
-exports.Deeplinks = Deeplinks;
-
-},{"./plugin":499}],473:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Device
- * @description
- * Access information about the underlying device and platform.
- *
- * @usage
- * ```js
- * import {Device} from 'ionic-native';
- *
- *
- *
- * console.log('Device UUID is: ' + Device.device.uuid);
- * ```
- */
-var Device = (function () {
-    function Device() {
-    }
-    Object.defineProperty(Device, "device", {
-        /**
-         * Returns the whole device object.
-         *
-         * @returns {Object} The device object.
-         */
-        get: function () { return window.device; },
-        enumerable: true,
-        configurable: true
-    });
-    __decorate([
-        plugin_1.CordovaProperty
-    ], Device, "device", null);
-    Device = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-device',
-            pluginRef: 'device',
-            repo: 'https://github.com/apache/cordova-plugin-device'
-        })
-    ], Device);
-    return Device;
-}());
-exports.Device = Device;
-
-},{"./plugin":499}],474:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-var DeviceAccounts = (function () {
-    function DeviceAccounts() {
-    }
-    /**
-     *  Gets all accounts registered on the Android Device
-     */
-    DeviceAccounts.get = function () { return; };
-    /**
-     *  Get all accounts registered on Android device for requested type
-     */
-    DeviceAccounts.getByType = function (type) { return; };
-    /**
-     *  Get all emails registered on Android device (accounts with 'com.google' type)
-     */
-    DeviceAccounts.getEmails = function () { return; };
-    /**
-     *  Get the first email registered on Android device
-     */
-    DeviceAccounts.getEmail = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], DeviceAccounts, "get", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], DeviceAccounts, "getByType", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], DeviceAccounts, "getEmails", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], DeviceAccounts, "getEmail", null);
-    DeviceAccounts = __decorate([
-        plugin_1.Plugin({
-            plugin: 'https://github.com/loicknuchel/cordova-device-accounts.git',
-            pluginRef: 'plugins.DeviceAccounts',
-            repo: 'https://github.com/loicknuchel/cordova-device-accounts',
-            platforms: ['Android']
-        })
-    ], DeviceAccounts);
-    return DeviceAccounts;
-}());
-exports.DeviceAccounts = DeviceAccounts;
-
-},{"./plugin":499}],475:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Device Motion
- * @description
- * Requires Cordova plugin: `cordova-plugin-device-motion`. For more info, please see the [Device Motion docs](https://github.com/apache/cordova-plugin-device-motion).
- *
- * @usage
- * ```ts
- * import {DeviceMotion} from 'ionic-native';
- *
- *
- *
- * // Get the device current acceleration
- * DeviceMotion.getCurrentAcceleration().then(
- *   acceleration => console.log(acceleration),
- *   error => console.log(error)
- * );
- *
- * // Watch device acceleration
- * var subscription = DeviceMotion.watchAcceleration().subscribe(acceleration => {
- *   console.log(acceleration);
- * });
- *
- * // Stop watch
- * subscription.unsubscribe();
- *
- * ```
- */
-var DeviceMotion = (function () {
-    function DeviceMotion() {
-    }
-    /**
-     * Get the current acceleration along the x, y, and z axes.
-     *
-     * @returns {Promise<any>} Returns object with x, y, z, and timestamp properties
-     */
-    DeviceMotion.getCurrentAcceleration = function () {
-        return;
-    };
-    /**
-     * Watch the device acceleration. Clear the watch by unsubscribing from the observable.
-     *
-     * ```ts
-     * // Watch device acceleration
-     * var subscription = DeviceMotion.watchPosition().subscribe(acceleration => {
-     *   console.log(acceleration);
-     * });
-     *
-     * // Stop watch
-     * subscription.unsubscribe();
-     * ```
-     * @param options
-     * @returns {Observable<AccelerationData>}
-     */
-    DeviceMotion.watchAcceleration = function (options) {
-        return;
-    };
-    __decorate([
-        plugin_1.Cordova()
-    ], DeviceMotion, "getCurrentAcceleration", null);
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse',
-            observable: true,
-            clearFunction: 'clearWatch'
-        })
-    ], DeviceMotion, "watchAcceleration", null);
-    DeviceMotion = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-device-motion',
-            pluginRef: 'navigator.accelerometer',
-            repo: 'https://github.com/apache/cordova-plugin-device-motion'
-        })
-    ], DeviceMotion);
-    return DeviceMotion;
-}());
-exports.DeviceMotion = DeviceMotion;
-
-},{"./plugin":499}],476:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Device Orientation
- * @description
- * Requires Cordova plugin: `cordova-plugin-device-orientation`. For more info, please see the [Device Orientation docs](https://github.com/apache/cordova-plugin-device-orientation).
- *
- * @usage
- * ```ts
- * import {DeviceOrientation} from 'ionic-native';
- *
- *
- *
- * // Get the device current compass heading
- * DeviceOrientation.getCurrentHeading().then(
- *   data => console.log(data),
- *   error => console.log(error)
- * );
- *
- * // Watch the device compass heading change
- * var subscription = DeviceOrientation.watchHeading().subscribe(
- *   data => console.log(data)
- * );
- *
- * // Stop watching heading change
- * subscription.unsubscribe();
- * ```
- */
-var DeviceOrientation = (function () {
-    function DeviceOrientation() {
-    }
-    /**
-     * Get the current compass heading.
-     * @returns {Promise<CompassHeading>}
-     */
-    DeviceOrientation.getCurrentHeading = function () { return; };
-    /**
-     * Get the device current heading at a regular interval
-     *
-     * Stop the watch by unsubscribing from the observable
-     * @param options
-     * @returns {Observable<CompassHeading>}
-     */
-    DeviceOrientation.watchHeading = function (options) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], DeviceOrientation, "getCurrentHeading", null);
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse',
-            observable: true,
-            clearFunction: 'clearWatch'
-        })
-    ], DeviceOrientation, "watchHeading", null);
-    DeviceOrientation = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-device-orientation',
-            pluginRef: 'navigator.compass',
-            repo: 'https://github.com/apache/cordova-plugin-device-orientation'
-        })
-    ], DeviceOrientation);
-    return DeviceOrientation;
-}());
-exports.DeviceOrientation = DeviceOrientation;
-
-},{"./plugin":499}],477:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-var Diagnostic = (function () {
-    function Diagnostic() {
-    }
-    /**
-     * Checks if app is able to access device location.
-     */
-    Diagnostic.isLocationEnabled = function () { return; };
-    /**
-     * Checks if Wifi is connected/enabled. On iOS this returns true if the device is connected to a network by WiFi. On Android and Windows 10 Mobile this returns true if the WiFi setting is set to enabled.
-     * On Android this requires permission. `<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />`
-     */
-    Diagnostic.isWifiEnabled = function () { return; };
-    /**
-     * Checks if the device has a camera. On Android this returns true if the device has a camera. On iOS this returns true if both the device has a camera AND the application is authorized to use it. On Windows 10 Mobile this returns true if both the device has a rear-facing camera AND the
-     * application is authorized to use it.
-     */
-    Diagnostic.isCameraEnabled = function () { return; };
-    /**
-     * Checks if the device has Bluetooth capabilities and if so that Bluetooth is switched on (same on Android, iOS and Windows 10 Mobile)
-     * On Android this requires permission <uses-permission android:name="android.permission.BLUETOOTH" />
-     */
-    Diagnostic.isBluetoothEnabled = function () { return; };
-    /**
-     * Returns the location authorization status for the application.
-     * Note for Android: this is intended for Android 6 / API 23 and above. Calling on Android 5 / API 22 and below will always return GRANTED status as permissions are already granted at installation time.
-     *
-     * mode - (iOS-only / optional) location authorization mode: "always" or "when_in_use". If not specified, defaults to "when_in_use".
-     */
-    Diagnostic.requestLocationAuthorization = function (mode) { return; };
-    /**
-     * Checks if the application is authorized to use location.
-     * Note for Android: this is intended for Android 6 / API 23 and above. Calling on Android 5 / API 22 and below will always return GRANTED status as permissions are already granted at installation time.
-     */
-    Diagnostic.isLocationAuthorized = function () { return; };
-    /**
-     * Checks if camera hardware is present on device.
-     */
-    Diagnostic.isCameraPresent = function () { return; };
-    /**
-     * Checks if the application is authorized to use the camera.
-     * Note for Android: this is intended for Android 6 / API 23 and above. Calling on Android 5 / API 22 and below will always return TRUE as permissions are already granted at installation time.
-     */
-    Diagnostic.isCameraAuthorized = function () { return; };
-    /**
-     * Checks if location mode is set to return high-accuracy locations from GPS hardware.
-     *   Returns true if Location mode is enabled and is set to either:
-     *   - Device only = GPS hardware only (high accuracy)
-     *   - High accuracy = GPS hardware, network triangulation and Wifi network IDs (high and low accuracy)
-     */
-    Diagnostic.isGpsLocationEnabled = function () { return; };
-    /**
-     * Checks if location mode is set to return low-accuracy locations from network triangulation/WiFi access points.
-     * Returns true if Location mode is enabled and is set to either:
-     *   - Battery saving = network triangulation and Wifi network IDs (low accuracy)
-     *   - High accuracy = GPS hardware, network triangulation and Wifi network IDs (high and low accuracy)
-     */
-    Diagnostic.isNetworkLocationEnabled = function () { return; };
-    /**
-     * Checks if remote (push) notifications are enabled.
-     * On iOS 8+, returns true if app is registered for remote notifications AND "Allow Notifications" switch is ON AND alert style is not set to "None" (i.e. "Banners" or "Alerts").
-     * On iOS <=7, returns true if app is registered for remote notifications AND alert style is not set to "None" (i.e. "Banners" or "Alerts") - same as isRegisteredForRemoteNotifications().
-     */
-    Diagnostic.isRemoteNotificationsEnabled = function () { return; };
-    /**
-     * Indicates if the app is registered for remote (push) notifications on the device.
-     * On iOS 8+, returns true if the app is registered for remote notifications and received its device token, or false if registration has not occurred, has failed, or has been denied by the user. Note that user preferences for notifications in the Settings app will not affect this.
-     * On iOS <=7, returns true if app is registered for remote notifications AND alert style is not set to "None" (i.e. "Banners" or "Alerts") - same as isRemoteNotificationsEnabled().
-     */
-    Diagnostic.isRegisteredForRemoteNotifications = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isLocationEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isWifiEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isCameraEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isBluetoothEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "requestLocationAuthorization", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isLocationAuthorized", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isCameraPresent", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isCameraAuthorized", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isGpsLocationEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isNetworkLocationEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isRemoteNotificationsEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Diagnostic, "isRegisteredForRemoteNotifications", null);
-    Diagnostic = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova.plugins.diagnostic',
-            pluginRef: 'cordova.plugins.diagnostic',
-            repo: 'https://github.com/dpa99c/cordova-diagnostic-plugin'
-        })
-    ], Diagnostic);
-    return Diagnostic;
-}());
-exports.Diagnostic = Diagnostic;
-
-},{"./plugin":499}],478:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Dialogs
- * @description
- * This plugin gives you ability to access and customize the device native dialogs.
- *
- * Requires Cordova plugin: `cordova-plugin-dialogs`. For more info, please see the [Dialogs plugin docs](https://github.com/apache/cordova-plugin-dialogs).
- *
- * @usage
- * ```js
- * import {Dialogs} from 'ionic-native';
- *
- *
- *
- *
- * ```
- */
-var Dialogs = (function () {
-    function Dialogs() {
-    }
-    /**
-     * Shows a custom alert or dialog box.
-     * @param message Dialog message. (String)
-     * @param title Dialog title. (String) (Optional, defaults to Alert)
-     * @param buttonName Button name. (String) (Optional, defaults to OK)
-     * @returns {Promise<any>} Returns a blank promise once the user has dismissed the alert.
-     */
-    Dialogs.alert = function (message, title, buttonName) {
-        if (title === void 0) { title = 'Alert'; }
-        if (buttonName === void 0) { buttonName = 'OK'; }
-        return;
-    };
-    /**
-     * Displays a customizable confirmation dialog box.
-     * @param message Dialog message. (String)
-     * @param title Dialog title. (String) (Optional, defaults to Confirm)
-     * @param buttonLabels Array of strings specifying button labels. (Array) (Optional, defaults to [OK,Cancel])
-     * @returns {Promise<number>} Returns a promise that resolves the button index that was clicked. Note that the index use one-based indexing.
-     */
-    Dialogs.confirm = function (message, title, buttonLabels) {
-        if (title === void 0) { title = 'Confirm'; }
-        if (buttonLabels === void 0) { buttonLabels = ['OK', 'Cancel']; }
-        return;
-    };
-    /**
-     * Displays a native dialog box that is more customizable than the browser's prompt function.
-     * @param message Dialog message. (String)
-     * @param title Dialog title (String) (Optional, defaults to Prompt)
-     * @param buttonLabels  Array of strings specifying button labels (Array) (Optional, defaults to ["OK","Cancel"])
-     * @param defaultText Default textbox input value (String) (Optional, Default: empty string)
-     * @returns {Promise<any>} Returns a promise that resolves an object with the button index clicked and the text entered
-     */
-    Dialogs.prompt = function (message, title, buttonLabels, defaultText) {
-        if (title === void 0) { title = 'Prompt'; }
-        if (buttonLabels === void 0) { buttonLabels = ['OK', 'Cancel']; }
-        if (defaultText === void 0) { defaultText = ''; }
-        return;
-    };
-    /**
-     * The device plays a beep sound.
-     * @param times The number of times to repeat the beep. (Number)
-     */
-    Dialogs.beep = function (times) { };
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 1,
-            errorIndex: 4
-        })
-    ], Dialogs, "alert", null);
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 1,
-            errorIndex: 4
-        })
-    ], Dialogs, "confirm", null);
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 1,
-            errorIndex: 5
-        })
-    ], Dialogs, "prompt", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], Dialogs, "beep", null);
-    Dialogs = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-dialogs',
-            pluginRef: 'navigator.notification',
-            repo: 'https://github.com/apache/cordova-plugin-dialogs.git'
-        })
-    ], Dialogs);
-    return Dialogs;
-}());
-exports.Dialogs = Dialogs;
-
-},{"./plugin":499}],479:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Email Composer
- * @description
- *
- * Requires Cordova plugin: cordova-plugin-email-composer. For more info, please see the [Email Composer plugin docs](https://github.com/katzer/cordova-plugin-email-composer).
- *
- * DISCLAIMER: This plugin is experiencing issues with the latest versions of Cordova. Use at your own risk. Functionality is not guaranteed. Please stay tuned for a more stable version.
- *
- * @usage
- * ```ts
- * import {EmailComposer} from 'ionic-native';
- *
- *
- * EmailComposer.isAvailable().then((available) =>{
- *  if(available) {
- *    //Now we know we can send
- *  }
- * });
- *
- * let email = {
- *   to: 'max@mustermann.de',
- *   cc: 'erika@mustermann.de',
- *   bcc: ['john@doe.com', 'jane@doe.com'],
- *   attachments: [
- *     'file://img/logo.png',
- *     'res://icon.png',
- *     'base64:icon.png//iVBORw0KGgoAAAANSUhEUg...',
- *     'file://README.pdf'
- *   ],
- *   subject: 'Cordova Icons',
- *   body: 'How are you? Nice greetings from Leipzig',
- *   isHtml: true
- * };
- *
- * // Send a text message using default options
- * EmailComposer.open(email);
- *
- * ```
- */
-var EmailComposer = (function () {
-    function EmailComposer() {
-    }
-    /**
-     * Verifies if sending emails is supported on the device.
-     *
-     * @param app {string?} An optional app id or uri scheme.
-     * @returns {Promise<boolean>} Resolves if available, rejects if not available
-     */
-    EmailComposer.isAvailable = function (app) {
-        return new Promise(function (resolve, reject) {
-            if (app)
-                cordova.plugins.email.isAvailable(app, function (isAvailable) { if (isAvailable)
-                    resolve();
-                else
-                    reject(); });
-            else
-                cordova.plugins.email.isAvailable(function (isAvailable) { if (isAvailable)
-                    resolve();
-                else
-                    reject(); });
-        });
-    };
-    /**
-     * Adds a new mail app alias.
-     *
-     * @param alias {string} The alias name
-     * @param packageName {string} The package name
-     */
-    EmailComposer.addAlias = function (alias, packageName) { };
-    /**
-     * Displays the email composer pre-filled with data.
-     *
-     * @param email {Email} Email
-     * @param scope {any?} An optional scope for the promise
-     * @returns {Promise<any>} Resolves promise when the EmailComposer has been opened
-     */
-    EmailComposer.open = function (email, scope) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], EmailComposer, "addAlias", null);
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 1,
-            errorIndex: 3
-        })
-    ], EmailComposer, "open", null);
-    EmailComposer = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-email-composer',
-            pluginRef: 'cordova.plugins.email',
-            repo: 'https://github.com/katzer/cordova-plugin-email-composer.git',
-            platforms: ['Android', 'iOS', 'Windows Phone 8']
-        })
-    ], EmailComposer);
-    return EmailComposer;
-}());
-exports.EmailComposer = EmailComposer;
-
-},{"./plugin":499}],480:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Facebook
- * @description
- * Use the Facebook Connect plugin to obtain access to the native FB application on iOS and Android.
- *
- * Requires Cordova plugin: `cordova-plugin-facebook4`. For more info, please see the [Facebook Connect](https://github.com/jeduan/cordova-plugin-facebook4).
- *
- * #### Installation
- *
- *  To use the FB plugin, you first have to create a new Facebook App inside of the Facebook developer portal at [https://developers.facebook.com/apps](https://developers.facebook.com/apps).
- *
- * [![fb-getstarted-1](/img/docs/native/Facebook/1.png)](https://developers.facebook.com/apps/)
- *
- * Retrieve the `App ID` and `App Name`.
- *
- * [![fb-getstarted-2](/img/docs/native/Facebook/2.png)](https://developers.facebook.com/apps/)
- *
- * Then type in the following command in your Terminal, where APP_ID and APP_NAME are the values from the Facebook Developer portal.
- *
- * ```bash
- *  ionic plugin add cordova-plugin-facebook4 --save --variable APP_ID="123456789" --variable APP_NAME="myApplication"
- * ```
- *
- * After, you'll need to add the native platforms you'll be using to your app in the Facebook Developer portal under your app's Settings:
- *
- * [![fb-getstarted-3](/img/docs/native/Facebook/3.png)](https://developers.facebook.com/apps/)
- *
- * Click `'Add Platform'`.
- *
- * [![fb-getstarted-4](/img/docs/native/Facebook/4.png)](https://developers.facebook.com/apps/)
- *
- * At this point you'll need to open your project's [`config.xml`](https://cordova.apache.org/docs/en/latest/config_ref/index.html) file, found in the root directory of your project.
- *
- * Take note of the `id` for the next step:
- * ```
- * <widget id="com.mycompany.testapp" version="0.0.1" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
- * ```
- *
- * You can also edit the `id` to whatever you'd like it to be.
- *
- * #### iOS Install
- * Under 'Bundle ID', add the `id` from your `config.xml` file:
- *
- * [![fb-getstarted-5](/img/docs/native/Facebook/5.png)](https://developers.facebook.com/apps/)
- *
- *
- * #### Android Install
- * Under 'Google Play Package Name', add the `id` from your `config.xml` file:
- *
- * [![fb-getstarted-6](/img/docs/native/Facebook/6.png)](https://developers.facebook.com/apps/)
- *
- *
- * And that's it! You can now make calls to Facebook using the plugin.
- *
- * ## Events
- *
- * App events allow you to understand the makeup of users engaging with your app, measure the performance of your Facebook mobile app ads, and reach specific sets of your users with Facebook mobile app ads.
- *
- * - [iOS] [https://developers.facebook.com/docs/ios/app-events](https://developers.facebook.com/docs/ios/app-events)
- * - [Android] [https://developers.facebook.com/docs/android/app-events](https://developers.facebook.com/docs/android/app-events)
- * - [JS] Does not have an Events API, so the plugin functions are empty and will return an automatic success
- *
- * Activation events are automatically tracked for you in the plugin.
- *
- * Events are listed on the [insights page](https://www.facebook.com/insights/).
- *
- * For tracking events, see `logEvent` and `logPurchase`.
- *
- * @usage
- * ```js
- * import {Facebook} from 'ionic-native';
- *
- *
- *
- * ```
- *
- */
-var Facebook = (function () {
-    function Facebook() {
-    }
-    /**
-     * Browser wrapper
-     * @param appId
-     * @param version
-     */
-    Facebook.browserInit = function (appId, version) {
-        return;
-    };
-    /**
-     * Login to Facebook to authenticate this app.
-     *
-     * ```ts
-     * {
-     *   status: "connected",
-     *   authResponse: {
-     *     session_key: true,
-     *     accessToken: "kgkh3g42kh4g23kh4g2kh34g2kg4k2h4gkh3g4k2h4gk23h4gk2h34gk234gk2h34AndSoOn",
-     *     expiresIn: 5183979,
-     *     sig: "...",
-     *     secret: "...",
-     *     userID: "634565435"
-     *   }
-     * }
-     * ```
-     *
-     * @param {string[]}  permissions List of [permissions](https://developers.facebook.com/docs/facebook-login/permissions) this app has upon logging in.
-     * @return Returns a Promise that resolves with a status object if login succeeds, and rejects if login fails.
-     */
-    Facebook.login = function (permissions) { return; };
-    /**
-     * Logout of Facebook.
-     *
-     * For more info see the [Facebook docs](https://developers.facebook.com/docs/reference/javascript/FB.logout)
-     * @return Returns a Promise that resolves on a successful logout, and rejects if logout fails.
-     */
-    Facebook.logout = function () { return; };
-    /**
-     * Determine if a user is logged in to Facebook and has authenticated your app.  There are three possible states for a user:
-     *
-     * 1) the user is logged into Facebook and has authenticated your application (connected)
-     * 2) the user is logged into Facebook but has not authenticated your application (not_authorized)
-     * 3) the user is either not logged into Facebook or explicitly logged out of your application so it doesn't attempt to connect to Facebook and thus, we don't know if they've authenticated your application or not (unknown)
-     *
-     * Resolves with a response like:
-     *
-     * ```
-     * {
-     *   authResponse: {
-     *     userID: "12345678912345",
-     *     accessToken: "kgkh3g42kh4g23kh4g2kh34g2kg4k2h4gkh3g4k2h4gk23h4gk2h34gk234gk2h34AndSoOn",
-     *     session_Key: true,
-     *     expiresIn: "5183738",
-     *     sig: "..."
-     *   },
-     *   status: "connected"
-     * }
-     * ```
-     *
-     * For more information see the [Facebook docs](https://developers.facebook.com/docs/reference/javascript/FB.getLoginStatus)
-     *
-     * @return Returns a Promise that resolves with a status, or rejects with an error
-     */
-    Facebook.getLoginStatus = function () { return; };
-    /**
-     * Get a Facebook access token for using Facebook services.
-     *
-     * @return Returns a Promise that resolves with an access token, or rejects with an error
-     */
-    Facebook.getAccessToken = function () { return; };
-    /**
-     * Show one of various Facebook dialogs. Example of options for a Share dialog:
-     *
-     * ```
-     * {
-     *   method: "share",
-     *   href: "http://example.com",
-     *   caption: "Such caption, very feed.",
-     *   description: "Much description",
-     *   picture: 'http://example.com/image.png'
-     * }
-     * ```
-     *
-     * For more options see the [Cordova plugin docs](https://github.com/jeduan/cordova-plugin-facebook4#show-a-dialog) and the [Facebook docs](https://developers.facebook.com/docs/javascript/reference/FB.ui)
-     * @options {Object}  options The dialog options
-     * @return Returns a Promise that resolves with success data, or rejects with an error
-     */
-    Facebook.showDialog = function (options) { return; };
-    /**
-     * Make a call to Facebook Graph API. Can take additional permissions beyond those granted on login.
-     *
-     * For more information see:
-     *
-     *  Calling the Graph API - https://developers.facebook.com/docs/javascript/reference/FB.api
-     *  Graph Explorer - https://developers.facebook.com/tools/explorer
-     *  Graph API - https://developers.facebook.com/docs/graph-api
-     *
-     * @param {string}  requestPath Graph API endpoint you want to call
-     * @param {string[]}  permissions List of [permissions](https://developers.facebook.com/docs/facebook-login/permissions) for this request.
-     * @return Returns a Promise that resolves with the result of the request, or rejects with an error
-     */
-    Facebook.api = function (requestPath, permissions) { return; };
-    /**
-     * Log an event.  For more information see the Events section above.
-     *
-     * @param {string}  name Name of the event
-     * @param {Object}  [params] An object containing extra data to log with the event
-     * @param {number}  [valueToSum] any value to be added to added to a sum on each event
-     * @return
-     */
-    Facebook.logEvent = function (name, params, valueToSum) { return; };
-    /**
-     * Log a purchase. For more information see the Events section above.
-     *
-     * @param {number}  value Value of the purchase.
-     * @param {string}  currency The currency, as an [ISO 4217 currency code](http://en.wikipedia.org/wiki/ISO_4217)
-     * @return Returns a Promise
-     */
-    Facebook.logPurchase = function (value, currency) { return; };
-    /**
-     * Open App Invite dialog. Does not require login.
-     *
-     * For more information see:
-     *
-     *   the App Invites Overview - https://developers.facebook.com/docs/app-invites/overview
-     *   the App Links docs - https://developers.facebook.com/docs/applinks
-     *
-     *
-     * @param {Object}  options An object containing an [App Link](https://developers.facebook.com/docs/applinks) URL to your app and an optional image URL.
-     *   url: [App Link](https://developers.facebook.com/docs/applinks) to your app
-     *   picture: image to be displayed in the App Invite dialog
-     *
-     * @return Returns a Promise that resolves with the result data, or rejects with an error
-     */
-    Facebook.appInvite = function (options) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], Facebook, "browserInit", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Facebook, "login", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Facebook, "logout", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Facebook, "getLoginStatus", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Facebook, "getAccessToken", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Facebook, "showDialog", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Facebook, "api", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Facebook, "logEvent", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Facebook, "logPurchase", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Facebook, "appInvite", null);
-    Facebook = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-facebook4',
-            pluginRef: 'facebookConnectPlugin',
-            repo: 'https://github.com/jeduan/cordova-plugin-facebook4',
-            install: 'cordova plugin add cordova-plugin-facebook4 --variable APP_ID="123456789" --variable APP_NAME="myApplication"'
-        })
-    ], Facebook);
-    return Facebook;
-}());
-exports.Facebook = Facebook;
-
-},{"./plugin":499}],481:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name File
- * @description
- * This plugin implements a File API allowing read/write access to files residing on the device.
- *
- *  This plugin is based on several specs, including : The HTML5 File API http://www.w3.org/TR/FileAPI/
- *  The (now-defunct) Directories and System extensions Latest: http://www.w3.org/TR/2012/WD-file-system-api-20120417/
- *  Although most of the plugin code was written when an earlier spec was current: http://www.w3.org/TR/2011/WD-file-system-api-20110419/
- *  It also implements the FileWriter spec : http://dev.w3.org/2009/dap/file-system/file-writer.html
- */
-var File = (function () {
-    function File() {
-    }
-    // @Cordova()
-    // static getFreeDiskSpace(): Promise<any> { return }
-    /**
-     * Check if a directory exists in a certain path, directory.
-     *
-     * @param {string} path Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} dir Name of directory to check
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.checkDir = function (path, dir) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        if ((/^\//.test(dir))) {
-            rejectFn('directory cannot start with \/');
-        }
-        if (!(/\/$/.test(dir))) {
-            path += '/';
-        }
-        try {
-            var directory = path + dir;
-            window.resolveLocalFileSystemURL(directory, function (fileSystem) {
-                if (fileSystem.isDirectory === true) {
-                    resolveFn(fileSystem);
-                }
-                else {
-                    rejectFn({ code: 13, message: 'input is not a directory' });
-                }
-            }, function (error) {
-                error.message = File.cordovaFileError[error.code];
-                rejectFn(error);
-            });
-        }
-        catch (err) {
-            err.message = File.cordovaFileError[err.code];
-            rejectFn(err);
-        }
-        return promise;
-    };
-    /**
-     * Creates a new directory in the specific path.
-     * The replace boolean value determines whether to replace an existing directory with the same name.
-     * If an existing directory exists and the replace value is false, the promise will fail and return an error.
-     *
-     * @param {string} path  Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} dirName Name of directory to create
-     * @param {boolean} replace If true, replaces file with same name. If false returns error
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.createDir = function (path, dirName, replace) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        if ((/^\//.test(dirName))) {
-            rejectFn('directory cannot start with \/');
-        }
-        replace = !replace;
-        var options = {
-            create: true,
-            exclusive: replace
-        };
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getDirectory(dirName, options, function (result) {
-                    resolveFn(result);
-                }, function (error) {
-                    error.message = File.cordovaFileError[error.code];
-                    rejectFn(error);
-                });
-            }, function (err) {
-                err.message = File.cordovaFileError[err.code];
-                rejectFn(err);
-            });
-        }
-        catch (e) {
-            e.message = File.cordovaFileError[e.code];
-            rejectFn(e);
-        }
-        return promise;
-    };
-    /**
-     * Remove a directory at a given path.
-     *
-     * @param {string} path The path to the directory
-     * @param {string} dirName The directory name
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.removeDir = function (path, dirName) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        if ((/^\//.test(dirName))) {
-            rejectFn('directory cannot start with \/');
-        }
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getDirectory(dirName, { create: false }, function (dirEntry) {
-                    dirEntry.remove(function () {
-                        resolveFn({ success: true, fileRemoved: dirEntry });
-                    }, function (error) {
-                        error.message = File.cordovaFileError[error.code];
-                        rejectFn(error);
-                    });
-                }, function (err) {
-                    err.message = File.cordovaFileError[err.code];
-                    rejectFn(err);
-                });
-            }, function (er) {
-                er.message = File.cordovaFileError[er.code];
-                rejectFn(er);
-            });
-        }
-        catch (e) {
-            e.message = File.cordovaFileError[e.code];
-            rejectFn(e);
-        }
-        return promise;
-    };
-    /**
-     * Move a directory to a given path.
-     *
-     * @param {string} path The source path to the directory
-     * @param {string} dirName The source directory name
-     * @param {string} newPath The destionation path to the directory
-     * @param {string} newDirName The destination directory name
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.moveDir = function (path, dirName, newPath, newDirName) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        newDirName = newDirName || dirName;
-        if ((/^\//.test(newDirName))) {
-            rejectFn('directory cannot start with \/');
-        }
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getDirectory(dirName, { create: false }, function (dirEntry) {
-                    window.resolveLocalFileSystemURL(newPath, function (newDirEntry) {
-                        dirEntry.moveTo(newDirEntry, newDirName, function (result) {
-                            resolveFn(result);
-                        }, function (error) {
-                            rejectFn(error);
-                        });
-                    }, function (erro) {
-                        rejectFn(erro);
-                    });
-                }, function (err) {
-                    rejectFn(err);
-                });
-            }, function (er) {
-                rejectFn(er);
-            });
-        }
-        catch (e) {
-            rejectFn(e);
-        }
-        return promise;
-    };
-    /**
-     * Copy a directory in various methods. If destination directory exists, will fail to copy.
-     *
-     * @param {string} path Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} dirName Name of directory to copy
-     * @param {string} newPath Base FileSystem of new location
-     * @param {string} newDirName New name of directory to copy to (leave blank to remain the same)
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.copyDir = function (path, dirName, newPath, newDirName) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        newDirName = newDirName || dirName;
-        if ((/^\//.test(newDirName))) {
-            rejectFn('directory cannot start with \/');
-        }
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getDirectory(dirName, { create: false, exclusive: false }, function (dirEntry) {
-                    window.resolveLocalFileSystemURL(newPath, function (newDirEntry) {
-                        dirEntry.copyTo(newDirEntry, newDirName, function (result) {
-                            resolveFn(result);
-                        }, function (error) {
-                            error.message = File.cordovaFileError[error.code];
-                            rejectFn(error);
-                        });
-                    }, function (erro) {
-                        erro.message = File.cordovaFileError[erro.code];
-                        rejectFn(erro);
-                    });
-                }, function (err) {
-                    err.message = File.cordovaFileError[err.code];
-                    rejectFn(err);
-                });
-            }, function (er) {
-                er.message = File.cordovaFileError[er.code];
-                rejectFn(er);
-            });
-        }
-        catch (e) {
-            e.message = File.cordovaFileError[e.code];
-            rejectFn(e);
-        }
-        return promise;
-    };
-    /**
-     * List files and directory from a given path.
-     *
-     * @param {string} path Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} dirName Name of directory
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.listDir = function (path, dirName) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        if ((/^\//.test(dirName))) {
-            rejectFn('directory cannot start with \/');
-        }
-        var options = {
-            create: false,
-            exclusive: false
-        };
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getDirectory(dirName, options, function (parent) {
-                    var reader = parent.createReader();
-                    reader.readEntries(function (entries) {
-                        resolveFn(entries);
-                    }, function () {
-                        rejectFn('DIR_READ_ERROR : ' + path + dirName);
-                    });
-                }, function (error) {
-                    error.message = File.cordovaFileError[error.code];
-                    rejectFn(error);
-                });
-            }, function (err) {
-                err.message = File.cordovaFileError[err.code];
-                rejectFn(err);
-            });
-        }
-        catch (e) {
-            e.message = File.cordovaFileError[e.code];
-            rejectFn(e);
-        }
-        return promise;
-    };
-    /**
-     * Removes all files and the directory from a desired location.
-     *
-     * @param {string} path Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} dirName Name of directory
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.removeRecursively = function (path, dirName) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        if ((/^\//.test(dirName))) {
-            rejectFn('directory cannot start with \/');
-        }
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getDirectory(dirName, { create: false }, function (dirEntry) {
-                    dirEntry.removeRecursively(function () {
-                        resolveFn({ success: true, fileRemoved: dirEntry });
-                    }, function (error) {
-                        error.message = File.cordovaFileError[error.code];
-                        rejectFn(error);
-                    });
-                }, function (err) {
-                    err.message = File.cordovaFileError[err.code];
-                    rejectFn(err);
-                });
-            }, function (er) {
-                er.message = File.cordovaFileError[er.code];
-                rejectFn(er);
-            });
-        }
-        catch (e) {
-            e.message = File.cordovaFileError[e.code];
-            rejectFn(e);
-        }
-        return promise;
-    };
-    /**
-     * Check if a file exists in a certain path, directory.
-     *
-     * @param {string} path Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} file Name of file to check
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.checkFile = function (path, file) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        if ((/^\//.test(file))) {
-            rejectFn('file cannot start with \/');
-        }
-        if (!(/\/$/.test(file))) {
-            path += '/';
-        }
-        try {
-            var directory = path + file;
-            window.resolveLocalFileSystemURL(directory, function (fileSystem) {
-                if (fileSystem.isFile === true) {
-                    resolveFn(fileSystem);
-                }
-                else {
-                    rejectFn({ code: 13, message: 'input is not a file' });
-                }
-            }, function (error) {
-                error.message = File.cordovaFileError[error.code];
-                rejectFn(error);
-            });
-        }
-        catch (err) {
-            err.message = File.cordovaFileError[err.code];
-            rejectFn(err);
-        }
-        return promise;
-    };
-    /**
-     * Creates a new file in the specific path.
-     * The replace boolean value determines whether to replace an existing file with the same name.
-     * If an existing file exists and the replace value is false, the promise will fail and return an error.
-     *
-     * @param {string} path  Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} fileName Name of file to create
-     * @param {boolean} replace If true, replaces file with same name. If false returns error
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.createFile = function (path, fileName, replace) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        if ((/^\//.test(fileName))) {
-            rejectFn('file-name cannot start with \/');
-        }
-        replace = !replace;
-        var options = {
-            create: true,
-            exclusive: replace
-        };
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getFile(fileName, options, function (result) {
-                    resolveFn(result);
-                }, function (error) {
-                    error.message = File.cordovaFileError[error.code];
-                    rejectFn(error);
-                });
-            }, function (err) {
-                err.message = File.cordovaFileError[err.code];
-                rejectFn(err);
-            });
-        }
-        catch (e) {
-            e.message = File.cordovaFileError[e.code];
-            rejectFn(e);
-        }
-        return promise;
-    };
-    /**
-     * Removes a file from a desired location.
-     *
-     * @param {string} path  Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} fileName Name of file to remove
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.removeFile = function (path, fileName) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        if ((/^\//.test(fileName))) {
-            rejectFn('file-name cannot start with \/');
-        }
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getFile(fileName, { create: false }, function (fileEntry) {
-                    fileEntry.remove(function () {
-                        resolveFn({ success: true, fileRemoved: fileEntry });
-                    }, function (error) {
-                        error.message = File.cordovaFileError[error.code];
-                        rejectFn(error);
-                    });
-                }, function (err) {
-                    err.message = File.cordovaFileError[err.code];
-                    rejectFn(err);
-                });
-            }, function (er) {
-                er.message = File.cordovaFileError[er.code];
-                rejectFn(er);
-            });
-        }
-        catch (e) {
-            e.message = File.cordovaFileError[e.code];
-            rejectFn(e);
-        }
-        return promise;
-    };
-    // static writeFile(path: string, fileName: string, text: string, replace: boolean): Promise<any> { return }
-    // static writeExistingFile(path: string, fileName: string, text: string): Promise<any> { return }
-    /**
-     * Read a file as string.
-     *
-     * @param {string} path Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} fileName Name of file to move
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.readAsText = function (path, fileName) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        if ((/^\//.test(fileName))) {
-            rejectFn('file-name cannot start with \/');
-        }
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getFile(fileName, { create: false }, function (fileEntry) {
-                    fileEntry.file(function (file) {
-                        var reader = new FileReader();
-                        reader.onloadend = function (e) {
-                            if (this.result !== undefined && this.result !== null) {
-                                resolveFn(this.result);
-                            }
-                            else if (this.error !== undefined && this.error !== null) {
-                                rejectFn(this.error);
-                            }
-                            else {
-                                rejectFn({ code: null, message: 'READER_ONLOADEND_ERR' });
-                            }
-                        };
-                        reader.readAsText(file);
-                    }, function (error) {
-                        error.message = File.cordovaFileError[error.code];
-                        rejectFn(error);
-                    });
-                }, function (err) {
-                    err.message = File.cordovaFileError[err.code];
-                    rejectFn(err);
-                });
-            }, function (er) {
-                er.message = File.cordovaFileError[er.code];
-                rejectFn(er);
-            });
-        }
-        catch (e) {
-            e.message = File.cordovaFileError[e.code];
-            rejectFn(e);
-        }
-        return promise;
-    };
-    // static readAsDataURL(path: string, file: string): Promise<any> { return }
-    // static readAsBinaryString(path: string, file: string): Promise<any> { return }
-    // static readAsArrayBuffer(path: string, file: string): Promise<any> { return }
-    /**
-     * Move a file to a given path.
-     *
-     * @param {string} path Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} fileName Name of file to move
-     * @param {string} newPath Base FileSystem of new location
-     * @param {string} newFileName New name of file to move to (leave blank to remain the same)
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.moveFile = function (path, fileName, newPath, newFileName) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        newFileName = newFileName || fileName;
-        if ((/^\//.test(newFileName))) {
-            rejectFn('file-name cannot start with \/');
-        }
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getFile(fileName, { create: false }, function (fileEntry) {
-                    window.resolveLocalFileSystemURL(newPath, function (newFileEntry) {
-                        fileEntry.moveTo(newFileEntry, newFileName, function (result) {
-                            resolveFn(result);
-                        }, function (error) {
-                            rejectFn(error);
-                        });
-                    }, function (err) {
-                        rejectFn(err);
-                    });
-                }, function (err) {
-                    rejectFn(err);
-                });
-            }, function (er) {
-                rejectFn(er);
-            });
-        }
-        catch (e) {
-            rejectFn(e);
-        }
-        return promise;
-    };
-    /**
-     * Copy a file in various methods. If file exists, will fail to copy.
-     *
-     * @param {string} path Base FileSystem. Please refer to the iOS and Android filesystems above
-     * @param {string} fileName Name of file to copy
-     * @param {string} newPath Base FileSystem of new location
-     * @param {string} newFileName New name of file to copy to (leave blank to remain the same)
-     * @return Returns a Promise that resolves or rejects with an error.
-     */
-    File.copyFile = function (path, fileName, newPath, newFileName) {
-        var resolveFn, rejectFn;
-        var promise = new Promise(function (resolve, reject) { resolveFn = resolve; rejectFn = reject; });
-        newFileName = newFileName || fileName;
-        if ((/^\//.test(newFileName))) {
-            rejectFn('file-name cannot start with \/');
-        }
-        try {
-            window.resolveLocalFileSystemURL(path, function (fileSystem) {
-                fileSystem.getFile(fileName, { create: false, exclusive: false }, function (fileEntry) {
-                    window.resolveLocalFileSystemURL(newPath, function (newFileEntry) {
-                        fileEntry.copyTo(newFileEntry, newFileName, function (result) {
-                            resolveFn(result);
-                        }, function (error) {
-                            error.message = File.cordovaFileError[error.code];
-                            rejectFn(error);
-                        });
-                    }, function (erro) {
-                        erro.message = File.cordovaFileError[erro.code];
-                        rejectFn(erro);
-                    });
-                }, function (err) {
-                    err.message = File.cordovaFileError[err.code];
-                    rejectFn(err);
-                });
-            }, function (er) {
-                er.message = File.cordovaFileError[er.code];
-                rejectFn(er);
-            });
-        }
-        catch (e) {
-            e.message = File.cordovaFileError[e.code];
-            rejectFn(e);
-        }
-        return promise;
-    };
-    File.cordovaFileError = {
-        1: 'NOT_FOUND_ERR',
-        2: 'SECURITY_ERR',
-        3: 'ABORT_ERR',
-        4: 'NOT_READABLE_ERR',
-        5: 'ENCODING_ERR',
-        6: 'NO_MODIFICATION_ALLOWED_ERR',
-        7: 'INVALID_STATE_ERR',
-        8: 'SYNTAX_ERR',
-        9: 'INVALID_MODIFICATION_ERR',
-        10: 'QUOTA_EXCEEDED_ERR',
-        11: 'TYPE_MISMATCH_ERR',
-        12: 'PATH_EXISTS_ERR'
-    };
-    File = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-file',
-            pluginRef: 'cordova.file',
-            repo: 'https://github.com/apache/cordova-plugin-file'
-        })
-    ], File);
-    return File;
-}());
-exports.File = File;
-
-},{"./plugin":499}],482:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Transfer
- * @description This plugin allows you to upload and download files.
- * Example:
- * Create instance:
- * const fileTransfer = new Transfer();
- *
- * Upload a file:
- * fileTransfer.upload(..).then(..).catch(..);
- *
- * Download a file:
- * fileTransfer.download(..).then(..).catch(..);
- *
- * Abort active transfer:
- * fileTransfer.abort();
- */
-var Transfer = (function () {
-    function Transfer() {
-        this._objectInstance = new FileTransfer();
-    }
-    /**
-     * Sends a file to a server.
-     *
-     * @param {string} fileUrl  Filesystem URL representing the file on the device or a data URI. For backwards compatibility, this can also be the full path of the file on the device.
-     * @param {string} url  URL of the server to receive the file, as encoded by encodeURI().
-     * @param {FileUploadOptions} options  Optional parameters.
-     * @param {boolean} trustAllHosts: Optional parameter, defaults to false. If set to true, it accepts all security certificates. This is useful since Android rejects self-signed security certificates. Not recommended for production use. Supported on Android and iOS.
-     * @return Returns a Promise that resolves to a FileUploadResult and rejects with FileTransferError.
-     */
-    Transfer.prototype.upload = function (fileUrl, url, options, trustAllHosts) {
-        return;
-    };
-    /**
-     * Downloads a file from server.
-     *
-     * @param {string} source  URL of the server to download the file, as encoded by encodeURI().
-     * @param {stirng} target  Filesystem url representing the file on the device. For backwards compatibility, this can also be the full path of the file on the device.
-     * @param {boolean} trustAllHosts  Optional parameter, defaults to false. If set to true, it accepts all security certificates. This is useful because Android rejects self-signed security certificates. Not recommended for production use. Supported on Android and iOS.
-     * @param {object} Optional parameters, currently only supports headers (such as Authorization (Basic Authentication), etc).
-     * @return Returns a Promise that resolves to a FileEntry object.
-     */
-    Transfer.prototype.download = function (source, target, trustAllHosts, options) {
-        return;
-    };
-    /**
-     * Registers a listener that gets called whenever a new chunk of data is transferred.
-     * @param {function} Listener that takes a progress event.
-     */
-    Transfer.prototype.onProgress = function (listener) {
-        this._objectInstance.onprogress = listener;
-    };
-    /**
-     * Aborts an in-progress transfer. The onerror callback is passed a FileTransferError
-     * object which has an error code of FileTransferError.ABORT_ERR.
-     */
-    Transfer.prototype.abort = function () { };
-    Transfer.FILE_NOT_FOUND_ERR = 1;
-    Transfer.INVALID_URL_ERR = 2;
-    Transfer.CONNECTION_ERR = 3;
-    Transfer.ABORT_ERR = 4;
-    Transfer.NOT_MODIFIED_ERR = 4;
-    __decorate([
-        plugin_1.CordovaInstance({
-            successIndex: 2,
-            errorIndex: 3
-        })
-    ], Transfer.prototype, "upload", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            successIndex: 2,
-            errorIndex: 3
-        })
-    ], Transfer.prototype, "download", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], Transfer.prototype, "abort", null);
-    Transfer = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-file-transfer',
-            pluginRef: 'FileTransfer',
-            repo: 'https://github.com/apache/cordova-plugin-file-transfer'
-        })
-    ], Transfer);
-    return Transfer;
-}());
-exports.Transfer = Transfer;
-
-},{"./plugin":499}],483:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Flashlight
- * @description This plugin allows you to switch the flashlight / torch of the device on and off.
- *
- * Requires Cordova plugin: `cordova-plugin-flashlight`. For more info, please see the [Flashlight plugin docs](https://github.com/EddyVerbruggen/Flashlight-PhoneGap-Plugin).
- *
- * @usage
- * ```js
- * import {Flashlight} from 'ionic-native';
- *
- *
- *
- * ```
- */
-var Flashlight = (function () {
-    function Flashlight() {
-    }
-    /**
-     * Checks if the flashlight is available
-     * @returns {Promise<boolean>} Returns a promise that resolves with a boolean stating if the flashlight is available.
-     */
-    Flashlight.available = function () { return; };
-    /**
-     * Switches the flashlight on
-     * @returns {Promise<boolean>}
-     */
-    Flashlight.switchOn = function () { return; };
-    /**
-     * Switches the flashlight off
-     * @returns {Promise<boolean>}
-     */
-    Flashlight.switchOff = function () { return; };
-    /**
-     * Toggles the flashlight
-     * @returns {Promise<any>}
-     */
-    Flashlight.toggle = function () { return; };
-    /**
-     * Checks if the flashlight is turned on.
-     * Returns a boolean
-     */
-    Flashlight.isSwitchedOn = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], Flashlight, "available", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Flashlight, "switchOn", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Flashlight, "switchOff", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Flashlight, "toggle", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], Flashlight, "isSwitchedOn", null);
-    Flashlight = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-flashlight',
-            pluginRef: 'window.plugins.flashlight',
-            repo: 'https://github.com/EddyVerbruggen/Flashlight-PhoneGap-Plugin.git'
-        })
-    ], Flashlight);
-    return Flashlight;
-}());
-exports.Flashlight = Flashlight;
-
-},{"./plugin":499}],484:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-var Observable_1 = require('rxjs/Observable');
-/**
- * @name Geolocation
- * @description
- * This plugin provides information about the device's location, such as latitude and longitude. Common sources of location information include Global Positioning System (GPS) and location inferred from network signals such as IP address, RFID, WiFi and Bluetooth MAC addresses, and GSM/CDMA cell IDs.
- *
- *  This API is based on the W3C Geolocation API Specification, and only executes on devices that don't already provide an implementation.
- *
- * @usage
- *
- * ```ts
- * import {Geolocation} from 'ionic-native';
- *
- *
- *
- * Geolocation.getCurrentPosition().then((resp) => {
- *  //resp.coords.latitude
- *  //resp.coords.longitude
- * })
- *
- * let watch = Geolocation.watchPosition();
- * watch.subscribe((data) => {
- *  //data.coords.latitude
- *  //data.coords.longitude
- * })
- * ```
- */
-var Geolocation = (function () {
-    function Geolocation() {
-    }
-    /**
-     * Get the device's current position.
-     *
-     * @param {GeolocationOptions} options  The [geolocation options](https://developer.mozilla.org/en-US/docs/Web/API/PositionOptions).
-     * @return Returns a Promise that resolves with the [position](https://developer.mozilla.org/en-US/docs/Web/API/Position) of the device, or rejects with an error.
-     */
-    Geolocation.getCurrentPosition = function (options) { return; };
-    /**
-     * Watch the current device's position.  Clear the watch by unsubscribing from
-     * Observable changes.
-     *
-     * ```ts
-     * var subscription = Geolocation.watchPosition().subscribe(position => {
-     *   console.log(position.coords.longitude + ' ' + position.coords.latitude);
-     * });
-     *
-     * // To stop notifications
-     * subscription.unsubscribe();
-     * ```
-     *
-     * @param {GeolocationOptions} options  The [geolocation options](https://developer.mozilla.org/en-US/docs/Web/API/PositionOptions).
-     * @return Returns an Observable that notifies with the [position](https://developer.mozilla.org/en-US/docs/Web/API/Position) of the device, or errors.
-     */
-    Geolocation.watchPosition = function (options) {
-        return new Observable_1.Observable(function (observer) {
-            var cb = function (data) { return observer.next(data); };
-            var watchId = navigator.geolocation.watchPosition(cb, options);
-            return function () { return navigator.geolocation.clearWatch(watchId); };
-        });
-    };
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse'
-        })
-    ], Geolocation, "getCurrentPosition", null);
-    Geolocation = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-geolocation',
-            pluginRef: 'navigator.geolocation',
-            repo: 'https://github.com/apache/cordova-plugin-geolocation'
-        })
-    ], Geolocation);
-    return Geolocation;
-}());
-exports.Geolocation = Geolocation;
-
-},{"./plugin":499,"rxjs/Observable":519}],485:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Globalization
- * @description
- * @usage
- * ```js
- * import {Globalization} from 'ionic-native';
- *
- *
- *
- * ```
- */
-var Globalization = (function () {
-    function Globalization() {
-    }
-    /**
-     * Returns the BCP-47 compliant language identifier tag to the successCallback with a properties object as a parameter. That object should have a value property with a String value.
-     * @return {Promise<{value: string}>}
-     */
-    Globalization.getPreferredLanguage = function () { return; };
-    /**
-     * Returns the BCP 47 compliant locale identifier string to the successCallback with a properties object as a parameter.
-     * @return {Promise<{value: string}>}
-     */
-    Globalization.getLocaleName = function () { return; };
-    /**
-     * Converts date to string
-     * @param date
-     * @param options
-     * @return {Promise<{value: string}>}
-     */
-    Globalization.dateToString = function (date, options) { return; };
-    /**
-     *
-     * @param dateString
-     * @param options
-     */
-    Globalization.stringToDate = function (dateString, options) { return; };
-    /**
-     *
-     * @param options
-     */
-    Globalization.getDatePattern = function (options) { return; };
-    /**
-     *
-     * @param options
-     */
-    Globalization.getDateNames = function (options) { return; };
-    /**
-     * Check if day light saving is active
-     * @param date
-     */
-    Globalization.isDayLightSavingsTime = function (date) { return; };
-    /**
-     * Get first day of week
-     */
-    Globalization.getFirstDayOfWeek = function () { return; };
-    /**
-     *
-     * @param options
-     */
-    Globalization.numberToString = function (options) { return; };
-    /**
-     *
-     * @param stringToConvert
-     * @param options
-     */
-    Globalization.stringToNumber = function (stringToConvert, options) { return; };
-    /**
-     *
-     * @param options
-     */
-    Globalization.getNumberPattern = function (options) { return; };
-    /**
-     *
-     * @param currencyCode
-     */
-    Globalization.getCurrencyPattern = function (currencyCode) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], Globalization, "getPreferredLanguage", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Globalization, "getLocaleName", null);
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 1,
-            errorIndex: 2
-        })
-    ], Globalization, "dateToString", null);
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 1,
-            errorIndex: 2
-        })
-    ], Globalization, "stringToDate", null);
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse'
-        })
-    ], Globalization, "getDatePattern", null);
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse'
-        })
-    ], Globalization, "getDateNames", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Globalization, "isDayLightSavingsTime", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Globalization, "getFirstDayOfWeek", null);
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 1,
-            errorIndex: 2
-        })
-    ], Globalization, "numberToString", null);
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 1,
-            errorIndex: 2
-        })
-    ], Globalization, "stringToNumber", null);
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse'
-        })
-    ], Globalization, "getNumberPattern", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Globalization, "getCurrencyPattern", null);
-    Globalization = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-globalization',
-            pluginRef: 'navigator.globalization',
-            repo: 'https://github.com/apache/cordova-plugin-globalization'
-        })
-    ], Globalization);
-    return Globalization;
-}());
-exports.Globalization = Globalization;
-
-},{"./plugin":499}],486:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Google Plus
- * @description
- * @usage
- * ```
- *
- * ```
- */
-var GooglePlus = (function () {
-    function GooglePlus() {
-    }
-    /**
-     * The login function walks the user through the Google Auth process.
-     * @param options
-     */
-    GooglePlus.login = function (options) { return; };
-    /**
-     * You can call trySilentLogin to check if they're already signed in to the app and sign them in silently if they are.
-     * @param options
-     */
-    GooglePlus.trySilentLogin = function (options) { return; };
-    /**
-     * This will clear the OAuth2 token.
-     */
-    GooglePlus.logout = function () { return; };
-    /**
-     * This will clear the OAuth2 token, forget which account was used to login, and disconnect that account from the app. This will require the user to allow the app access again next time they sign in. Be aware that this effect is not always instantaneous. It can take time to completely disconnect.
-     */
-    GooglePlus.disconnect = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], GooglePlus, "login", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GooglePlus, "trySilentLogin", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GooglePlus, "logout", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GooglePlus, "disconnect", null);
-    GooglePlus = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-googleplus',
-            pluginRef: 'window.plugins.googleplus',
-            repo: 'https://github.com/EddyVerbruggen/cordova-plugin-googleplus',
-            platforms: ['Web', 'Android', 'iOS'],
-            install: 'ionic plugin add cordova-plugin-googleplus --variable REVERSED_CLIENT_ID=myreversedclientid'
-        })
-    ], GooglePlus);
-    return GooglePlus;
-}());
-exports.GooglePlus = GooglePlus;
-
-},{"./plugin":499}],487:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Google Analytics
- * @description
- * This plugin connects to Google's native Universal Analytics SDK
- * Prerequisites:
- * - A Cordova 3.0+ project for iOS and/or Android
- * - A Mobile App property through the Google Analytics Admin Console
- * - (Android) Google Play Services SDK installed via [Android SDK Manager](https://developer.android.com/sdk/installing/adding-packages.html)
- */
-var GoogleAnalytics = (function () {
-    function GoogleAnalytics() {
-    }
-    /**
-     * In your 'deviceready' handler, set up your Analytics tracker.
-     * https://developers.google.com/analytics/devguides/collection/analyticsjs/
-     * @param {string}  id  Your Google Analytics Mobile App property
-     */
-    GoogleAnalytics.startTrackerWithId = function (id) { return; };
-    /**
-     * Track a screen
-     * https://developers.google.com/analytics/devguides/collection/analyticsjs/screens
-     *
-     * @param {string}  title   Screen title
-     */
-    GoogleAnalytics.trackView = function (title) { return; };
-    /**
-     * Track an event
-     * https://developers.google.com/analytics/devguides/collection/analyticsjs/events
-     * @param {string}  category
-     * @param {string}  action
-     * @param {string}  label
-     * @param {number}  value
-     */
-    GoogleAnalytics.trackEvent = function (category, action, label, value) { return; };
-    /**
-     * Track an exception
-     * @param {string}  description
-     * @param {boolean} fatal
-     */
-    GoogleAnalytics.trackException = function (description, fatal) { return; };
-    /**
-     * Track User Timing (App Speed)
-     * @param {string}  category
-     * @param {number}  intervalInMilliseconds
-     * @param {string}  variable
-     * @param {string}  label
-     */
-    GoogleAnalytics.trackTiming = function (category, intervalInMilliseconds, variable, label) { return; };
-    /**
-     * Add a Transaction (Ecommerce)
-     * https://developers.google.com/analytics/devguides/collection/analyticsjs/ecommerce#addTrans
-     * @param {string}  id
-     * @param {string}  affiliation
-     * @param {number}  revenue
-     * @param {number}  tax
-     * @param {number}  shipping
-     * @param {string}  currencyCode
-     */
-    GoogleAnalytics.addTransaction = function (id, affiliation, revenue, tax, shipping, currencyCode) { return; };
-    /**
-     * Add a Transaction Item (Ecommerce)
-     * https://developers.google.com/analytics/devguides/collection/analyticsjs/ecommerce#addItem
-     * @param {string}  id
-     * @param {string}  name
-     * @param {string}  sku
-     * @param {string}  category
-     * @param {number}  price
-     * @param {number}  quantity
-     * @param {string}  currencyCode
-     */
-    GoogleAnalytics.addTransactionItem = function (id, name, sku, category, price, quantity, currencyCode) { return; };
-    /**
-     * Add a Custom Dimension
-     * https://developers.google.com/analytics/devguides/platform/customdimsmets
-     * @param {string}  key
-     * @param {string}  value
-     */
-    GoogleAnalytics.addCustomDimension = function (key, value) { return; };
-    /**
-     * Set a UserId
-     * https://developers.google.com/analytics/devguides/collection/analyticsjs/user-id
-     * @param {string}  id
-     */
-    GoogleAnalytics.setUserId = function (id) { return; };
-    /**
-     * Enable verbose logging
-     */
-    GoogleAnalytics.debugMode = function () { return; };
-    /**
-     * Enable/disable automatic reporting of uncaught exceptions
-     * @param {boolean} shouldEnable
-     */
-    GoogleAnalytics.enableUncaughtExceptionReporting = function (shouldEnable) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "startTrackerWithId", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "trackView", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "trackEvent", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "trackException", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "trackTiming", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "addTransaction", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "addTransactionItem", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "addCustomDimension", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "setUserId", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "debugMode", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleAnalytics, "enableUncaughtExceptionReporting", null);
-    GoogleAnalytics = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-google-analytics',
-            pluginRef: 'analytics',
-            repo: 'https://github.com/danwilson/google-analytics-plugin',
-            platforms: ['Android', 'iOS']
-        })
-    ], GoogleAnalytics);
-    return GoogleAnalytics;
-}());
-exports.GoogleAnalytics = GoogleAnalytics;
-
-},{"./plugin":499}],488:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-var Observable_1 = require('rxjs/Observable');
-/**
- * @private
- * You can listen to these events where appropriate
- */
-exports.GoogleMapsEvent = {
-    MAP_CLICK: 'click',
-    MAP_LONG_CLICK: 'long_click',
-    MY_LOCATION_CHANGE: 'my_location_change',
-    MY_LOCATION_BUTTON_CLICK: 'my_location_button_click',
-    INDOOR_BUILDING_FOCUSED: 'indoor_building_focused',
-    INDOOR_LEVEL_ACTIVATED: 'indoor_level_activated',
-    CAMERA_CHANGE: 'camera_change',
-    CAMERA_IDLE: 'camera_idle',
-    MAP_READY: 'map_ready',
-    MAP_LOADED: 'map_loaded',
-    MAP_WILL_MOVE: 'will_move',
-    MAP_CLOSE: 'map_close',
-    MARKER_CLICK: 'click',
-    OVERLAY_CLICK: 'overlay_click',
-    INFO_CLICK: 'info_click',
-    MARKER_DRAG: 'drag',
-    MARKER_DRAG_START: 'drag_start',
-    MARKER_DRAG_END: 'drag_end'
-};
-/**
- * @private
- */
-exports.GoogleMapsAnimation = {
-    BOUNCE: 'BOUNCE',
-    DROP: 'DROP'
-};
-/**
- * @name Google Maps
- * @description This plugin uses the native Google Maps SDK
- * @usage
- * ```
- * import {GoogleMap, GoogleMapsEvent} from 'ionic-native';
- *
- * ...
- *
- * // somewhere in your component
- * let map = new GoogleMap('elementID');
- *
- * map.on(GoogleMapsEvent.MAP_READY).subscribe(() => console.log("Map is ready!"));
- * ```
- */
-var GoogleMap = (function () {
-    function GoogleMap(elementId, options) {
-        this._objectInstance = plugin.google.maps.Map.getMap(document.getElementById(elementId), options);
-    }
-    /**
-     * Checks if a map object has been created.
-     * @return {Promise<boolean>} returns a promise that resolves with a boolean that indicates if the plugin is available.
-     */
-    GoogleMap.isAvailable = function () {
-        return;
-    };
-    GoogleMap.prototype.on = function (event) {
-        var _this = this;
-        return new Observable_1.Observable(function (observer) {
-            var cb = function (data) { return observer.next(data); };
-            _this._objectInstance.on(event, cb);
-            return function () { return _this._objectInstance.off(event); };
-        });
-    };
-    GoogleMap.prototype.one = function (event) {
-        var _this = this;
-        return new Promise(function (resolve) { return _this._objectInstance.one(event, resolve); });
-    };
-    GoogleMap.prototype.setDebuggable = function (isDebuggable) {
-    };
-    GoogleMap.prototype.setClickable = function (isClickable) {
-    };
-    /**
-     * Get the position of the camera
-     */
-    GoogleMap.prototype.getCameraPosition = function () {
-        return;
-    };
-    /**
-     * Get the location of the user
-     */
-    GoogleMap.prototype.getMyLocation = function () {
-        return;
-    };
-    /**
-     * Get the visible region
-     */
-    GoogleMap.prototype.getVisibleRegion = function () {
-        return;
-    };
-    GoogleMap.prototype.showDialog = function () {
-    };
-    GoogleMap.prototype.closeDialog = function () {
-    };
-    GoogleMap.prototype.getLicenseInfo = function () {
-        return;
-    };
-    GoogleMap.prototype.setCenter = function (latLng) {
-    };
-    GoogleMap.prototype.setZoom = function (zoomLevel) {
-    };
-    GoogleMap.prototype.setMapTypeId = function (typeId) {
-    };
-    GoogleMap.prototype.setTilt = function (tiltLevel) {
-    };
-    GoogleMap.prototype.animateCamera = function (animateCameraOptions) {
-    };
-    GoogleMap.prototype.moveCamera = function (cameraPosition) {
-    };
-    GoogleMap.prototype.setMyLocationEnabled = function (enabled) {
-    };
-    GoogleMap.prototype.setIndoorEnabled = function (enabled) {
-    };
-    GoogleMap.prototype.setTrafficEnabled = function (enabled) {
-    };
-    GoogleMap.prototype.setCompassEnabled = function (enabled) {
-    };
-    GoogleMap.prototype.setAllGesturesEnabled = function (enabled) {
-    };
-    GoogleMap.prototype.addMarker = function (options) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            _this._objectInstance.addMarker(options, function (marker) {
-                if (marker)
-                    resolve(new GoogleMapsMarker(marker));
-                else
-                    reject();
-            });
-        });
-    };
-    GoogleMap.prototype.addCircle = function (options) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            _this._objectInstance.addCircle(options, function (circle) {
-                if (circle)
-                    resolve(new GoogleMapsCircle(circle));
-                else
-                    reject();
-            });
-        });
-    };
-    GoogleMap.prototype.addPolygon = function (options) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            _this._objectInstance.addPolygon(options, function (polygon) {
-                if (polygon)
-                    resolve(new GoogleMapsPolygon(polygon));
-                else
-                    reject();
-            });
-        });
-    };
-    GoogleMap.prototype.addPolyline = function (options) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            _this._objectInstance.addPolyline(options, function (polyline) {
-                if (polyline)
-                    resolve(new GoogleMapsPolyline(polyline));
-                else
-                    reject();
-            });
-        });
-    };
-    GoogleMap.prototype.addTileOverlay = function (options) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            _this._objectInstance.addTileOverlay(options, function (tileOverlay) {
-                if (tileOverlay)
-                    resolve(new GoogleMapsTileOverlay(tileOverlay));
-                else
-                    reject();
-            });
-        });
-    };
-    GoogleMap.prototype.addGroundOverlay = function (options) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            _this._objectInstance.addTileOverlay(options, function (groundOverlay) {
-                if (groundOverlay)
-                    resolve(new GoogleMapsGroundOverlay(groundOverlay));
-                else
-                    reject();
-            });
-        });
-    };
-    GoogleMap.prototype.addKmlOverlay = function (options) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            _this._objectInstance.addTileOverlay(options, function (kmlOverlay) {
-                if (kmlOverlay)
-                    resolve(new GoogleMapsKmlOverlay(kmlOverlay));
-                else
-                    reject();
-            });
-        });
-    };
-    GoogleMap.prototype.setDiv = function (domNode) {
-    };
-    GoogleMap.prototype.setVisible = function (visible) {
-    };
-    GoogleMap.prototype.setOptions = function (options) {
-    };
-    GoogleMap.prototype.setBackgroundColor = function (backgroundColor) {
-    };
-    GoogleMap.prototype.setPadding = function (top, right, bottom, left) {
-    };
-    GoogleMap.prototype.clear = function () {
-    };
-    GoogleMap.prototype.refreshLayout = function () {
-    };
-    GoogleMap.prototype.fromLatLngToPoint = function (latLng, point) {
-        return;
-    };
-    GoogleMap.prototype.fromPointToLatLng = function (point, latLng) {
-        return;
-    };
-    GoogleMap.prototype.toDataURL = function () {
-        return;
-    };
-    GoogleMap.prototype.remove = function () {
-    };
-    GoogleMap.prototype.panBy = function () {
-    };
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setDebuggable", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setClickable", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], GoogleMap.prototype, "getCameraPosition", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], GoogleMap.prototype, "getMyLocation", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], GoogleMap.prototype, "getVisibleRegion", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "showDialog", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "closeDialog", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], GoogleMap.prototype, "getLicenseInfo", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setCenter", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setZoom", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setMapTypeId", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setTilt", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "animateCamera", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "moveCamera", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setMyLocationEnabled", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setIndoorEnabled", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setTrafficEnabled", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setCompassEnabled", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setAllGesturesEnabled", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setDiv", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setOptions", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setBackgroundColor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "setPadding", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "clear", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "refreshLayout", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], GoogleMap.prototype, "fromLatLngToPoint", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], GoogleMap.prototype, "fromPointToLatLng", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], GoogleMap.prototype, "toDataURL", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "remove", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMap.prototype, "panBy", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], GoogleMap, "isAvailable", null);
-    GoogleMap = __decorate([
-        plugin_1.Plugin({
-            pluginRef: 'plugin.google.maps.Map',
-            plugin: 'cordova-plugin-googlemaps',
-            repo: 'https://github.com/mapsplugin/cordova-plugin-googlemaps'
-        })
-    ], GoogleMap);
-    return GoogleMap;
-}());
-exports.GoogleMap = GoogleMap;
-/**
- * @private
- */
-var GoogleMapsMarker = (function () {
-    function GoogleMapsMarker(_objectInstance) {
-        this._objectInstance = _objectInstance;
-    }
-    GoogleMapsMarker.prototype.addEventListener = function (event) {
-        var _this = this;
-        return new Observable_1.Observable(function (observer) {
-            var cb = function (data) {
-                observer.next(data);
-            };
-            _this._objectInstance.addEventListener(event, cb);
-            return function () { return _this._objectInstance.removeEventListener(event, cb); };
-        });
-    };
-    GoogleMapsMarker.prototype.isVisible = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.setVisible = function (visible) {
-    };
-    GoogleMapsMarker.prototype.getHashCode = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.remove = function () {
-    };
-    GoogleMapsMarker.prototype.setOpacity = function (alpha) {
-    };
-    GoogleMapsMarker.prototype.getOpacity = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.setZIndex = function () {
-    };
-    GoogleMapsMarker.prototype.setIconAnchor = function (x, y) {
-    };
-    GoogleMapsMarker.prototype.setInfoWindowAnchor = function (x, y) {
-    };
-    GoogleMapsMarker.prototype.setDraggable = function (draggable) {
-    };
-    GoogleMapsMarker.prototype.isDraggable = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.setFlat = function (flat) {
-        return;
-    };
-    GoogleMapsMarker.prototype.setIcon = function (icon) {
-    };
-    GoogleMapsMarker.prototype.setTitle = function (title) {
-    };
-    GoogleMapsMarker.prototype.getTitle = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.setSnippet = function (snippet) {
-    };
-    GoogleMapsMarker.prototype.getSnippet = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.setRotation = function (rotation) {
-    };
-    GoogleMapsMarker.prototype.getRotation = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.showInfoWindow = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.hideInfoWindow = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.setPosition = function (latLng) {
-    };
-    GoogleMapsMarker.prototype.getPosition = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.getMap = function () {
-        return;
-    };
-    GoogleMapsMarker.prototype.setAnimation = function (animation) {
-    };
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "isVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], GoogleMapsMarker.prototype, "setVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "getHashCode", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "remove", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setOpacity", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "getOpacity", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setZIndex", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setIconAnchor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setInfoWindowAnchor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setDraggable", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "isDraggable", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setFlat", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setIcon", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setTitle", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "getTitle", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setSnippet", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "getSnippet", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setRotation", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "getRotation", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "showInfoWindow", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "hideInfoWindow", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setPosition", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], GoogleMapsMarker.prototype, "getPosition", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "getMap", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsMarker.prototype, "setAnimation", null);
-    return GoogleMapsMarker;
-}());
-exports.GoogleMapsMarker = GoogleMapsMarker;
-/**
- * @private
- */
-var GoogleMapsCircle = (function () {
-    function GoogleMapsCircle(_objectInstance) {
-        this._objectInstance = _objectInstance;
-    }
-    GoogleMapsCircle.prototype.addEventListener = function (event) {
-        var _this = this;
-        return new Observable_1.Observable(function (observer) {
-            var cb = function (data) { return observer.next(data); };
-            _this._objectInstance.addEventListener(event, cb);
-            return function () { return _this._objectInstance.removeEventListener(event, cb); };
-        });
-    };
-    GoogleMapsCircle.prototype.getCenter = function () {
-        return;
-    };
-    GoogleMapsCircle.prototype.getRadius = function () {
-        return;
-    };
-    GoogleMapsCircle.prototype.getStrokeColor = function () {
-        return;
-    };
-    GoogleMapsCircle.prototype.getVisible = function () {
-        return;
-    };
-    GoogleMapsCircle.prototype.getZIndex = function () {
-        return;
-    };
-    GoogleMapsCircle.prototype.remove = function () {
-    };
-    GoogleMapsCircle.prototype.setCenter = function (latLng) {
-    };
-    GoogleMapsCircle.prototype.setFillColor = function (fillColor) {
-    };
-    GoogleMapsCircle.prototype.setStrokeColor = function (strokeColor) {
-    };
-    GoogleMapsCircle.prototype.setStrokeWidth = function (strokeWidth) {
-    };
-    GoogleMapsCircle.prototype.setVisible = function (visible) {
-    };
-    GoogleMapsCircle.prototype.setZIndex = function (zIndex) {
-    };
-    GoogleMapsCircle.prototype.setRadius = function (radius) {
-    };
-    GoogleMapsCircle.prototype.getMap = function () {
-        return;
-    };
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "getCenter", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "getRadius", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "getStrokeColor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "getVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "getZIndex", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "remove", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "setCenter", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "setFillColor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "setStrokeColor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "setStrokeWidth", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "setVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "setZIndex", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "setRadius", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsCircle.prototype, "getMap", null);
-    return GoogleMapsCircle;
-}());
-exports.GoogleMapsCircle = GoogleMapsCircle;
-/**
- * @private
- */
-var GoogleMapsPolyline = (function () {
-    function GoogleMapsPolyline(_objectInstance) {
-        this._objectInstance = _objectInstance;
-    }
-    GoogleMapsPolyline.prototype.addEventListener = function (event) {
-        var _this = this;
-        return new Observable_1.Observable(function (observer) {
-            var cb = function (data) { return observer.next(data); };
-            _this._objectInstance.addEventListener(event, cb);
-            return function () { return _this._objectInstance.removeEventListener(event, cb); };
-        });
-    };
-    GoogleMapsPolyline.prototype.getPoints = function () {
-        return;
-    };
-    GoogleMapsPolyline.prototype.getCOlor = function () {
-        return;
-    };
-    GoogleMapsPolyline.prototype.getWidth = function () {
-        return;
-    };
-    GoogleMapsPolyline.prototype.getGeodesic = function () {
-        return;
-    };
-    GoogleMapsPolyline.prototype.getZIndex = function () {
-        return;
-    };
-    GoogleMapsPolyline.prototype.remove = function () {
-    };
-    GoogleMapsPolyline.prototype.setPoints = function (points) {
-    };
-    GoogleMapsPolyline.prototype.setColor = function (color) {
-    };
-    GoogleMapsPolyline.prototype.setWidth = function (width) {
-    };
-    GoogleMapsPolyline.prototype.setVisible = function (visible) {
-    };
-    GoogleMapsPolyline.prototype.setZIndex = function (zIndex) {
-    };
-    GoogleMapsPolyline.prototype.setGeoDesic = function (geoDesic) {
-    };
-    GoogleMapsPolyline.prototype.getMap = function () {
-        return;
-    };
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "getPoints", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "getCOlor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "getWidth", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "getGeodesic", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "getZIndex", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "remove", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "setPoints", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "setColor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "setWidth", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "setVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "setZIndex", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "setGeoDesic", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolyline.prototype, "getMap", null);
-    return GoogleMapsPolyline;
-}());
-exports.GoogleMapsPolyline = GoogleMapsPolyline;
-/**
- * @private
- */
-var GoogleMapsPolygon = (function () {
-    function GoogleMapsPolygon(_objectInstance) {
-        this._objectInstance = _objectInstance;
-    }
-    GoogleMapsPolygon.prototype.addEventListener = function (event) {
-        var _this = this;
-        return new Observable_1.Observable(function (observer) {
-            var cb = function (data) { return observer.next(data); };
-            _this._objectInstance.addEventListener(event, cb);
-            return function () { return _this._objectInstance.removeEventListener(event, cb); };
-        });
-    };
-    GoogleMapsPolygon.prototype.getPoints = function () {
-        return;
-    };
-    GoogleMapsPolygon.prototype.getStrokeColor = function () {
-        return;
-    };
-    GoogleMapsPolygon.prototype.getFillColor = function () {
-        return;
-    };
-    GoogleMapsPolygon.prototype.getStrokeWidth = function () {
-        return;
-    };
-    GoogleMapsPolygon.prototype.getGeodesic = function () {
-        return;
-    };
-    GoogleMapsPolygon.prototype.getVisible = function () {
-        return;
-    };
-    GoogleMapsPolygon.prototype.getZIndex = function () {
-        return;
-    };
-    GoogleMapsPolygon.prototype.remove = function () {
-    };
-    GoogleMapsPolygon.prototype.setPoints = function (points) {
-    };
-    GoogleMapsPolygon.prototype.setStrokeColor = function (strokeColor) {
-    };
-    GoogleMapsPolygon.prototype.setFillColor = function (fillColor) {
-    };
-    GoogleMapsPolygon.prototype.setStrokeWidth = function (strokeWidth) {
-    };
-    GoogleMapsPolygon.prototype.setVisible = function (visible) {
-    };
-    GoogleMapsPolygon.prototype.setZIndex = function (zIndex) {
-    };
-    GoogleMapsPolygon.prototype.setGeodesic = function (geodesic) {
-    };
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "getPoints", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "getStrokeColor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "getFillColor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "getStrokeWidth", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "getGeodesic", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "getVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "getZIndex", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "remove", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "setPoints", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "setStrokeColor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "setFillColor", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "setStrokeWidth", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "setVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "setZIndex", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsPolygon.prototype, "setGeodesic", null);
-    return GoogleMapsPolygon;
-}());
-exports.GoogleMapsPolygon = GoogleMapsPolygon;
-/**
- * @private
- */
-var GoogleMapsTileOverlay = (function () {
-    function GoogleMapsTileOverlay(_objectInstance) {
-        this._objectInstance = _objectInstance;
-    }
-    GoogleMapsTileOverlay.prototype.getVisible = function () {
-        return;
-    };
-    GoogleMapsTileOverlay.prototype.setVisible = function (visible) {
-    };
-    GoogleMapsTileOverlay.prototype.getFadeIn = function () {
-        return;
-    };
-    GoogleMapsTileOverlay.prototype.setFadeIn = function (fadeIn) {
-    };
-    GoogleMapsTileOverlay.prototype.getZIndex = function () {
-        return;
-    };
-    GoogleMapsTileOverlay.prototype.setZIndex = function (zIndex) {
-    };
-    GoogleMapsTileOverlay.prototype.getOpacity = function () {
-        return;
-    };
-    GoogleMapsTileOverlay.prototype.setOpacity = function (opacity) {
-    };
-    GoogleMapsTileOverlay.prototype.clearTileCache = function () {
-    };
-    GoogleMapsTileOverlay.prototype.remove = function () {
-    };
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsTileOverlay.prototype, "getVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsTileOverlay.prototype, "setVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsTileOverlay.prototype, "getFadeIn", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsTileOverlay.prototype, "setFadeIn", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsTileOverlay.prototype, "getZIndex", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsTileOverlay.prototype, "setZIndex", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsTileOverlay.prototype, "getOpacity", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsTileOverlay.prototype, "setOpacity", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsTileOverlay.prototype, "clearTileCache", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsTileOverlay.prototype, "remove", null);
-    return GoogleMapsTileOverlay;
-}());
-exports.GoogleMapsTileOverlay = GoogleMapsTileOverlay;
-/**
- * @private
- */
-var GoogleMapsGroundOverlay = (function () {
-    function GoogleMapsGroundOverlay(_objectInstance) {
-        this._objectInstance = _objectInstance;
-    }
-    GoogleMapsGroundOverlay.prototype.setBearing = function (bearing) {
-    };
-    GoogleMapsGroundOverlay.prototype.getBearing = function () {
-        return;
-    };
-    GoogleMapsGroundOverlay.prototype.setOpacity = function (opacity) {
-    };
-    GoogleMapsGroundOverlay.prototype.getOpacity = function () {
-        return;
-    };
-    GoogleMapsGroundOverlay.prototype.setVisible = function (visible) {
-    };
-    GoogleMapsGroundOverlay.prototype.getVisible = function () {
-        return;
-    };
-    GoogleMapsGroundOverlay.prototype.setImage = function (image) {
-    };
-    ;
-    GoogleMapsGroundOverlay.prototype.remove = function () {
-    };
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsGroundOverlay.prototype, "setBearing", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsGroundOverlay.prototype, "getBearing", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsGroundOverlay.prototype, "setOpacity", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsGroundOverlay.prototype, "getOpacity", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsGroundOverlay.prototype, "setVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsGroundOverlay.prototype, "getVisible", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsGroundOverlay.prototype, "setImage", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsGroundOverlay.prototype, "remove", null);
-    return GoogleMapsGroundOverlay;
-}());
-exports.GoogleMapsGroundOverlay = GoogleMapsGroundOverlay;
-/**
- * @private
- */
-var GoogleMapsKmlOverlay = (function () {
-    function GoogleMapsKmlOverlay(_objectInstance) {
-        this._objectInstance = _objectInstance;
-    }
-    GoogleMapsKmlOverlay.prototype.remove = function () {
-    };
-    GoogleMapsKmlOverlay.prototype.getOverlays = function () {
-        return;
-    };
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsKmlOverlay.prototype, "remove", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsKmlOverlay.prototype, "getOverlays", null);
-    return GoogleMapsKmlOverlay;
-}());
-exports.GoogleMapsKmlOverlay = GoogleMapsKmlOverlay;
-/**
- * @private
- */
-var GoogleMapsLatLngBounds = (function () {
-    function GoogleMapsLatLngBounds(southwest, northeast) {
-        this.southwest = southwest;
-        this.northeast = northeast;
-        this._objectInstance = new plugin.google.maps.LatLngBounds([southwest, northeast]);
-    }
-    GoogleMapsLatLngBounds.prototype.toString = function () {
-        return;
-    };
-    GoogleMapsLatLngBounds.prototype.toUrlValue = function (precision) {
-        return;
-    };
-    GoogleMapsLatLngBounds.prototype.extend = function (LatLng) {
-    };
-    GoogleMapsLatLngBounds.prototype.contains = function (LatLng) {
-        return;
-    };
-    GoogleMapsLatLngBounds.prototype.getCenter = function () {
-        return;
-    };
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsLatLngBounds.prototype, "toString", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsLatLngBounds.prototype, "toUrlValue", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsLatLngBounds.prototype, "extend", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsLatLngBounds.prototype, "contains", null);
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsLatLngBounds.prototype, "getCenter", null);
-    return GoogleMapsLatLngBounds;
-}());
-exports.GoogleMapsLatLngBounds = GoogleMapsLatLngBounds;
-/**
- * @private
- */
-var GoogleMapsLatLng = (function () {
-    function GoogleMapsLatLng(lat, lng) {
-        this.lat = lat;
-        this.lng = lng;
-        this._objectInstance = new plugin.google.maps.LatLng(lat, lng);
-    }
-    GoogleMapsLatLng.prototype.equals = function (other) {
-        return this.lat === other.lat && this.lng === other.lng;
-    };
-    GoogleMapsLatLng.prototype.toString = function () {
-        return;
-    };
-    GoogleMapsLatLng.prototype.toUrlValue = function (precision) {
-        precision = precision || 6;
-        return this.lat.toFixed(precision) + ',' + this.lng.toFixed(precision);
-    };
-    __decorate([
-        plugin_1.CordovaInstance({ sync: true })
-    ], GoogleMapsLatLng.prototype, "toString", null);
-    return GoogleMapsLatLng;
-}());
-exports.GoogleMapsLatLng = GoogleMapsLatLng;
-
-},{"./plugin":499,"rxjs/Observable":519}],489:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Hotspot
- * @description
- * @usage
- * ```js
- * import {Hotspot, Network} from 'ionic-native';
- *
- * ...
- *     Hotspot.scanWifi().then((networks: Array<Network>) => {
- *         console.log(networks);
- *     });
- * ...
- *
- * ```
- */
-var Hotspot = (function () {
-    function Hotspot() {
-    }
-    Hotspot.isAvailable = function () { return; };
-    Hotspot.toggleWifi = function () { return; };
-    /**
-     * Configures and starts hotspot with SSID and Password
-     *
-     * @param {string}    SSID        - SSID of your new Access Point
-     * @param {string}    mode        - encryption mode (Open, WEP, WPA, WPA_PSK)
-     * @param {string}    password    - password for your new Access Point
-     *
-     * @return {Promise<void>}        - Promise to call once hotspot is started, or reject upon failure
-     */
-    Hotspot.createHotspot = function (ssid, mode, password) { return; };
-    /**
-     * Turns on Access Point
-     *
-     * @return {Promise<boolean>} - true if AP is started
-     */
-    Hotspot.startHotspot = function () { return; };
-    /**
-     * Configures hotspot with SSID and Password
-     *
-     * @param {string}    SSID        - SSID of your new Access Point
-     * @param {string}    mode        - encryption mode (Open, WEP, WPA, WPA_PSK)
-     * @param {string}    password    - password for your new Access Point
-     *
-     * @return {Promise<void>}        - Promise to call when hotspot is configured, or reject upon failure
-     */
-    Hotspot.configureHotspot = function (ssid, mode, password) { return; };
-    /**
-     * Turns off Access Point
-     *
-     * @return {Promise<boolean>} - Promise to turn off the hotspot, true on success, false on failure
-     */
-    Hotspot.stopHotspot = function () { return; };
-    /**
-     * Checks if hotspot is enabled
-     *
-     * @return {Promise<void>}    - Promise that hotspot is enabled, rejected if it is not enabled
-     */
-    Hotspot.isHotspotEnabled = function () { return; };
-    Hotspot.getAllHotspotDevices = function () { return; };
-    /**
-     * Connect to a WiFi network
-     *
-     * @param {string}    ssid
-     *      SSID to connect
-     * @param {string}    password
-     *      password to use
-     *
-     * @return {Promise<void>}
-     *      Promise that connection to the WiFi network was successfull, rejected if unsuccessful
-     */
-    Hotspot.connectToWifi = function (ssid, password) { return; };
-    /**
-     * Connect to a WiFi network
-     *
-     * @param {string}   ssid
-     *      SSID to connect
-     * @param {string}   password
-     *      Password to use
-     * @param {string}   authentication
-     *      Authentication modes to use (LEAP, SHARED, OPEN)
-     * @param {string[]} encryption
-     *      Encryption modes to use (CCMP, TKIP, WEP104, WEP40)
-     *
-     * @return {Promise<void>}
-     *      Promise that connection to the WiFi network was successfull, rejected if unsuccessful
-     */
-    Hotspot.connectToWifiAuthEncrypt = function (ssid, password, authentication, encryption) { return; };
-    /**
-     * Add a WiFi network
-     *
-     * @param {string}    ssid
-     *      SSID of network
-     * @param {string}    mode
-     *      Authentication mode of (Open, WEP, WPA, WPA_PSK)
-     * @param {string}    password
-     *      Password for network
-     *
-     * @return {Promise<void>}
-     *      Promise that adding the WiFi network was successfull, rejected if unsuccessful
-     */
-    Hotspot.addWifiNetwork = function (ssid, mode, password) { return; };
-    /**
-     * Remove a WiFi network
-     *
-     * @param {string}    ssid
-     *      SSID of network
-     *
-     * @return {Promise<void>}
-     *      Promise that removing the WiFi network was successfull, rejected if unsuccessful
-     */
-    Hotspot.removeWifiNetwork = function (ssid) { return; };
-    Hotspot.isConnectedToInternet = function () { return; };
-    Hotspot.isConnectedToInternetViaWifi = function () { return; };
-    Hotspot.isWifiOn = function () { return; };
-    Hotspot.isWifiSupported = function () { return; };
-    Hotspot.isWifiDirectSupported = function () { return; };
-    Hotspot.scanWifi = function () { return; };
-    Hotspot.scanWifiByLevel = function () { return; };
-    Hotspot.startWifiPeriodicallyScan = function (interval, duration) { return; };
-    Hotspot.stopWifiPeriodicallyScan = function () { return; };
-    Hotspot.getNetConfig = function () { return; };
-    Hotspot.getConnectionInfo = function () { return; };
-    Hotspot.pingHost = function (ip) { return; };
-    /**
-     * Gets MAC Address associated with IP Address from ARP File
-     *
-     * @param {string}        ip  - IP Address that you want the MAC Address of
-     *
-     * @return {Promise<string>}  - A Promise for the MAC Address
-     */
-    Hotspot.getMacAddressOfHost = function (ip) { return; };
-    /**
-     * Checks if IP is live using DNS
-     *
-     * @param {string}        ip  - IP Address you want to test
-     *
-     * @return {Promise<boolean>} - A Promise for whether the IP Address is reachable
-     */
-    Hotspot.isDnsLive = function (ip) { return; };
-    /**
-     * Checks if IP is live using socket And PORT
-     *
-     * @param {string}        ip  - IP Address you want to test
-     *
-     * @return {Promise<boolean>} - A Promise for whether the IP Address is reachable
-     */
-    Hotspot.isPortLive = function (ip) { return; };
-    /**
-     * Checks if device is rooted
-     *
-     * @return {Promise<boolean>} - A Promise for whether the device is rooted
-     */
-    Hotspot.isRooted = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "isAvailable", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "toggleWifi", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "createHotspot", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "startHotspot", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "configureHotspot", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "stopHotspot", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "isHotspotEnabled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "getAllHotspotDevices", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "connectToWifi", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "connectToWifiAuthEncrypt", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "addWifiNetwork", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "removeWifiNetwork", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "isConnectedToInternet", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "isConnectedToInternetViaWifi", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "isWifiOn", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "isWifiSupported", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "isWifiDirectSupported", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "scanWifi", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "scanWifiByLevel", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "startWifiPeriodicallyScan", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "stopWifiPeriodicallyScan", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "getNetConfig", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "getConnectionInfo", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "pingHost", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "getMacAddressOfHost", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "isDnsLive", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "isPortLive", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Hotspot, "isRooted", null);
-    Hotspot = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-hotspot',
-            pluginRef: 'cordova.plugins.hotspot',
-            repo: 'https://github.com/hypery2k/cordova-hotspot-plugin',
-            platforms: ['Android']
-        })
-    ], Hotspot);
-    return Hotspot;
-}());
-exports.Hotspot = Hotspot;
-
-},{"./plugin":499}],490:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Httpd
- * @description
- * Embedded httpd for Cordova apps. Light weight HTTP server.
- * @usage
- */
-var Httpd = (function () {
-    function Httpd() {
-    }
-    /**
-     * Starts a web server.
-     * @returns {Observable<string>} Returns an Observable. Subscribe to receive the URL for your web server (if succeeded). Unsubscribe to stop the server.
-     * @param options {HttpdOptions}
-     */
-    Httpd.startServer = function (options) { return; };
-    /**
-     * Gets the URL of the running server
-     * @returns {Promise<string>} Returns a promise that resolves with the URL of the web server.
-     */
-    Httpd.getUrl = function () { return; };
-    /**
-     * Get the local path of the running webserver
-     * @returns {Promise<string>} Returns a promise that resolves with the local path of the web server.
-     */
-    Httpd.getLocalPath = function () { return; };
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'stopServer'
-        })
-    ], Httpd, "startServer", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Httpd, "getUrl", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Httpd, "getLocalPath", null);
-    Httpd = __decorate([
-        plugin_1.Plugin({
-            plugin: 'https://github.com/floatinghotpot/cordova-httpd.git',
-            pluginRef: 'cordova.plugins.CorHttpd',
-            repo: 'https://github.com/floatinghotpot/cordova-httpd',
-            platforms: ['iOS', 'Android']
-        })
-    ], Httpd);
-    return Httpd;
-}());
-exports.Httpd = Httpd;
-
-},{"./plugin":499}],491:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Image Picker
- * @description
- * Cordova Plugin For Multiple Image Selection
- *
- * Requires Cordova plugin: `cordova-plugin-image-picker`.
- * For more info, please see the https://github.com/wymsee/cordova-imagePicker
- *
- * @usage
- * ```js
- * import {ImagePicker} from 'ionic-native';
- *
- *
- *
- * ImagePicker.getPictures(options).then((results) => {
- *   for (var i = 0; i < results.length; i++) {
- *       console.log('Image URI: ' + results[i]);
- *   }
- * }, (err) => {
- * });
- * ```
- */
-var ImagePicker = (function () {
-    function ImagePicker() {
-    }
-    /**
-     * Pick pictures from the library.
-     * @param {ImagePickerOptions} options
-     * @return Returns a Promise that resolves the image file URI
-     * otherwise rejects with an error.
-     */
-    ImagePicker.getPictures = function (options) { return; };
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse'
-        })
-    ], ImagePicker, "getPictures", null);
-    ImagePicker = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-image-picker',
-            pluginRef: 'window.imagePicker',
-            repo: 'https://github.com/wymsee/cordova-imagePicker'
-        })
-    ], ImagePicker);
-    return ImagePicker;
-}());
-exports.ImagePicker = ImagePicker;
-
-},{"./plugin":499}],492:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-var InAppBrowser = (function () {
-    function InAppBrowser() {
-    }
-    /**
-     * Opens a URL in a new InAppBrowser instance, the current browser instance, or the system browser.
-     * @param  url     The URL to load.
-     * @param  target  The target in which to load the URL, an optional parameter that defaults to _self.
-     * @param  options Options for the InAppBrowser. Optional, defaulting to: location=yes.
-     *                 The options string must not contain any blank space, and each feature's
-     *                 name/value pairs must be separated by a comma. Feature names are case insensitive.
-     */
-    InAppBrowser.open = function (url, target, options) { return; };
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], InAppBrowser, "open", null);
-    InAppBrowser = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-inappbrowser',
-            pluginRef: 'cordova.InAppBrowser'
-        })
-    ], InAppBrowser);
-    return InAppBrowser;
-}());
-exports.InAppBrowser = InAppBrowser;
-
-},{"./plugin":499}],493:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Insomnia
- * @description
- * Prevent the screen of the mobile device from falling asleep.
- *
- * @usage
- * ```js
- * import {Insomnia} from 'ionic-native';
- *
- * Insomnia.keepAwake()
- *   .then(
- *     () => console.log('success'),
- *     () => console.log('error')
- *   );
- *
- * Insomnia.allowSleepAgain()
- *   .then(
- *     () => console.log('success'),
- *     () => console.log('error')
- *   );
- * ```
- *
- */
-var Insomnia = (function () {
-    function Insomnia() {
-    }
-    /**
-     * Keeps awake the application
-     * @returns {Promise}
-     */
-    Insomnia.keepAwake = function () { return; };
-    /**
-     * Allows the application to sleep again
-     * @returns {Promise}
-     */
-    Insomnia.allowSleepAgain = function () { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], Insomnia, "keepAwake", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Insomnia, "allowSleepAgain", null);
-    Insomnia = __decorate([
-        plugin_1.Plugin({
-            plugin: 'https://github.com/EddyVerbruggen/Insomnia-PhoneGap-Plugin.git',
-            pluginRef: 'plugins.insomnia',
-            repo: 'https://github.com/EddyVerbruggen/Insomnia-PhoneGap-Plugin',
-            platforms: ['Android', 'iOS', 'Windows Phone 8']
-        })
-    ], Insomnia);
-    return Insomnia;
-}());
-exports.Insomnia = Insomnia;
-
-},{"./plugin":499}],494:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Keyboard
- * @description
- * @usage
- * ```js
- * import {Keyboard} from 'ionic-native';
- *
- *
- *
- * ```
- */
-var Keyboard = (function () {
-    function Keyboard() {
-    }
-    /**
-     * Hide the keyboard accessory bar with the next, previous and done buttons.
-     * @param hide {boolean}
-     */
-    Keyboard.hideKeyboardAccessoryBar = function (hide) {
-        console.log('hideKeyboardAccessoryBar method has been removed temporarily.');
-    };
-    /**
-     * Force keyboard to be shown.
-     */
-    Keyboard.show = function () { };
-    /**
-     * Close the keyboard if open.
-     */
-    Keyboard.close = function () { };
-    /**
-     * Prevents the native UIScrollView from moving when an input is focused.
-     * @param disable
-     */
-    Keyboard.disableScroll = function (disable) { };
-    /**
-     * Creates an observable that notifies you when the keyboard is shown. Unsubscribe to observable to cancel event watch.
-     */
-    Keyboard.onKeyboardShow = function () { return; };
-    /**
-     * Creates an observable that notifies you when the keyboard is hidden. Unsubscribe to observable to cancel event watch.
-     */
-    Keyboard.onKeyboardHide = function () { return; };
-    __decorate([
-        plugin_1.Cordova({
-            sync: true,
-            platforms: ['Android', 'BlackBerry 10', 'Windows']
-        })
-    ], Keyboard, "show", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true,
-            platforms: ['iOS', 'Android', 'BlackBerry 10', 'Windows']
-        })
-    ], Keyboard, "close", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true,
-            platforms: ['iOS', 'Windows']
-        })
-    ], Keyboard, "disableScroll", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'native.keyboardshow',
-            platforms: ['iOS', 'Android', 'BlackBerry 10', 'Windows']
-        })
-    ], Keyboard, "onKeyboardShow", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'native.keyboardhide',
-            platforms: ['iOS', 'Android', 'BlackBerry 10', 'Windows']
-        })
-    ], Keyboard, "onKeyboardHide", null);
-    Keyboard = __decorate([
-        plugin_1.Plugin({
-            plugin: 'ionic-plugin-keyboard',
-            pluginRef: 'cordova.plugins.Keyboard',
-            repo: 'https://github.com/driftyco/ionic-plugin-keyboard'
-        })
-    ], Keyboard);
-    return Keyboard;
-}());
-exports.Keyboard = Keyboard;
-
-},{"./plugin":499}],495:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Launch Navigator
- * @description
- * Requires Cordova plugin: uk.co.workingedge.phonegap.plugin.launchnavigator. For more info, please see the [LaunchNavigator plugin docs](https://github.com/dpa99c/phonegap-launch-navigator).
- *
- * @usage
- * ```js
- * import {LaunchNavigator} from 'ionic-native';
- *
- *
- *
- * LaunchNavigator.navigate("Toronto, ON", "London, ON")
- *   .then(
- *     success => console.log("Launched navigator"),
- *     error => console.log("Error launching navigator", error)
- *   );
- * ```
- */
-var LaunchNavigator = (function () {
-    function LaunchNavigator() {
-    }
-    /**
-     * Launches navigator app
-     * @param destination Location name or coordinates
-     * @param start Location name or coordinates
-     * @param options
-     * @returns {Promise<any>}
-     */
-    LaunchNavigator.navigate = function (destination, start, options) {
-        if (start === void 0) { start = null; }
-        return;
-    };
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 2,
-            errorIndex: 3
-        })
-    ], LaunchNavigator, "navigate", null);
-    LaunchNavigator = __decorate([
-        plugin_1.Plugin({
-            plugin: 'uk.co.workingedge.phonegap.plugin.launchnavigator',
-            pluginRef: 'launchnavigator',
-            repo: 'https://github.com/dpa99c/phonegap-launch-navigator.git'
-        })
-    ], LaunchNavigator);
-    return LaunchNavigator;
-}());
-exports.LaunchNavigator = LaunchNavigator;
-
-},{"./plugin":499}],496:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Local Notifications
- * @description
- * This plugin allows you to display local notifications on the device
- *
- * @usage
- * ```ts
- * import {LocalNotifications} from 'ionic-native';
- *
- *
- *
- * // Schedule a single notification
- * LocalNotifications.schedule({
- *   id: 1,
- *   text: "Single Notification",
- *   sound: isAndroid? 'file://sound.mp3': 'file://beep.caf'
- *   data: { secret: key }
- * });
- *
- *
- * // Schedule multiple notifications
- * LocalNotifications.schedule([{
- *    id: 1,
- *    text: "Multi Notification 1",
- *    sound: isAndroid ? 'file://sound.mp3': 'file://beep.caf',
- *    data: { secret:key }
- *   },{
- *    id: 2,
- *    title: "Local Notification Example",
- *    text: "Multi Notification 2",
- *    icon: "http://example.com/icon.png"
- * }]);
- *
- *
- * // Schedule delayed notification
- * LocalNotifications.schedule({
- *    text: "Delayed Notification",
- *    at: new Date(new Date().getTime() + 3600),
- *    led: "FF0000",
- *    sound: null
- * });
- * ```
- *
- */
-var LocalNotifications = (function () {
-    function LocalNotifications() {
-    }
-    /**
-     * Schedules a single or multiple notifications
-     * @param options
-     */
-    LocalNotifications.schedule = function (options) { };
-    /**
-     * Updates a previously scheduled notification. Must include the id in the options parameter.
-     * @param options
-     */
-    LocalNotifications.update = function (options) { };
-    /**
-     * Clears single or multiple notifications
-     * @param notificationId A single notification id, or an array of notification ids.
-     */
-    LocalNotifications.clear = function (notificationId) { return; };
-    /**
-     * Clears all notifications
-     */
-    LocalNotifications.clearAll = function () { return; };
-    /**
-     * Cancels single or multiple notifications
-     * @param notificationId A single notification id, or an array of notification ids.
-     */
-    LocalNotifications.cancel = function (notificationId) { return; };
-    /**
-     * Cancels all notifications
-     */
-    LocalNotifications.cancelAll = function () { return; };
-    /**
-     * Checks presence of a notification
-     * @param notificationId
-     */
-    LocalNotifications.isPresent = function (notificationId) { return; };
-    /**
-     * Checks is a notification is scheduled
-     * @param notificationId
-     */
-    LocalNotifications.isScheduled = function (notificationId) { return; };
-    /**
-     * Checks if a notification is triggered
-     * @param notificationId
-     */
-    LocalNotifications.isTriggered = function (notificationId) { return; };
-    /**
-     * Get all the notification ids
-     */
-    LocalNotifications.getAllIds = function () { return; };
-    /**
-     * Get the ids of triggered notifications
-     */
-    LocalNotifications.getTriggeredIds = function () { return; };
-    /**
-     * Get the ids of scheduled notifications
-     */
-    LocalNotifications.getScheduledIds = function () { return; };
-    /**
-     * Get a notification object
-     * @param notificationId The id of the notification to get
-     */
-    LocalNotifications.get = function (notificationId) { return; };
-    /**
-     * Get a scheduled notification object
-     * @param notificationId The id of the notification to get
-     */
-    LocalNotifications.getScheduled = function (notificationId) { return; };
-    /**
-     * Get a triggered notification object
-     * @param notificationId The id of the notification to get
-     */
-    LocalNotifications.getTriggered = function (notificationId) { return; };
-    /**
-     * Get all notification objects
-     */
-    LocalNotifications.getAll = function () { return; };
-    /**
-     * Get all scheduled notification objects
-     */
-    LocalNotifications.getAllScheduled = function () { return; };
-    /**
-     * Get all triggered notification objects
-     */
-    LocalNotifications.getAllTriggered = function () { return; };
-    /**
-     * Sets a callback for a specific event
-     * @param eventName The name of the event. Available events: schedule, trigger, click, update, clear, clearall, cancel, cancelall
-     * @param callback Call back function. All events return notification and state parameter. clear and clearall return state parameter only.
-     */
-    LocalNotifications.on = function (eventName, callback) { };
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], LocalNotifications, "schedule", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], LocalNotifications, "update", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "clear", null);
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 0,
-            errorIndex: 2
-        })
-    ], LocalNotifications, "clearAll", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "cancel", null);
-    __decorate([
-        plugin_1.Cordova({
-            successIndex: 0,
-            errorIndex: 2
-        })
-    ], LocalNotifications, "cancelAll", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "isPresent", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "isScheduled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "isTriggered", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "getAllIds", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "getTriggeredIds", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "getScheduledIds", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "get", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "getScheduled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "getTriggered", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "getAll", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "getAllScheduled", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], LocalNotifications, "getAllTriggered", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], LocalNotifications, "on", null);
-    LocalNotifications = __decorate([
-        plugin_1.Plugin({
-            plugin: 'de.appplant.cordova.plugin.local-notification',
-            pluginRef: 'cordova.plugins.notification.local',
-            repo: 'https://github.com/katzer/cordova-plugin-local-notifications'
-        })
-    ], LocalNotifications);
-    return LocalNotifications;
-}());
-exports.LocalNotifications = LocalNotifications;
-
-},{"./plugin":499}],497:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-var Observable_1 = require('rxjs/Observable');
-/**
- * @name MediaPlugin
- * @description
- * @usage
- * ```ts
- * import {MediaPlugin} from 'ionic-native';
- *
- *
- *
- * // Create a MediaPlugin instance.  Expects path to file or url as argument
- * var file = new MediaPlugin("path/to/file.mp3");
- *
- * // Catch the Success & Error Output
- * // Platform Quirks
- * // iOS calls success on completion of playback only
- * // Android calls success on completion of playback AND on release()
- * file.init.then(() => {
- *   console.log("Playback Finished");
- * }, (err) => {
- *   console.log("somthing went wrong! error code: "+err.code+" message: "+err.message);
- * });
- *
- * // play the file
- * file.play();
- *
- * // pause the file
- * file.pause();
- *
- * // get current playback position
- * file.getCurrentPosition().then((position) => {
- *   console.log(position);
- * });
- *
- * // get file duration
- * file.getDuration().then((duration) => {
- *   console.log(position);
- * });
- *
- * // skip to 10 seconds (expects int value in ms)
- * file.seekTo(10000);
- *
- * // stop playing the file
- * file.stop();
- *
- * // release the native audio resource
- * // Platform Quirks:
- * // iOS simply create a new instance and the old one will be overwritten
- * // Android you must call release() to destroy instances of media when you are done
- * file.release();
- *
- * // Recording to a file
- * var newFile = new MediaPlugin("path/to/file.mp3");
- * newFile.startRecord();
- *
- * newFile.stopRecord();
- *
- *
- *
- * ```
- */
-var MediaPlugin = (function () {
-    // Methods
-    /**
-     * Open a media file
-     * @param src {string} A URI containing the audio content.
-     */
-    function MediaPlugin(src) {
-        var res, rej, next;
-        this.init = new Promise(function (resolve, reject) { res = resolve; rej = reject; });
-        this.status = new Observable_1.Observable(function (observer) {
-            next = function (data) { return observer.next(data); };
-        });
-        this._objectInstance = new Media(src, res, rej, next);
-    }
-    /**
-     * Returns the current amplitude of the current recording.
-     */
-    MediaPlugin.prototype.getCurrentAmplitude = function () { return; };
-    /**
-     * Returns the current position within an audio file. Also updates the Media object's position parameter.
-     */
-    MediaPlugin.prototype.getCurrentPosition = function () { return; };
-    /**
-     * Returns the duration of an audio file in seconds. If the duration is unknown, it returns a value of -1.
-     */
-    MediaPlugin.prototype.getDuration = function () { return; };
-    /**
-     * Starts or resumes playing an audio file.
-     */
-    MediaPlugin.prototype.play = function (iosOptions) { };
-    /**
-     * Pauses playing an audio file.
-     */
-    MediaPlugin.prototype.pause = function () { };
-    /**
-     * Releases the underlying operating system's audio resources. This is particularly important for Android, since there are a finite amount of OpenCore instances for media playback. Applications should call the release function for any Media resource that is no longer needed.
-     */
-    MediaPlugin.prototype.release = function () { };
-    /**
-     * Sets the current position within an audio file.
-     * @param milliseconds
-     */
-    MediaPlugin.prototype.seekTo = function (milliseconds) { };
-    /**
-     * Set the volume for an audio file.
-     * @param volume The volume to set for playback. The value must be within the range of 0.0 to 1.0.
-     */
-    MediaPlugin.prototype.setVolume = function (volume) { };
-    /**
-     * Starts recording an audio file.
-     */
-    MediaPlugin.prototype.startRecord = function () { };
-    /**
-     * Stops recording
-     */
-    MediaPlugin.prototype.stopRecord = function () { };
-    /**
-     * Stops playing an audio file.
-     */
-    MediaPlugin.prototype.stop = function () { };
-    // Constants
-    MediaPlugin.MEDIA_NONE = 0;
-    MediaPlugin.MEDIA_STARTING = 1;
-    MediaPlugin.MEDIA_RUNNING = 2;
-    MediaPlugin.MEDIA_PAUSED = 3;
-    MediaPlugin.MEDIA_STOPPED = 4;
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], MediaPlugin.prototype, "getCurrentAmplitude", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], MediaPlugin.prototype, "getCurrentPosition", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], MediaPlugin.prototype, "getDuration", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], MediaPlugin.prototype, "play", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], MediaPlugin.prototype, "pause", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], MediaPlugin.prototype, "release", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], MediaPlugin.prototype, "seekTo", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], MediaPlugin.prototype, "setVolume", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], MediaPlugin.prototype, "startRecord", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], MediaPlugin.prototype, "stopRecord", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], MediaPlugin.prototype, "stop", null);
-    MediaPlugin = __decorate([
-        plugin_1.Plugin({
-            repo: 'https://github.com/apache/cordova-plugin-media',
-            plugin: 'cordova-plugin-media',
-            pluginRef: 'Media'
-        })
-    ], MediaPlugin);
-    return MediaPlugin;
-}());
-exports.MediaPlugin = MediaPlugin;
-var MediaError = (function () {
-    function MediaError() {
-    }
-    Object.defineProperty(MediaError, "MEDIA_ERR_ABORTED", {
-        get: function () { return 1; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(MediaError, "MEDIA_ERR_NETWORK", {
-        get: function () { return 2; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(MediaError, "MEDIA_ERR_DECODE", {
-        get: function () { return 3; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(MediaError, "MEDIA_ERR_NONE_SUPPORTED", {
-        get: function () { return 4; },
-        enumerable: true,
-        configurable: true
-    });
-    return MediaError;
-}());
-exports.MediaError = MediaError;
-
-},{"./plugin":499,"rxjs/Observable":519}],498:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Network
- * @description
- * Requires Cordova plugin: cordova-plugin-network-information. For more info, please see the [Network plugin docs](https://github.com/apache/cordova-plugin-network-information).
- *
- * @usage
- * ```js
- * import {Network, Connection} from 'ionic-native';
- *
- * // watch network for a disconnect
- * let disconnectSubscription = Network.onDisconnect().subscribe(() => {
- *   console.log('network was disconnected :-( ')
- * });
- *
- * // stop disconnect watch
- * disconnectSubscription.unsubscribe();
- *
- *
- * // watch network for a connection
- * let connectSubscription = Network.onConnect().subscribe(() => {
- *   console.log('network connected!');
-*
- *   // We just got a connection but we need to wait briefly
- *
-// before we determine the connection type.  Might need to wait
-
- *   // prior to doing any api requests as well.
- *   setTimeout(() => {
- *     console.log(Network.connection);
- *     if (Network.connection === Connection.WIFI) {
- *       console.log('we got a wifi connection, woohoo!');
- *     }
- *   }, 3000);
- * });
- *
- * // stop connect watch
- * connectSubscription.unsubscribe();
- *
- * ```
- */
-var Network = (function () {
-    function Network() {
-    }
-    Object.defineProperty(Network, "connection", {
-        /**
-         * Return the network connection type
-         */
-        get: function () { return navigator.connection.type; },
-        enumerable: true,
-        configurable: true
-    });
-    /**
-     * Get notified when the device goes offline
-     * @returns {Observable<any>} Returns an observable.
-     */
-    Network.onDisconnect = function () { return; };
-    /**
-     * Get notified when the device goes online
-     * @returns {Observable<any>} Returns an observable.
-     */
-    Network.onConnect = function () { return; };
-    __decorate([
-        plugin_1.CordovaProperty
-    ], Network, "connection", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'offline'
-        })
-    ], Network, "onDisconnect", null);
-    __decorate([
-        plugin_1.Cordova({
-            eventObservable: true,
-            event: 'online'
-        })
-    ], Network, "onConnect", null);
-    Network = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-network-information',
-            repo: 'https://github.com/apache/cordova-plugin-network-information',
-            platforms: ['Amazon Fire OS', 'iOS', 'Android', 'BlackBerry 10', 'Windows Phone 7', 'Windows Phone 8', 'Windows', 'Firefox OS', 'Browser'],
-            pluginRef: 'navigator.connection'
-        })
-    ], Network);
-    return Network;
-}());
-exports.Network = Network;
-var Connection = (function () {
-    function Connection() {
-    }
-    Object.defineProperty(Connection, "UNKNOWN", {
-        get: function () { return 'unknown'; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Connection, "ETHERNET", {
-        get: function () { return 'ethernet'; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Connection, "WIFI", {
-        get: function () { return 'wifi'; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Connection, "CELL_2G", {
-        get: function () { return '2g'; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Connection, "CELL_3G", {
-        get: function () { return '3g'; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Connection, "CELL_4G", {
-        get: function () { return '4g'; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Connection, "CELL", {
-        get: function () { return 'cellular'; },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(Connection, "NONE", {
-        get: function () { return 'none'; },
-        enumerable: true,
-        configurable: true
-    });
-    return Connection;
-}());
-exports.Connection = Connection;
-
-},{"./plugin":499}],499:[function(require,module,exports){
-"use strict";
-var util_1 = require('../util');
-var Observable_1 = require('rxjs/Observable');
-/**
- * @private
- * @param pluginRef
- * @returns {null|*}
- */
-exports.getPlugin = function (pluginRef) {
-    return util_1.get(window, pluginRef);
-};
-/**
- * @private
- * @param pluginObj
- * @param method
- */
-exports.pluginWarn = function (pluginObj, method) {
-    var pluginName = pluginObj.name, plugin = pluginObj.plugin;
-    if (method)
-        console.warn('Native: tried calling ' + pluginName + '.' + method + ', but the ' + pluginName + ' plugin is not installed.');
-    else
-        console.warn('Native: tried accessing the ' + pluginName + ' plugin but it\'s not installed.');
-    console.warn('Install the ' + pluginName + ' plugin: \'ionic plugin add ' + plugin + '\'');
-};
-/**
- * @private
- * @param pluginName
- * @param method
- */
-exports.cordovaWarn = function (pluginName, method) {
-    if (method)
-        console.warn('Native: tried calling ' + pluginName + '.' + method + ', but Cordova is not available. Make sure to include cordova.js or run in a device/simulator');
-    else
-        console.warn('Native: tried accessing the ' + pluginName + ' plugin but Cordova is not available. Make sure to include cordova.js or run in a device/simulator');
-};
-function setIndex(args, opts, resolve, reject) {
-    if (opts === void 0) { opts = {}; }
-    // If the plugin method expects myMethod(success, err, options)
-    if (opts.callbackOrder === 'reverse') {
-        // Get those arguments in the order [resolve, reject, ...restOfArgs]
-        args.unshift(reject);
-        args.unshift(resolve);
-    }
-    else if (typeof opts.successIndex !== 'undefined' || typeof opts.errorIndex !== 'undefined') {
-        // If we've specified a success/error index
-        args.splice(opts.successIndex, 0, resolve);
-        args.splice(opts.errorIndex, 0, reject);
-    }
-    else {
-        // Otherwise, let's tack them on to the end of the argument list
-        // which is 90% of cases
-        args.push(resolve);
-        args.push(reject);
-    }
-    return args;
-}
-function callCordovaPlugin(pluginObj, methodName, args, opts, resolve, reject) {
-    if (opts === void 0) { opts = {}; }
-    // Try to figure out where the success/error callbacks need to be bound
-    // to our promise resolve/reject handlers.
-    args = setIndex(args, opts, resolve, reject);
-    var pluginInstance = exports.getPlugin(pluginObj.pluginRef);
-    if (!pluginInstance) {
-        // Do this check in here in the case that the Web API for this plugin is available (for example, Geolocation).
-        if (!window.cordova) {
-            exports.cordovaWarn(pluginObj.name, methodName);
-            return {
-                error: 'cordova_not_available'
-            };
-        }
-        exports.pluginWarn(pluginObj, methodName);
-        return {
-            error: 'plugin_not_installed'
-        };
-    }
-    // TODO: Illegal invocation needs window context
-    return util_1.get(window, pluginObj.pluginRef)[methodName].apply(pluginInstance, args);
-}
-function getPromise(cb) {
-    if (window.Promise) {
-        return new Promise(function (resolve, reject) {
-            cb(resolve, reject);
-        });
-    }
-    else if (window.angular) {
-        var $q_1 = window.angular.injector(['ng']).get('$q');
-        return $q_1(function (resolve, reject) {
-            cb(resolve, reject);
-        });
-    }
-    else {
-        console.error('No Promise support or polyfill found. To enable Ionic Native support, please add the es6-promise polyfill before this script, or run with a library like Angular 1/2 or on a recent browser.');
-    }
-}
-function wrapPromise(pluginObj, methodName, args, opts) {
-    if (opts === void 0) { opts = {}; }
-    var pluginResult, rej;
-    var p = getPromise(function (resolve, reject) {
-        pluginResult = callCordovaPlugin(pluginObj, methodName, args, opts, resolve, reject);
-        rej = reject;
-    });
-    // Angular throws an error on unhandled rejection, but in this case we have already printed
-    // a warning that Cordova is undefined or the plugin is uninstalled, so there is no reason
-    // to error
-    if (pluginResult && pluginResult.error) {
-        p.catch(function () { });
-        rej(pluginResult.error);
-    }
-    return p;
-}
-function wrapObservable(pluginObj, methodName, args, opts) {
-    if (opts === void 0) { opts = {}; }
-    return new Observable_1.Observable(function (observer) {
-        var pluginResult = callCordovaPlugin(pluginObj, methodName, args, opts, observer.next.bind(observer), observer.error.bind(observer));
-        if (pluginResult && pluginResult.error) {
-            observer.error(pluginResult.error);
-        }
-        return function () {
+    // Internal: Determines whether the native `JSON.stringify` and `parse`
+    // implementations are spec-compliant. Based on work by Ken Snyder.
+    function has(name) {
+      if (has[name] !== undef) {
+        // Return cached feature test result.
+        return has[name];
+      }
+      var isSupported;
+      if (name == "bug-string-char-index") {
+        // IE <= 7 doesn't support accessing string characters using square
+        // bracket notation. IE 8 only supports this for primitives.
+        isSupported = "a"[0] != "a";
+      } else if (name == "json") {
+        // Indicates whether both `JSON.stringify` and `JSON.parse` are
+        // supported.
+        isSupported = has("json-stringify") && has("json-parse");
+      } else {
+        var value, serialized = '{"a":[1,true,false,null,"\\u0000\\b\\n\\f\\r\\t"]}';
+        // Test `JSON.stringify`.
+        if (name == "json-stringify") {
+          var stringify = exports.stringify, stringifySupported = typeof stringify == "function" && isExtended;
+          if (stringifySupported) {
+            // A test function object with a custom `toJSON` method.
+            (value = function () {
+              return 1;
+            }).toJSON = value;
             try {
-                if (opts.clearFunction) {
-                    if (opts.clearWithArgs) {
-                        return util_1.get(window, pluginObj.pluginRef)[opts.clearFunction].apply(pluginObj, args);
-                    }
-                    return util_1.get(window, pluginObj.pluginRef)[opts.clearFunction].call(pluginObj, pluginResult);
-                }
+              stringifySupported =
+                // Firefox 3.1b1 and b2 serialize string, number, and boolean
+                // primitives as object literals.
+                stringify(0) === "0" &&
+                // FF 3.1b1, b2, and JSON 2 serialize wrapped primitives as object
+                // literals.
+                stringify(new Number()) === "0" &&
+                stringify(new String()) == '""' &&
+                // FF 3.1b1, 2 throw an error if the value is `null`, `undefined`, or
+                // does not define a canonical JSON representation (this applies to
+                // objects with `toJSON` properties as well, *unless* they are nested
+                // within an object or array).
+                stringify(getClass) === undef &&
+                // IE 8 serializes `undefined` as `"undefined"`. Safari <= 5.1.7 and
+                // FF 3.1b3 pass this test.
+                stringify(undef) === undef &&
+                // Safari <= 5.1.7 and FF 3.1b3 throw `Error`s and `TypeError`s,
+                // respectively, if the value is omitted entirely.
+                stringify() === undef &&
+                // FF 3.1b1, 2 throw an error if the given value is not a number,
+                // string, array, object, Boolean, or `null` literal. This applies to
+                // objects with custom `toJSON` methods as well, unless they are nested
+                // inside object or array literals. YUI 3.0.0b1 ignores custom `toJSON`
+                // methods entirely.
+                stringify(value) === "1" &&
+                stringify([value]) == "[1]" &&
+                // Prototype <= 1.6.1 serializes `[undefined]` as `"[]"` instead of
+                // `"[null]"`.
+                stringify([undef]) == "[null]" &&
+                // YUI 3.0.0b1 fails to serialize `null` literals.
+                stringify(null) == "null" &&
+                // FF 3.1b1, 2 halts serialization if an array contains a function:
+                // `[1, true, getClass, 1]` serializes as "[1,true,],". FF 3.1b3
+                // elides non-JSON values from objects and arrays, unless they
+                // define custom `toJSON` methods.
+                stringify([undef, getClass, null]) == "[null,null,null]" &&
+                // Simple serialization test. FF 3.1b1 uses Unicode escape sequences
+                // where character escape codes are expected (e.g., `\b` => `\u0008`).
+                stringify({ "a": [value, true, false, null, "\x00\b\n\f\r\t"] }) == serialized &&
+                // FF 3.1b1 and b2 ignore the `filter` and `width` arguments.
+                stringify(null, value) === "1" &&
+                stringify([1, 2], null, 1) == "[\n 1,\n 2\n]" &&
+                // JSON 2, Prototype <= 1.7, and older WebKit builds incorrectly
+                // serialize extended years.
+                stringify(new Date(-8.64e15)) == '"-271821-04-20T00:00:00.000Z"' &&
+                // The milliseconds are optional in ES 5, but required in 5.1.
+                stringify(new Date(8.64e15)) == '"+275760-09-13T00:00:00.000Z"' &&
+                // Firefox <= 11.0 incorrectly serializes years prior to 0 as negative
+                // four-digit years instead of six-digit years. Credits: @Yaffle.
+                stringify(new Date(-621987552e5)) == '"-000001-01-01T00:00:00.000Z"' &&
+                // Safari <= 5.1.5 and Opera >= 10.53 incorrectly serialize millisecond
+                // values less than 1000. Credits: @Yaffle.
+                stringify(new Date(-1)) == '"1969-12-31T23:59:59.999Z"';
+            } catch (exception) {
+              stringifySupported = false;
             }
-            catch (e) {
-                console.warn('Unable to clear the previous observable watch for', pluginObj.name, methodName);
-                console.error(e);
-            }
-        };
-    });
-}
-function callInstance(pluginObj, methodName, args, opts, resolve, reject) {
-    if (opts === void 0) { opts = {}; }
-    args = setIndex(args, opts, resolve, reject);
-    return pluginObj._objectInstance[methodName].apply(pluginObj._objectInstance, args);
-}
-function wrapInstance(pluginObj, methodName, opts) {
-    if (opts === void 0) { opts = {}; }
-    return function () {
-        var args = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            args[_i - 0] = arguments[_i];
+          }
+          isSupported = stringifySupported;
         }
-        if (opts.sync) {
-            return callInstance(pluginObj, methodName, args, opts);
-        }
-        else if (opts.observable) {
-            return new Observable_1.Observable(function (observer) {
-                var pluginResult = callInstance(pluginObj, methodName, args, opts, observer.next.bind(observer), observer.error.bind(observer));
-                return function () {
+        // Test `JSON.parse`.
+        if (name == "json-parse") {
+          var parse = exports.parse;
+          if (typeof parse == "function") {
+            try {
+              // FF 3.1b1, b2 will throw an exception if a bare literal is provided.
+              // Conforming implementations should also coerce the initial argument to
+              // a string prior to parsing.
+              if (parse("0") === 0 && !parse(false)) {
+                // Simple parsing test.
+                value = parse(serialized);
+                var parseSupported = value["a"].length == 5 && value["a"][0] === 1;
+                if (parseSupported) {
+                  try {
+                    // Safari <= 5.1.2 and FF 3.1b1 allow unescaped tabs in strings.
+                    parseSupported = !parse('"\t"');
+                  } catch (exception) {}
+                  if (parseSupported) {
                     try {
-                        if (opts.clearWithArgs) {
-                            return pluginObj._objectInstance[opts.clearFunction].apply(pluginObj._objectInstance, args);
+                      // FF 4.0 and 4.0.1 allow leading `+` signs and leading
+                      // decimal points. FF 4.0, 4.0.1, and IE 9-10 also allow
+                      // certain octal literals.
+                      parseSupported = parse("01") !== 1;
+                    } catch (exception) {}
+                  }
+                  if (parseSupported) {
+                    try {
+                      // FF 4.0, 4.0.1, and Rhino 1.7R3-R4 allow trailing decimal
+                      // points. These environments, along with FF 3.1b1 and 2,
+                      // also allow trailing commas in JSON objects and arrays.
+                      parseSupported = parse("1.") !== 1;
+                    } catch (exception) {}
+                  }
+                }
+              }
+            } catch (exception) {
+              parseSupported = false;
+            }
+          }
+          isSupported = parseSupported;
+        }
+      }
+      return has[name] = !!isSupported;
+    }
+
+    if (!has("json")) {
+      // Common `[[Class]]` name aliases.
+      var functionClass = "[object Function]",
+          dateClass = "[object Date]",
+          numberClass = "[object Number]",
+          stringClass = "[object String]",
+          arrayClass = "[object Array]",
+          booleanClass = "[object Boolean]";
+
+      // Detect incomplete support for accessing string characters by index.
+      var charIndexBuggy = has("bug-string-char-index");
+
+      // Define additional utility methods if the `Date` methods are buggy.
+      if (!isExtended) {
+        var floor = Math.floor;
+        // A mapping between the months of the year and the number of days between
+        // January 1st and the first of the respective month.
+        var Months = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+        // Internal: Calculates the number of days between the Unix epoch and the
+        // first day of the given month.
+        var getDay = function (year, month) {
+          return Months[month] + 365 * (year - 1970) + floor((year - 1969 + (month = +(month > 1))) / 4) - floor((year - 1901 + month) / 100) + floor((year - 1601 + month) / 400);
+        };
+      }
+
+      // Internal: Determines if a property is a direct property of the given
+      // object. Delegates to the native `Object#hasOwnProperty` method.
+      if (!(isProperty = objectProto.hasOwnProperty)) {
+        isProperty = function (property) {
+          var members = {}, constructor;
+          if ((members.__proto__ = null, members.__proto__ = {
+            // The *proto* property cannot be set multiple times in recent
+            // versions of Firefox and SeaMonkey.
+            "toString": 1
+          }, members).toString != getClass) {
+            // Safari <= 2.0.3 doesn't implement `Object#hasOwnProperty`, but
+            // supports the mutable *proto* property.
+            isProperty = function (property) {
+              // Capture and break the object's prototype chain (see section 8.6.2
+              // of the ES 5.1 spec). The parenthesized expression prevents an
+              // unsafe transformation by the Closure Compiler.
+              var original = this.__proto__, result = property in (this.__proto__ = null, this);
+              // Restore the original prototype chain.
+              this.__proto__ = original;
+              return result;
+            };
+          } else {
+            // Capture a reference to the top-level `Object` constructor.
+            constructor = members.constructor;
+            // Use the `constructor` property to simulate `Object#hasOwnProperty` in
+            // other environments.
+            isProperty = function (property) {
+              var parent = (this.constructor || constructor).prototype;
+              return property in this && !(property in parent && this[property] === parent[property]);
+            };
+          }
+          members = null;
+          return isProperty.call(this, property);
+        };
+      }
+
+      // Internal: Normalizes the `for...in` iteration algorithm across
+      // environments. Each enumerated key is yielded to a `callback` function.
+      forEach = function (object, callback) {
+        var size = 0, Properties, members, property;
+
+        // Tests for bugs in the current environment's `for...in` algorithm. The
+        // `valueOf` property inherits the non-enumerable flag from
+        // `Object.prototype` in older versions of IE, Netscape, and Mozilla.
+        (Properties = function () {
+          this.valueOf = 0;
+        }).prototype.valueOf = 0;
+
+        // Iterate over a new instance of the `Properties` class.
+        members = new Properties();
+        for (property in members) {
+          // Ignore all properties inherited from `Object.prototype`.
+          if (isProperty.call(members, property)) {
+            size++;
+          }
+        }
+        Properties = members = null;
+
+        // Normalize the iteration algorithm.
+        if (!size) {
+          // A list of non-enumerable properties inherited from `Object.prototype`.
+          members = ["valueOf", "toString", "toLocaleString", "propertyIsEnumerable", "isPrototypeOf", "hasOwnProperty", "constructor"];
+          // IE <= 8, Mozilla 1.0, and Netscape 6.2 ignore shadowed non-enumerable
+          // properties.
+          forEach = function (object, callback) {
+            var isFunction = getClass.call(object) == functionClass, property, length;
+            var hasProperty = !isFunction && typeof object.constructor != "function" && objectTypes[typeof object.hasOwnProperty] && object.hasOwnProperty || isProperty;
+            for (property in object) {
+              // Gecko <= 1.0 enumerates the `prototype` property of functions under
+              // certain conditions; IE does not.
+              if (!(isFunction && property == "prototype") && hasProperty.call(object, property)) {
+                callback(property);
+              }
+            }
+            // Manually invoke the callback for each non-enumerable property.
+            for (length = members.length; property = members[--length]; hasProperty.call(object, property) && callback(property));
+          };
+        } else if (size == 2) {
+          // Safari <= 2.0.4 enumerates shadowed properties twice.
+          forEach = function (object, callback) {
+            // Create a set of iterated properties.
+            var members = {}, isFunction = getClass.call(object) == functionClass, property;
+            for (property in object) {
+              // Store each property name to prevent double enumeration. The
+              // `prototype` property of functions is not enumerated due to cross-
+              // environment inconsistencies.
+              if (!(isFunction && property == "prototype") && !isProperty.call(members, property) && (members[property] = 1) && isProperty.call(object, property)) {
+                callback(property);
+              }
+            }
+          };
+        } else {
+          // No bugs detected; use the standard `for...in` algorithm.
+          forEach = function (object, callback) {
+            var isFunction = getClass.call(object) == functionClass, property, isConstructor;
+            for (property in object) {
+              if (!(isFunction && property == "prototype") && isProperty.call(object, property) && !(isConstructor = property === "constructor")) {
+                callback(property);
+              }
+            }
+            // Manually invoke the callback for the `constructor` property due to
+            // cross-environment inconsistencies.
+            if (isConstructor || isProperty.call(object, (property = "constructor"))) {
+              callback(property);
+            }
+          };
+        }
+        return forEach(object, callback);
+      };
+
+      // Public: Serializes a JavaScript `value` as a JSON string. The optional
+      // `filter` argument may specify either a function that alters how object and
+      // array members are serialized, or an array of strings and numbers that
+      // indicates which properties should be serialized. The optional `width`
+      // argument may be either a string or number that specifies the indentation
+      // level of the output.
+      if (!has("json-stringify")) {
+        // Internal: A map of control characters and their escaped equivalents.
+        var Escapes = {
+          92: "\\\\",
+          34: '\\"',
+          8: "\\b",
+          12: "\\f",
+          10: "\\n",
+          13: "\\r",
+          9: "\\t"
+        };
+
+        // Internal: Converts `value` into a zero-padded string such that its
+        // length is at least equal to `width`. The `width` must be <= 6.
+        var leadingZeroes = "000000";
+        var toPaddedString = function (width, value) {
+          // The `|| 0` expression is necessary to work around a bug in
+          // Opera <= 7.54u2 where `0 == -0`, but `String(-0) !== "0"`.
+          return (leadingZeroes + (value || 0)).slice(-width);
+        };
+
+        // Internal: Double-quotes a string `value`, replacing all ASCII control
+        // characters (characters with code unit values between 0 and 31) with
+        // their escaped equivalents. This is an implementation of the
+        // `Quote(value)` operation defined in ES 5.1 section 15.12.3.
+        var unicodePrefix = "\\u00";
+        var quote = function (value) {
+          var result = '"', index = 0, length = value.length, useCharIndex = !charIndexBuggy || length > 10;
+          var symbols = useCharIndex && (charIndexBuggy ? value.split("") : value);
+          for (; index < length; index++) {
+            var charCode = value.charCodeAt(index);
+            // If the character is a control character, append its Unicode or
+            // shorthand escape sequence; otherwise, append the character as-is.
+            switch (charCode) {
+              case 8: case 9: case 10: case 12: case 13: case 34: case 92:
+                result += Escapes[charCode];
+                break;
+              default:
+                if (charCode < 32) {
+                  result += unicodePrefix + toPaddedString(2, charCode.toString(16));
+                  break;
+                }
+                result += useCharIndex ? symbols[index] : value.charAt(index);
+            }
+          }
+          return result + '"';
+        };
+
+        // Internal: Recursively serializes an object. Implements the
+        // `Str(key, holder)`, `JO(value)`, and `JA(value)` operations.
+        var serialize = function (property, object, callback, properties, whitespace, indentation, stack) {
+          var value, className, year, month, date, time, hours, minutes, seconds, milliseconds, results, element, index, length, prefix, result;
+          try {
+            // Necessary for host object support.
+            value = object[property];
+          } catch (exception) {}
+          if (typeof value == "object" && value) {
+            className = getClass.call(value);
+            if (className == dateClass && !isProperty.call(value, "toJSON")) {
+              if (value > -1 / 0 && value < 1 / 0) {
+                // Dates are serialized according to the `Date#toJSON` method
+                // specified in ES 5.1 section 15.9.5.44. See section 15.9.1.15
+                // for the ISO 8601 date time string format.
+                if (getDay) {
+                  // Manually compute the year, month, date, hours, minutes,
+                  // seconds, and milliseconds if the `getUTC*` methods are
+                  // buggy. Adapted from @Yaffle's `date-shim` project.
+                  date = floor(value / 864e5);
+                  for (year = floor(date / 365.2425) + 1970 - 1; getDay(year + 1, 0) <= date; year++);
+                  for (month = floor((date - getDay(year, 0)) / 30.42); getDay(year, month + 1) <= date; month++);
+                  date = 1 + date - getDay(year, month);
+                  // The `time` value specifies the time within the day (see ES
+                  // 5.1 section 15.9.1.2). The formula `(A % B + B) % B` is used
+                  // to compute `A modulo B`, as the `%` operator does not
+                  // correspond to the `modulo` operation for negative numbers.
+                  time = (value % 864e5 + 864e5) % 864e5;
+                  // The hours, minutes, seconds, and milliseconds are obtained by
+                  // decomposing the time within the day. See section 15.9.1.10.
+                  hours = floor(time / 36e5) % 24;
+                  minutes = floor(time / 6e4) % 60;
+                  seconds = floor(time / 1e3) % 60;
+                  milliseconds = time % 1e3;
+                } else {
+                  year = value.getUTCFullYear();
+                  month = value.getUTCMonth();
+                  date = value.getUTCDate();
+                  hours = value.getUTCHours();
+                  minutes = value.getUTCMinutes();
+                  seconds = value.getUTCSeconds();
+                  milliseconds = value.getUTCMilliseconds();
+                }
+                // Serialize extended years correctly.
+                value = (year <= 0 || year >= 1e4 ? (year < 0 ? "-" : "+") + toPaddedString(6, year < 0 ? -year : year) : toPaddedString(4, year)) +
+                  "-" + toPaddedString(2, month + 1) + "-" + toPaddedString(2, date) +
+                  // Months, dates, hours, minutes, and seconds should have two
+                  // digits; milliseconds should have three.
+                  "T" + toPaddedString(2, hours) + ":" + toPaddedString(2, minutes) + ":" + toPaddedString(2, seconds) +
+                  // Milliseconds are optional in ES 5.0, but required in 5.1.
+                  "." + toPaddedString(3, milliseconds) + "Z";
+              } else {
+                value = null;
+              }
+            } else if (typeof value.toJSON == "function" && ((className != numberClass && className != stringClass && className != arrayClass) || isProperty.call(value, "toJSON"))) {
+              // Prototype <= 1.6.1 adds non-standard `toJSON` methods to the
+              // `Number`, `String`, `Date`, and `Array` prototypes. JSON 3
+              // ignores all `toJSON` methods on these objects unless they are
+              // defined directly on an instance.
+              value = value.toJSON(property);
+            }
+          }
+          if (callback) {
+            // If a replacement function was provided, call it to obtain the value
+            // for serialization.
+            value = callback.call(object, property, value);
+          }
+          if (value === null) {
+            return "null";
+          }
+          className = getClass.call(value);
+          if (className == booleanClass) {
+            // Booleans are represented literally.
+            return "" + value;
+          } else if (className == numberClass) {
+            // JSON numbers must be finite. `Infinity` and `NaN` are serialized as
+            // `"null"`.
+            return value > -1 / 0 && value < 1 / 0 ? "" + value : "null";
+          } else if (className == stringClass) {
+            // Strings are double-quoted and escaped.
+            return quote("" + value);
+          }
+          // Recursively serialize objects and arrays.
+          if (typeof value == "object") {
+            // Check for cyclic structures. This is a linear search; performance
+            // is inversely proportional to the number of unique nested objects.
+            for (length = stack.length; length--;) {
+              if (stack[length] === value) {
+                // Cyclic structures cannot be serialized by `JSON.stringify`.
+                throw TypeError();
+              }
+            }
+            // Add the object to the stack of traversed objects.
+            stack.push(value);
+            results = [];
+            // Save the current indentation level and indent one additional level.
+            prefix = indentation;
+            indentation += whitespace;
+            if (className == arrayClass) {
+              // Recursively serialize array elements.
+              for (index = 0, length = value.length; index < length; index++) {
+                element = serialize(index, value, callback, properties, whitespace, indentation, stack);
+                results.push(element === undef ? "null" : element);
+              }
+              result = results.length ? (whitespace ? "[\n" + indentation + results.join(",\n" + indentation) + "\n" + prefix + "]" : ("[" + results.join(",") + "]")) : "[]";
+            } else {
+              // Recursively serialize object members. Members are selected from
+              // either a user-specified list of property names, or the object
+              // itself.
+              forEach(properties || value, function (property) {
+                var element = serialize(property, value, callback, properties, whitespace, indentation, stack);
+                if (element !== undef) {
+                  // According to ES 5.1 section 15.12.3: "If `gap` {whitespace}
+                  // is not the empty string, let `member` {quote(property) + ":"}
+                  // be the concatenation of `member` and the `space` character."
+                  // The "`space` character" refers to the literal space
+                  // character, not the `space` {width} argument provided to
+                  // `JSON.stringify`.
+                  results.push(quote(property) + ":" + (whitespace ? " " : "") + element);
+                }
+              });
+              result = results.length ? (whitespace ? "{\n" + indentation + results.join(",\n" + indentation) + "\n" + prefix + "}" : ("{" + results.join(",") + "}")) : "{}";
+            }
+            // Remove the object from the traversed object stack.
+            stack.pop();
+            return result;
+          }
+        };
+
+        // Public: `JSON.stringify`. See ES 5.1 section 15.12.3.
+        exports.stringify = function (source, filter, width) {
+          var whitespace, callback, properties, className;
+          if (objectTypes[typeof filter] && filter) {
+            if ((className = getClass.call(filter)) == functionClass) {
+              callback = filter;
+            } else if (className == arrayClass) {
+              // Convert the property names array into a makeshift set.
+              properties = {};
+              for (var index = 0, length = filter.length, value; index < length; value = filter[index++], ((className = getClass.call(value)), className == stringClass || className == numberClass) && (properties[value] = 1));
+            }
+          }
+          if (width) {
+            if ((className = getClass.call(width)) == numberClass) {
+              // Convert the `width` to an integer and create a string containing
+              // `width` number of space characters.
+              if ((width -= width % 1) > 0) {
+                for (whitespace = "", width > 10 && (width = 10); whitespace.length < width; whitespace += " ");
+              }
+            } else if (className == stringClass) {
+              whitespace = width.length <= 10 ? width : width.slice(0, 10);
+            }
+          }
+          // Opera <= 7.54u2 discards the values associated with empty string keys
+          // (`""`) only if they are used directly within an object member list
+          // (e.g., `!("" in { "": 1})`).
+          return serialize("", (value = {}, value[""] = source, value), callback, properties, whitespace, "", []);
+        };
+      }
+
+      // Public: Parses a JSON source string.
+      if (!has("json-parse")) {
+        var fromCharCode = String.fromCharCode;
+
+        // Internal: A map of escaped control characters and their unescaped
+        // equivalents.
+        var Unescapes = {
+          92: "\\",
+          34: '"',
+          47: "/",
+          98: "\b",
+          116: "\t",
+          110: "\n",
+          102: "\f",
+          114: "\r"
+        };
+
+        // Internal: Stores the parser state.
+        var Index, Source;
+
+        // Internal: Resets the parser state and throws a `SyntaxError`.
+        var abort = function () {
+          Index = Source = null;
+          throw SyntaxError();
+        };
+
+        // Internal: Returns the next token, or `"$"` if the parser has reached
+        // the end of the source string. A token may be a string, number, `null`
+        // literal, or Boolean literal.
+        var lex = function () {
+          var source = Source, length = source.length, value, begin, position, isSigned, charCode;
+          while (Index < length) {
+            charCode = source.charCodeAt(Index);
+            switch (charCode) {
+              case 9: case 10: case 13: case 32:
+                // Skip whitespace tokens, including tabs, carriage returns, line
+                // feeds, and space characters.
+                Index++;
+                break;
+              case 123: case 125: case 91: case 93: case 58: case 44:
+                // Parse a punctuator token (`{`, `}`, `[`, `]`, `:`, or `,`) at
+                // the current position.
+                value = charIndexBuggy ? source.charAt(Index) : source[Index];
+                Index++;
+                return value;
+              case 34:
+                // `"` delimits a JSON string; advance to the next character and
+                // begin parsing the string. String tokens are prefixed with the
+                // sentinel `@` character to distinguish them from punctuators and
+                // end-of-string tokens.
+                for (value = "@", Index++; Index < length;) {
+                  charCode = source.charCodeAt(Index);
+                  if (charCode < 32) {
+                    // Unescaped ASCII control characters (those with a code unit
+                    // less than the space character) are not permitted.
+                    abort();
+                  } else if (charCode == 92) {
+                    // A reverse solidus (`\`) marks the beginning of an escaped
+                    // control character (including `"`, `\`, and `/`) or Unicode
+                    // escape sequence.
+                    charCode = source.charCodeAt(++Index);
+                    switch (charCode) {
+                      case 92: case 34: case 47: case 98: case 116: case 110: case 102: case 114:
+                        // Revive escaped control characters.
+                        value += Unescapes[charCode];
+                        Index++;
+                        break;
+                      case 117:
+                        // `\u` marks the beginning of a Unicode escape sequence.
+                        // Advance to the first character and validate the
+                        // four-digit code point.
+                        begin = ++Index;
+                        for (position = Index + 4; Index < position; Index++) {
+                          charCode = source.charCodeAt(Index);
+                          // A valid sequence comprises four hexdigits (case-
+                          // insensitive) that form a single hexadecimal value.
+                          if (!(charCode >= 48 && charCode <= 57 || charCode >= 97 && charCode <= 102 || charCode >= 65 && charCode <= 70)) {
+                            // Invalid Unicode escape sequence.
+                            abort();
+                          }
                         }
-                        return pluginObj._objectInstance[opts.clearFunction].call(pluginObj, pluginResult);
+                        // Revive the escaped character.
+                        value += fromCharCode("0x" + source.slice(begin, Index));
+                        break;
+                      default:
+                        // Invalid escape sequence.
+                        abort();
                     }
-                    catch (e) {
-                        console.warn('Unable to clear the previous observable watch for', pluginObj.name, methodName);
-                        console.error(e);
+                  } else {
+                    if (charCode == 34) {
+                      // An unescaped double-quote character marks the end of the
+                      // string.
+                      break;
                     }
-                };
-            });
-        }
-        else {
-            return getPromise(function (resolve, reject) {
-                callInstance(pluginObj, methodName, args, opts, resolve, reject);
-            });
-        }
-    };
-}
-/**
- * Wrap the event with an observable
- * @param event
- * @returns {Observable}
- */
-function wrapEventObservable(event) {
-    return new Observable_1.Observable(function (observer) {
-        var callback = function (status) { return observer.next(status); };
-        window.addEventListener(event, callback, false);
-        return function () { return window.removeEventListener(event, callback, false); };
-    });
-}
-/**
- * @private
- * @param pluginObj
- * @param methodName
- * @param opts
- * @returns {function(...[any]): (undefined|*|Observable|*|*)}
- */
-exports.wrap = function (pluginObj, methodName, opts) {
-    if (opts === void 0) { opts = {}; }
-    return function () {
-        var args = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            args[_i - 0] = arguments[_i];
-        }
-        if (opts.sync)
-            return callCordovaPlugin(pluginObj, methodName, args, opts);
-        else if (opts.observable)
-            return wrapObservable(pluginObj, methodName, args, opts);
-        else if (opts.eventObservable && opts.event)
-            return wrapEventObservable(opts.event);
-        else
-            return wrapPromise(pluginObj, methodName, args, opts);
-    };
-};
-/**
- * @private
- *
- * Class decorator specifying Plugin metadata. Required for all plugins.
- *
- * @usage
- * ```ts
- * @Plugin({
- *  name: 'MyPlugin',
- *  plugin: 'cordova-plugin-myplugin',
- *  pluginRef: 'window.myplugin'
- *  })
- *  export class MyPlugin {
- *
- *    // Plugin wrappers, properties, and functions go here ...
- *
- *  }
- * ```
- */
-function Plugin(config) {
-    return function (cls) {
-        // Add these fields to the class
-        for (var k in config) {
-            cls[k] = config[k];
-        }
-        cls['installed'] = function () {
-            return !!exports.getPlugin(config.pluginRef);
-        };
-        return cls;
-    };
-}
-exports.Plugin = Plugin;
-/**
- * @private
- *
- * Wrap a stub function in a call to a Cordova plugin, checking if both Cordova
- * and the required plugin are installed.
- */
-function Cordova(opts) {
-    if (opts === void 0) { opts = {}; }
-    return function (target, methodName, descriptor) {
-        return {
-            value: function () {
-                var args = [];
-                for (var _i = 0; _i < arguments.length; _i++) {
-                    args[_i - 0] = arguments[_i];
+                    charCode = source.charCodeAt(Index);
+                    begin = Index;
+                    // Optimize for the common case where a string is valid.
+                    while (charCode >= 32 && charCode != 92 && charCode != 34) {
+                      charCode = source.charCodeAt(++Index);
+                    }
+                    // Append the string as-is.
+                    value += source.slice(begin, Index);
+                  }
                 }
-                return exports.wrap(this, methodName, opts).apply(this, args);
+                if (source.charCodeAt(Index) == 34) {
+                  // Advance to the next character and return the revived string.
+                  Index++;
+                  return value;
+                }
+                // Unterminated string.
+                abort();
+              default:
+                // Parse numbers and literals.
+                begin = Index;
+                // Advance past the negative sign, if one is specified.
+                if (charCode == 45) {
+                  isSigned = true;
+                  charCode = source.charCodeAt(++Index);
+                }
+                // Parse an integer or floating-point value.
+                if (charCode >= 48 && charCode <= 57) {
+                  // Leading zeroes are interpreted as octal literals.
+                  if (charCode == 48 && ((charCode = source.charCodeAt(Index + 1)), charCode >= 48 && charCode <= 57)) {
+                    // Illegal octal literal.
+                    abort();
+                  }
+                  isSigned = false;
+                  // Parse the integer component.
+                  for (; Index < length && ((charCode = source.charCodeAt(Index)), charCode >= 48 && charCode <= 57); Index++);
+                  // Floats cannot contain a leading decimal point; however, this
+                  // case is already accounted for by the parser.
+                  if (source.charCodeAt(Index) == 46) {
+                    position = ++Index;
+                    // Parse the decimal component.
+                    for (; position < length && ((charCode = source.charCodeAt(position)), charCode >= 48 && charCode <= 57); position++);
+                    if (position == Index) {
+                      // Illegal trailing decimal.
+                      abort();
+                    }
+                    Index = position;
+                  }
+                  // Parse exponents. The `e` denoting the exponent is
+                  // case-insensitive.
+                  charCode = source.charCodeAt(Index);
+                  if (charCode == 101 || charCode == 69) {
+                    charCode = source.charCodeAt(++Index);
+                    // Skip past the sign following the exponent, if one is
+                    // specified.
+                    if (charCode == 43 || charCode == 45) {
+                      Index++;
+                    }
+                    // Parse the exponential component.
+                    for (position = Index; position < length && ((charCode = source.charCodeAt(position)), charCode >= 48 && charCode <= 57); position++);
+                    if (position == Index) {
+                      // Illegal empty exponent.
+                      abort();
+                    }
+                    Index = position;
+                  }
+                  // Coerce the parsed value to a JavaScript number.
+                  return +source.slice(begin, Index);
+                }
+                // A negative sign may only precede numbers.
+                if (isSigned) {
+                  abort();
+                }
+                // `true`, `false`, and `null` literals.
+                if (source.slice(Index, Index + 4) == "true") {
+                  Index += 4;
+                  return true;
+                } else if (source.slice(Index, Index + 5) == "false") {
+                  Index += 5;
+                  return false;
+                } else if (source.slice(Index, Index + 4) == "null") {
+                  Index += 4;
+                  return null;
+                }
+                // Unrecognized token.
+                abort();
             }
+          }
+          // Return the sentinel `$` character if the parser has reached the end
+          // of the source string.
+          return "$";
         };
-    };
-}
-exports.Cordova = Cordova;
-/**
- * @private
- *
- * Wrap an instance method
- */
-function CordovaInstance(opts) {
-    if (opts === void 0) { opts = {}; }
-    return function (target, methodName) {
-        return {
-            value: function () {
-                var args = [];
-                for (var _i = 0; _i < arguments.length; _i++) {
-                    args[_i - 0] = arguments[_i];
-                }
-                return wrapInstance(this, methodName, opts).apply(this, args);
+
+        // Internal: Parses a JSON `value` token.
+        var get = function (value) {
+          var results, hasMembers;
+          if (value == "$") {
+            // Unexpected end of input.
+            abort();
+          }
+          if (typeof value == "string") {
+            if ((charIndexBuggy ? value.charAt(0) : value[0]) == "@") {
+              // Remove the sentinel `@` character.
+              return value.slice(1);
             }
+            // Parse object and array literals.
+            if (value == "[") {
+              // Parses a JSON array, returning a new JavaScript array.
+              results = [];
+              for (;; hasMembers || (hasMembers = true)) {
+                value = lex();
+                // A closing square bracket marks the end of the array literal.
+                if (value == "]") {
+                  break;
+                }
+                // If the array literal contains elements, the current token
+                // should be a comma separating the previous element from the
+                // next.
+                if (hasMembers) {
+                  if (value == ",") {
+                    value = lex();
+                    if (value == "]") {
+                      // Unexpected trailing `,` in array literal.
+                      abort();
+                    }
+                  } else {
+                    // A `,` must separate each array element.
+                    abort();
+                  }
+                }
+                // Elisions and leading commas are not permitted.
+                if (value == ",") {
+                  abort();
+                }
+                results.push(get(value));
+              }
+              return results;
+            } else if (value == "{") {
+              // Parses a JSON object, returning a new JavaScript object.
+              results = {};
+              for (;; hasMembers || (hasMembers = true)) {
+                value = lex();
+                // A closing curly brace marks the end of the object literal.
+                if (value == "}") {
+                  break;
+                }
+                // If the object literal contains members, the current token
+                // should be a comma separator.
+                if (hasMembers) {
+                  if (value == ",") {
+                    value = lex();
+                    if (value == "}") {
+                      // Unexpected trailing `,` in object literal.
+                      abort();
+                    }
+                  } else {
+                    // A `,` must separate each object member.
+                    abort();
+                  }
+                }
+                // Leading commas are not permitted, object property names must be
+                // double-quoted strings, and a `:` must separate each property
+                // name and value.
+                if (value == "," || typeof value != "string" || (charIndexBuggy ? value.charAt(0) : value[0]) != "@" || lex() != ":") {
+                  abort();
+                }
+                results[value.slice(1)] = get(lex());
+              }
+              return results;
+            }
+            // Unexpected token encountered.
+            abort();
+          }
+          return value;
         };
-    };
-}
-exports.CordovaInstance = CordovaInstance;
-/**
- * @private
- *
- *
- * Before calling the original method, ensure Cordova and the plugin are installed.
- */
-function CordovaProperty(target, key, descriptor) {
-    var originalMethod = descriptor.get;
-    descriptor.get = function () {
-        var args = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            args[_i - 0] = arguments[_i];
+
+        // Internal: Updates a traversed object member.
+        var update = function (source, property, callback) {
+          var element = walk(source, property, callback);
+          if (element === undef) {
+            delete source[property];
+          } else {
+            source[property] = element;
+          }
+        };
+
+        // Internal: Recursively traverses a parsed JSON object, invoking the
+        // `callback` function for each value. This is an implementation of the
+        // `Walk(holder, name)` operation defined in ES 5.1 section 15.12.2.
+        var walk = function (source, property, callback) {
+          var value = source[property], length;
+          if (typeof value == "object" && value) {
+            // `forEach` can't be used to traverse an array in Opera <= 8.54
+            // because its `Object#hasOwnProperty` implementation returns `false`
+            // for array indices (e.g., `![1, 2, 3].hasOwnProperty("0")`).
+            if (getClass.call(value) == arrayClass) {
+              for (length = value.length; length--;) {
+                update(value, length, callback);
+              }
+            } else {
+              forEach(value, function (property) {
+                update(value, property, callback);
+              });
+            }
+          }
+          return callback.call(source, property, value);
+        };
+
+        // Public: `JSON.parse`. See ES 5.1 section 15.12.2.
+        exports.parse = function (source, callback) {
+          var result, value;
+          Index = 0;
+          Source = "" + source;
+          result = get(lex());
+          // If a JSON string contains multiple tokens, it is invalid.
+          if (lex() != "$") {
+            abort();
+          }
+          // Reset the parser state.
+          Index = Source = null;
+          return callback && getClass.call(callback) == functionClass ? walk((value = {}, value[""] = result, value), "", callback) : result;
+        };
+      }
+    }
+
+    exports["runInContext"] = runInContext;
+    return exports;
+  }
+
+  if (freeExports && !isLoader) {
+    // Export for CommonJS environments.
+    runInContext(root, freeExports);
+  } else {
+    // Export for web browsers and JavaScript engines.
+    var nativeJSON = root.JSON,
+        previousJSON = root["JSON3"],
+        isRestored = false;
+
+    var JSON3 = runInContext(root, (root["JSON3"] = {
+      // Public: Restores the original value of the global `JSON` object and
+      // returns a reference to the `JSON3` object.
+      "noConflict": function () {
+        if (!isRestored) {
+          isRestored = true;
+          root.JSON = nativeJSON;
+          root["JSON3"] = previousJSON;
+          nativeJSON = previousJSON = null;
         }
-        if (!window.cordova) {
-            exports.cordovaWarn(this.name, null);
-            return {};
-        }
-        var pluginObj = this;
-        var pluginInstance = exports.getPlugin(pluginObj.pluginRef);
-        if (!pluginInstance) {
-            exports.pluginWarn(this, key);
-            return {};
-        }
-        return originalMethod.apply(this, args);
+        return JSON3;
+      }
+    }));
+
+    root.JSON = {
+      "parse": JSON3.parse,
+      "stringify": JSON3.stringify
     };
-    return descriptor;
-}
-exports.CordovaProperty = CordovaProperty;
-/**
- * @private
- * @param target
- * @param key
- * @param descriptor
- * @constructor
- */
-function InstanceProperty(target, key, descriptor) {
-    descriptor.get = function () {
-        return this._objectInstance[key];
-    };
-    descriptor.set = function () {
-        var args = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            args[_i - 0] = arguments[_i];
-        }
-        this._objectInstance[key] = args[0];
-    };
-    return descriptor;
-}
-exports.InstanceProperty = InstanceProperty;
+  }
 
-},{"../util":514,"rxjs/Observable":519}],500:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-var Printer = (function () {
-    function Printer() {
-    }
-    /**
-     * Checks whether to device is capable of printing.
-     */
-    Printer.isAvailable = function () { return; };
-    /**
-     * Sends content to the printer.
-     * @param {content} The content to print. Can be a URL or an HTML string. If a HTML DOM Object is provided, its innerHtml property value will be used.
-     * @param {options} The options to pass to the printer
-     */
-    Printer.print = function (content, options) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], Printer, "isAvailable", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Printer, "print", null);
-    Printer = __decorate([
-        plugin_1.Plugin({
-            plugin: 'de.appplant.cordova.plugin.printer',
-            pluginRef: 'cordova.plugins.printer',
-            repo: 'https://github.com/katzer/cordova-plugin-printer.git',
-            platforms: ['Android', 'iOS']
-        })
-    ], Printer);
-    return Printer;
-}());
-exports.Printer = Printer;
-
-},{"./plugin":499}],501:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Push
- * @description
- * Register and receive push notifications.
- *
- * Requires Cordova plugin: `phonegap-plugin-push`. For more info, please see the [Push plugin docs](https://github.com/phonegap/phonegap-plugin-push).
- *
- * For TypeScript users, see the [Push plugin docs about using TypeScript for custom notifications](https://github.com/phonegap/phonegap-plugin-push/blob/master/docs/TYPESCRIPT.md).
- *
- * @usage
- * ```js
- * import {Push} from 'ionic-native';
- *
- *
- *
- * ```
- */
-var Push = (function () {
-    function Push() {
-    }
-    /**
-     * Initialize the plugin on the native side.
-     *
-     * ```
-     * var push = Push.init({
-     *    android: {
-     *        senderID: "12345679"
-     *    },
-     *    ios: {
-     *        alert: "true",
-     *        badge: true,
-     *        sound: 'false'
-     *    },
-     *    windows: {}
-     * });
-     * ```
-     *
-     * @param {PushOptions} options  The Push [options](https://github.com/phonegap/phonegap-plugin-push/blob/master/docs/API.md#parameters).
-     * @return {PushNotification}  Returns a new [PushNotification](https://github.com/phonegap/phonegap-plugin-push/blob/master/docs/API.md#pushonevent-callback) object.
-     */
-    Push.init = function (options) { return; };
-    /**
-     * Check whether the push notification permission has been granted.
-     * @return {Promise} Returns a Promise that resolves with an object with one property: isEnabled, a boolean that indicates if permission has been granted.
-     */
-    Push.hasPermission = function () { return; };
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], Push, "init", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Push, "hasPermission", null);
-    Push = __decorate([
-        plugin_1.Plugin({
-            plugin: 'phonegap-plugin-push',
-            pluginRef: 'PushNotification',
-            repo: 'https://github.com/phonegap/phonegap-plugin-push'
-        })
-    ], Push);
-    return Push;
-}());
-exports.Push = Push;
-
-},{"./plugin":499}],502:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name SafariViewController
- * @description
- * @usage
- * ```
- * import {SafariViewController} from 'ionic-native';
- *
- * ...
- *
- * SafariViewController.isAvailable()
- *   .then(
- *     (available) => {
- *       if(available){
- *
- *         SafariViewController.show({
- *           url: 'http://ionic.io',
- *           hidden: false,
- *           animated: false,
- *           transition: 'curl',
- *           enterReaderModeIfAvailable: true,
- *           tintColor: '#ff0000'
- *         })
- *         .then(
- *           (result: any) => {
- *             if(result.event === 'opened') console.log("Opened");
- *             else if(result.event === 'loaded') console.log("Loaded");
- *             else if(result.event === 'closed') console.log("Closed");
- *           },
- *           (error: any) => console.error(error)
- *         );
- *
- *       } else {
- *         // use fallback browser, example InAppBrowser
- *       }
- *     }
- *   );
- * ```
- */
-var SafariViewController = (function () {
-    function SafariViewController() {
-    }
-    /**
-     * Checks if SafariViewController is available
-     */
-    SafariViewController.isAvailable = function () { return; };
-    /**
-     * Shows Safari View Controller
-     * @param options
-     */
-    SafariViewController.show = function (options) { return; };
-    /**
-     * Hides Safari View Controller
-     */
-    SafariViewController.hide = function () { };
-    /**
-     * Tries to connect to the  Chrome's custom tabs service. you must call this method before calling any of the other methods listed below.
-     */
-    SafariViewController.connectToService = function () { return; };
-    /**
-     * Call this method whenever there's a chance the user will open an external url.
-     */
-    SafariViewController.warmUp = function () { return; };
-    /**
-     * For even better performance optimization, call this methods if there's more than a 50% chance the user will open a certain URL.
-     * @param url
-     */
-    SafariViewController.mayLaunchUrl = function (url) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], SafariViewController, "isAvailable", null);
-    __decorate([
-        plugin_1.Cordova({
-            callbackOrder: 'reverse'
-        })
-    ], SafariViewController, "show", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], SafariViewController, "hide", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], SafariViewController, "connectToService", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], SafariViewController, "warmUp", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], SafariViewController, "mayLaunchUrl", null);
-    SafariViewController = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-safariviewcontroller',
-            pluginRef: 'SafariViewController',
-            platforms: ['iOS'],
-            repo: 'https://github.com/EddyVerbruggen/cordova-plugin-safariviewcontroller'
-        })
-    ], SafariViewController);
-    return SafariViewController;
-}());
-exports.SafariViewController = SafariViewController;
-
-},{"./plugin":499}],503:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-var Screenshot = (function () {
-    function Screenshot() {
-    }
-    /**
-     *  Takes screenshot and saves the image
-     *
-     * @param {string} format. Format can take the value of either 'jpg' or 'png'
-     * On ios, only 'jpg' format is supported
-     * @param {number} quality. Determines the quality of the screenshot.
-     *        Default quality is set to 100.
-     * @param {string} filename. Name of the file as stored on the storage
-     */
-    Screenshot.save = function (format, quality, filename) {
-        return new Promise(function (resolve, reject) {
-            navigator.screenshot.save(function (error, result) {
-                if (error) {
-                    reject(error);
-                }
-                else {
-                    resolve(result);
-                }
-            }, format, quality, filename);
-        });
-    };
-    /**
-     *  Takes screenshot and returns the image as an URI
-     *
-     * @param {number} quality. Determines the quality of the screenshot.
-     *        Default quality is set to 100.
-     */
-    Screenshot.URI = function (quality) {
-        return new Promise(function (resolve, reject) {
-            navigator.screenshot.URI(function (error, result) {
-                if (error) {
-                    reject(error);
-                }
-                else {
-                    resolve(result);
-                }
-            }, quality);
-        });
-    };
-    Screenshot = __decorate([
-        plugin_1.Plugin({
-            plugin: 'https://github.com/gitawego/cordova-screenshot.git',
-            pluginRef: 'navigator.screenshot',
-            repo: 'https://github.com/gitawego/cordova-screenshot.git'
-        })
-    ], Screenshot);
-    return Screenshot;
-}());
-exports.Screenshot = Screenshot;
-
-},{"./plugin":499}],504:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name SMS
- * @description
- *
- * Requires Cordova plugin: cordova-plugin-sms. For more info, please see the [SMS plugin docs](https://github.com/cordova-sms/cordova-sms-plugin).
- *
- * @usage
- * ```ts
- * import {SMS} from 'ionic-native';
- *
- *
- *
- * // Send a text message using default options
- * SMS.send('416123456','Hello world!');
- *
- * ```
- */
-var SMS = (function () {
-    function SMS() {
-    }
-    /**
-     * Sends sms to a number
-     * @param phoneNumber {string|Array<string>} Phone number
-     * @param message {string} Message
-     * @param options {SmsOptions} Options
-     * @returns {Promise<any>} Resolves promise when the SMS has been sent
-     */
-    SMS.send = function (phoneNumber, message, options) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], SMS, "send", null);
-    SMS = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-sms-plugin',
-            pluginRef: 'sms',
-            repo: 'https://github.com/cordova-sms/cordova-sms-plugin',
-            platforms: ['Android', 'iOS', 'Windows Phone 8']
-        })
-    ], SMS);
-    return SMS;
-}());
-exports.SMS = SMS;
-
-},{"./plugin":499}],505:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Social Sharing
- * @description
- * Share text, files, images, and links via social networks, sms, and email.
- * @usage
- * ```js
- * import {SocialSharing} from 'ionic-native';
- *
- * ...
- * // TODO add usage info
- * ```
- */
-var SocialSharing = (function () {
-    function SocialSharing() {
-    }
-    /**
-     * Shares using the share sheet
-     * @param message {string} The message you would like to share.
-     * @param subject {string} The subject
-     * @param file {string|Array<string>} URL(s) to file(s) or image(s), local path(s) to file(s) or image(s), or base64 data of an image. Only the first file/image will be used on Windows Phone.
-     * @param url {string} A URL to share
-     */
-    SocialSharing.share = function (message, subject, file, url) { };
-    /**
-     * Shares using the share sheet with additional options and returns a result object or an error message (requires plugin version 5.1.0+)
-     * @param options {object} The options object with the message, subject, files, url and chooserTitle properties.
-     */
-    SocialSharing.shareWithOptions = function (options) { return; };
-    /**
-     * Checks if you can share via a specific app.
-     * @param appName App name or package name. Examples: instagram or com.apple.social.facebook
-     */
-    SocialSharing.canShareVia = function (appName) { return; };
-    /**
-     * Shares directly to Twitter
-     * @param message
-     * @param image
-     * @param url
-     */
-    SocialSharing.shareViaTwitter = function (message, image, url) { };
-    /**
-     * Shares directly to Facebook
-     * @param message {string}
-     * @param image {string}
-     * @param url {string}
-     */
-    SocialSharing.shareViaFacebook = function (message, image, url) { return; };
-    /**
-     * Shares directly to Facebook with a paste message hint
-     * @param message {string}
-     * @param image {string}
-     * @param url {string}
-     * @param pasteMessageHint {string}
-     */
-    SocialSharing.shareViaFacebookWithPasteMessageHint = function (message, image, url, pasteMessageHint) { return; };
-    /**
-     * Shares directly to Instagram
-     * @param message {string}
-     * @param image {string}
-     */
-    SocialSharing.shareViaInstagram = function (message, image) { return; };
-    /**
-     * Shares directly to WhatsApp
-     * @param message {string}
-     * @param image {string}
-     * @param url {string}
-     */
-    SocialSharing.shareViaWhatsApp = function (message, image, url) { return; };
-    /**
-     * Shares directly to a WhatsApp Contact
-     * @param receiver {string} Pass phone number on Android, and Addressbook ID (abid) on iOS
-     * @param message {string} Message to send
-     * @param image {string} Image to send (does not work on iOS
-     * @param url {string} Link to send
-     */
-    SocialSharing.shareViaWhatsAppToReceiver = function (receiver, message, image, url) { return; };
-    /**
-     * Share via SMS
-     * @param messge {string} message to send
-     * @param phoneNumber {string} Number or multiple numbers seperated by commas
-     */
-    SocialSharing.shareViaSMS = function (messge, phoneNumber) { return; };
-    /**
-     * Share via Email
-     * @param message {string}
-     * @param subject {string}
-     * @param to {Array<string>}
-     * @param cc {Array<string>}
-     * @param bcc {Array<string>}
-     * @param files {string|Array<string>} URL or local path to file(s) to attach
-     */
-    SocialSharing.shareViaEmail = function (message, subject, to, cc, bcc, files) { return; };
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], SocialSharing, "share", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['iOS', 'Android']
-        })
-    ], SocialSharing, "shareWithOptions", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['iOS', 'Android']
-        })
-    ], SocialSharing, "canShareVia", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true,
-            platforms: ['iOS', 'Android']
-        })
-    ], SocialSharing, "shareViaTwitter", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['iOS', 'Android']
-        })
-    ], SocialSharing, "shareViaFacebook", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['iOS', 'Android']
-        })
-    ], SocialSharing, "shareViaFacebookWithPasteMessageHint", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['iOS', 'Android']
-        })
-    ], SocialSharing, "shareViaInstagram", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['iOS', 'Android']
-        })
-    ], SocialSharing, "shareViaWhatsApp", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['iOS', 'Android']
-        })
-    ], SocialSharing, "shareViaWhatsAppToReceiver", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['iOS', 'Android']
-        })
-    ], SocialSharing, "shareViaSMS", null);
-    __decorate([
-        plugin_1.Cordova({
-            platforms: ['iOS', 'Android']
-        })
-    ], SocialSharing, "shareViaEmail", null);
-    SocialSharing = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-x-socialsharing',
-            pluginRef: 'window.plugins.socialsharing',
-            repo: 'https://github.com/EddyVerbruggen/SocialSharing-PhoneGap-Plugin',
-            platforms: ['iOS', 'Android', 'Windows Phone']
-        })
-    ], SocialSharing);
-    return SocialSharing;
-}());
-exports.SocialSharing = SocialSharing;
-
-},{"./plugin":499}],506:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Spinner Dialog
- * @description
- * @usage
- * ```js
- * import {SpinnerDialog} from 'ionic-native';
- *
- *
- *
- * SpinnerDialog.show();
- *
- * SpinnerDialog.hide();
- * ```
- */
-var SpinnerDialog = (function () {
-    function SpinnerDialog() {
-    }
-    /**
-     * Shows the spinner dialog
-     * @param title {string} Spinner title (shows on Android only)
-     * @param message {string} Spinner message
-     * @param cancelCallback {boolean|function} Set to false to set spinner not cancelable. Or provide a function to call when the user cancels the spinner.
-     * @param iOSOptions {object} Options for iOS only
-     */
-    SpinnerDialog.show = function (title, message, cancelCallback, iOSOptions) { };
-    /**
-     * Hides the spinner dialog if visible
-     */
-    SpinnerDialog.hide = function () { };
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], SpinnerDialog, "show", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], SpinnerDialog, "hide", null);
-    SpinnerDialog = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-spinner-dialog',
-            pluginRef: 'window.plugins.spinnerDialog',
-            repo: 'https://github.com/Paldom/SpinnerDialog',
-            platforms: ['Android', 'iOS', 'Windows Phone 8']
-        })
-    ], SpinnerDialog);
-    return SpinnerDialog;
-}());
-exports.SpinnerDialog = SpinnerDialog;
-
-},{"./plugin":499}],507:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name Splashscreen
- * @description This plugin displays and hides a splash screen during application launch. The methods below allows showing and hiding the splashscreen after the app has loaded.
- * @usage
- * ```ts
- * import {Splashscreen} from 'ionic-native';
- *
- *
- *
- * Splashscreen.show();
- *
- * Splashscreen.hide();
- * ```
- */
-var Splashscreen = (function () {
-    function Splashscreen() {
-    }
-    /**
-     * Shows the splashscreen
-     */
-    Splashscreen.show = function () { };
-    /**
-     * Hides the splashscreen
-     */
-    Splashscreen.hide = function () { };
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], Splashscreen, "show", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], Splashscreen, "hide", null);
-    Splashscreen = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-splashscreen',
-            pluginRef: 'navigator.splashscreen',
-            repo: 'https://github.com/apache/cordova-plugin-splashscreen'
-        })
-    ], Splashscreen);
-    return Splashscreen;
-}());
-exports.Splashscreen = Splashscreen;
-
-},{"./plugin":499}],508:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name SQLite
- *
- * @description
- * Access SQLite databases on the device.
- *
- * @usage
- *
- * ```ts
- * import { SQLite } from 'ionic-native';
- *
- * let db = new SQLite();
- * db.openDatabse({
- *   name: 'data.db',
- *   location: 'default' // the location field is required
- * }).then(() => {
- *   db.executeSql('create table danceMoves(name VARCHAR(32))', {}).then(() => {
- *
- *   }, (err) => {
- *     console.error('Unable to execute sql', err);
- *   })
- * }, (err) => {
- *   console.error('Unable to open database', err);
- * });
- * ```
- *
- */
-var SQLite = (function () {
-    function SQLite() {
-    }
-    Object.defineProperty(SQLite.prototype, "databaseFeatures", {
-        get: function () {
-            return this._objectInstance.databaseFeatures;
-        },
-        enumerable: true,
-        configurable: true
+  // Export for asynchronous module loaders.
+  if (isLoader) {
+    define(function () {
+      return JSON3;
     });
-    /**
-     * Open or create a SQLite database file.
-     *
-     * See the plugin docs for an explanation of all options: https://github.com/litehelpers/Cordova-sqlite-storage#opening-a-database
-     *
-     * @param config the config for opening the database.
-     * @usage
-     *
-     * ```ts
-     * import { SQLite } from 'ionic-native';
-     *
-     * let db = new SQLite();
-     * db.openDatabse({
-     *   name: 'data.db',
-     *   location: 'default' // the location field is required
-     * }).then(() => {
-     *   db.executeSql('create table danceMoves(name VARCHAR(32))', {}).then(() => {
-     *
-     *   }, (err) => {
-     *     console.error('Unable to execute sql', err);
-     *   })
-     * }, (err) => {
-     *   console.error('Unable to open database', err);
-     * });
-     * ```
-     */
-    SQLite.prototype.openDatabase = function (config) {
-        var _this = this;
-        return new Promise(function (resolve, reject) {
-            sqlitePlugin.openDatabase(config, function (db) {
-                _this._objectInstance = db;
-                resolve(db);
-            }, function (error) {
-                console.warn(error);
-                reject(error);
-            });
-        });
-    };
-    SQLite.prototype.addTransaction = function (transaction) { };
-    SQLite.prototype.transaction = function (fn) { return; };
-    SQLite.prototype.readTransaction = function (fn) { return; };
-    SQLite.prototype.startNextTransaction = function () { };
-    SQLite.prototype.close = function () { return; };
-    SQLite.prototype.start = function () { };
-    /**
-     * Execute SQL on the opened database. Note, you must call `openDatabase` first, and
-     * ensure it resolved and successfully opened the database.
-     *
-     * @usage
-     *
-     * ```ts
-     * db.executeSql('SELECT FROM puppies WHERE type = ?', ['cavalier']).then((resultSet) => {
-     *   // Access the items through resultSet.rows
-     *   // resultSet.rows.item(i)
-     * }, (err) => {})
-     * ```
-     */
-    SQLite.prototype.executeSql = function (statement, params) { return; };
-    SQLite.prototype.addSatement = function (sql, values) { return; };
-    SQLite.prototype.sqlBatch = function (sqlStatements) { return; };
-    SQLite.prototype.abortallPendingTransactions = function () { };
-    SQLite.prototype.handleStatementSuccess = function (handler, response) { };
-    SQLite.prototype.handleStatementFailure = function (handler, response) { };
-    SQLite.prototype.run = function () { };
-    SQLite.prototype.abort = function (txFailure) { };
-    SQLite.prototype.finish = function () { };
-    SQLite.prototype.abortFromQ = function (sqlerror) { };
-    SQLite.echoTest = function () { return; };
-    SQLite.deleteDatabase = function (first) { return; };
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], SQLite.prototype, "addTransaction", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], SQLite.prototype, "transaction", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], SQLite.prototype, "readTransaction", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], SQLite.prototype, "startNextTransaction", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], SQLite.prototype, "close", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], SQLite.prototype, "start", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], SQLite.prototype, "executeSql", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], SQLite.prototype, "addSatement", null);
-    __decorate([
-        plugin_1.CordovaInstance()
-    ], SQLite.prototype, "sqlBatch", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], SQLite.prototype, "abortallPendingTransactions", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], SQLite.prototype, "handleStatementSuccess", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], SQLite.prototype, "handleStatementFailure", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], SQLite.prototype, "run", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], SQLite.prototype, "abort", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], SQLite.prototype, "finish", null);
-    __decorate([
-        plugin_1.CordovaInstance({
-            sync: true
-        })
-    ], SQLite.prototype, "abortFromQ", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], SQLite, "echoTest", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], SQLite, "deleteDatabase", null);
-    SQLite = __decorate([
-        plugin_1.Plugin({
-            pluginRef: 'sqlitePlugin',
-            plugin: 'cordova-sqlite-storage',
-            repo: 'https://github.com/litehelpers/Cordova-sqlite-storage'
-        })
-    ], SQLite);
-    return SQLite;
-}());
-exports.SQLite = SQLite;
+  }
+}).call(this);
 
-},{"./plugin":499}],509:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{}],480:[function(require,module,exports){
 /**
- * @name Status Bar
- * @description
- * Manage the appearance of the native status bar.
- *
- * Requires Cordova plugin: `cordova-plugin-statusbar`. For more info, please see the [StatusBar plugin docs](https://github.com/apache/cordova-plugin-statusbar).
- *
- * @usage
- * ```ts
- * import {StatusBar} from 'ionic-native';
- *
- * ...
- *
- * StatuBar.overlaysWebView(true); // let status var overlay webview
- *
- * StatusBar.backgroundColorByHexString('#ffffff'); // set status bar to white
- * ```
- *
+ * Helpers.
  */
-var StatusBar = (function () {
-    function StatusBar() {
-    }
-    /**
-     * Set whether the status bar overlays the main app view. The default
-     * is true.
-     *
-     * @param {boolean} doesOverlay  Whether the status bar overlays the main app view.
-     */
-    StatusBar.overlaysWebView = function (doesOverlay) { };
-    ;
-    /**
-     * Use the default statusbar (dark text, for light backgrounds).
-     */
-    StatusBar.styleDefault = function () { };
-    ;
-    /**
-     * Use the lightContent statusbar (light text, for dark backgrounds).
-     */
-    StatusBar.styleLightContent = function () { };
-    ;
-    /**
-     * Use the blackTranslucent statusbar (light text, for dark backgrounds).
-     */
-    StatusBar.styleBlackTranslucent = function () { };
-    ;
-    /**
-     * Use the blackOpaque statusbar (light text, for dark backgrounds).
-     */
-    StatusBar.styleBlackOpaque = function () { };
-    ;
-    /**
-     * Set the status bar to a specific named color. Valid options:
-     * black, darkGray, lightGray, white, gray, red, green, blue, cyan, yellow, magenta, orange, purple, brown.
-     *
-     * iOS note: you must call StatusBar.overlaysWebView(false) to enable color changing.
-     *
-     * @param {string} colorName  The name of the color (from above)
-     */
-    StatusBar.backgroundColorByName = function (colorName) { };
-    ;
-    /**
-     * Set the status bar to a specific hex color (CSS shorthand supported!).
-     *
-     * iOS note: you must call StatusBar.overlaysWebView(false) to enable color changing.
-     *
-     * @param {string} hexString  The hex value of the color.
-     */
-    StatusBar.backgroundColorByHexString = function (hexString) { };
-    ;
-    /**
-     * Hide the StatusBar
-     */
-    StatusBar.hide = function () { };
-    ;
-    /**
-    * Show the StatusBar
-    */
-    StatusBar.show = function () { };
-    ;
-    Object.defineProperty(StatusBar, "isVisible", {
-        /**
-         * Whether the StatusBar is currently visible or not.
-         */
-        get: function () { return window.StatusBar.isVisible; },
-        enumerable: true,
-        configurable: true
-    });
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], StatusBar, "overlaysWebView", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], StatusBar, "styleDefault", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], StatusBar, "styleLightContent", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], StatusBar, "styleBlackTranslucent", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], StatusBar, "styleBlackOpaque", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], StatusBar, "backgroundColorByName", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], StatusBar, "backgroundColorByHexString", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], StatusBar, "hide", null);
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], StatusBar, "show", null);
-    __decorate([
-        plugin_1.CordovaProperty
-    ], StatusBar, "isVisible", null);
-    StatusBar = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-statusbar',
-            pluginRef: 'StatusBar',
-            repo: 'https://github.com/apache/cordova-plugin-statusbar',
-            platforms: ['iOS', 'Android', 'Windows Phone 8', 'Windows 8', 'Windows 10']
-        })
-    ], StatusBar);
-    return StatusBar;
-}());
-exports.StatusBar = StatusBar;
 
-},{"./plugin":499}],510:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
+var s = 1000;
+var m = s * 60;
+var h = m * 60;
+var d = h * 24;
+var y = d * 365.25;
+
 /**
- * @name Toast
- * @description
- * This plugin allows you to show a native Toast (a little text popup) on iOS, Android and WP8. It's great for showing a non intrusive native notification which is guaranteed always in the viewport of the browser.
+ * Parse or format the given `val`.
  *
- * Requires Cordova plugin: `cordova-plugin-x-toast`. For more info, please see the [Toast plugin docs](https://github.com/EddyVerbruggen/Toast-PhoneGap-Plugin).
+ * Options:
  *
- * @usage
- * ```ts
- * import {Toast} from 'ionic-native';
+ *  - `long` verbose formatting [false]
  *
- *
- *
- * Toast.show("I'm a toast", "5000", "center").subscribe(
- *   toast => {
- *     console.log(toast);
- *   }
- * );
- * ```
+ * @param {String|Number} val
+ * @param {Object} options
+ * @return {String|Number}
+ * @api public
  */
-var Toast = (function () {
-    function Toast() {
-    }
-    /**
-     * Show a native toast for the given duration at the specified position.
-     *
-     * @param {string} message  The message to display.
-     * @param {string} duration  Duration to show the toast, either 'short', 'long' or any number of milliseconds: '1500'.
-     * @param {string} position  Where to position the toast, either 'top', 'center', or 'bottom'.
-     * @return {Observable}  Returns an Observable that notifies first on success and then when tapped, rejects on error.
-     */
-    Toast.show = function (message, duration, position) { return; };
-    /**
-     * Manually hide any currently visible toast.
-     * @return {Promise} Returns a Promise that resolves on success.
-     */
-    Toast.hide = function () { return; };
-    /**
-     * Show a native toast with the given options.
-     *
-     * @param {Object} options  Options for showing a toast. Available options:
-     *   message  The message to display.
-     *   duration  Duration to show the toast, either 'short', 'long' or any number of milliseconds: '1500'.
-     *   position  Where to position the toast, either 'top', 'center', or 'bottom'.
-     *   addPixelsY  Offset in pixels to move the toast up or down from its specified position.
-     *
-     * @return {Observable}  Returns an Observable that notifies first on success and then when tapped, rejects on error.
-     */
-    Toast.showWithOptions = function (options) { return; };
-    /**
-     * Shorthand for `show(message, 'short', 'top')`.
-     * @return {Observable}  Returns an Observable that notifies first on success and then when tapped, rejects on error.
-     */
-    Toast.showShortTop = function (message) { return; };
-    /**
-     * Shorthand for `show(message, 'short', 'center')`.
-     * @return {Observable}  Returns an Observable that notifies first on success and then when tapped, rejects on error.
-     */
-    Toast.showShortCenter = function (message) { return; };
-    /**
-     * Shorthand for `show(message, 'short', 'bottom')`.
-     * @return {Observable}  Returns an Observable that notifies first on success and then when tapped, rejects on error.
-     */
-    Toast.showShortBottom = function (message) { return; };
-    /**
-     * Shorthand for `show(message, 'long', 'top')`.
-     * @return {Observable}  Returns an Observable that notifies first on success and then when tapped, rejects on error.
-     */
-    Toast.showLongTop = function (message) { return; };
-    /**
-     * Shorthand for `show(message, 'long', 'center')`.
-     * @return {Observable}  Returns an Observable that notifies first on success and then when tapped, rejects on error.
-     */
-    Toast.showLongCenter = function (message) { return; };
-    /**
-     * Shorthand for `show(message, 'long', 'bottom')`.
-     * @return {Observable}  Returns an Observable that notifies first on success and then when tapped, rejects on error.
-     */
-    Toast.showLongBottom = function (message) { return; };
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'hide'
-        })
-    ], Toast, "show", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], Toast, "hide", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'hide'
-        })
-    ], Toast, "showWithOptions", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'hide'
-        })
-    ], Toast, "showShortTop", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'hide'
-        })
-    ], Toast, "showShortCenter", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'hide'
-        })
-    ], Toast, "showShortBottom", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'hide'
-        })
-    ], Toast, "showLongTop", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'hide'
-        })
-    ], Toast, "showLongCenter", null);
-    __decorate([
-        plugin_1.Cordova({
-            observable: true,
-            clearFunction: 'hide'
-        })
-    ], Toast, "showLongBottom", null);
-    Toast = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-x-toast',
-            pluginRef: 'plugins.toast',
-            repo: 'https://github.com/EddyVerbruggen/Toast-PhoneGap-Plugin',
-            platforms: ['Android', 'iOS', 'Windows Phone 8']
-        })
-    ], Toast);
-    return Toast;
-}());
-exports.Toast = Toast;
 
-},{"./plugin":499}],511:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
+module.exports = function(val, options){
+  options = options || {};
+  if ('string' == typeof val) return parse(val);
+  return options.long
+    ? long(val)
+    : short(val);
 };
-var plugin_1 = require('./plugin');
-/**
- * @name TouchID
- * @description
- * Scan the fingerprint of a user with the TouchID sensor.
- *
- * Requires Cordova plugin: `cordova-plugin-touch-id`. For more info, please see the [TouchID plugin docs](https://github.com/EddyVerbruggen/cordova-plugin-touch-id).
- *
- * ### Error Codes
- *
- * The plugin will reject for various reasons. Your app will most likely need to respond to the cases differently.
- *
- * Here is a list of some of the error codes:
- *
- *  -  `-1` - Fingerprint scan failed more than 3 times
- *  -  `-2` or `-128` - User tapped the 'Cancel' button
- *  -  `-3` - User tapped the 'Enter Passcode' or 'Enter Password' button
- *  -  `-4` - The scan was cancelled by the system (Home button for example)
- *  -  `-6` - TouchID is not Available
- *  -  `-8` - TouchID is locked out from too many tries
- * @usage
- * ```js
- * import {TouchID} from 'ionic-native';
- *
- * ...
- *
- * TouchID.isAvailable()
- *   .then(
- *     res => console.log("TouchID is available!"),
- *     err => console.error("TouchID isn't available", err)
- *   );
- *
- * TouchID.verifyFingerprint('Scan your fingerprint please')
- *   .then(
- *     res => console.log("Ok", res),
- *     err => console.error("Error", err)
- *   );
- *
- * ```
- */
-var TouchID = (function () {
-    function TouchID() {
-    }
-    /**
-     * Whether TouchID is available or not.
-     *
-     * @return {Promise} Returns a Promise that resolves if yes, rejects if no.
-     */
-    TouchID.prototype.isAvailable = function () { return; };
-    /**
-     * Show TouchID dialog and wait for a fingerprint scan. If user taps 'Enter Password' button, brings up standard system passcode screen.
-     *
-     * @param {string} message  The message to display
-     * @return {Promise} Returns a Promise the resolves if the fingerprint scan was successful, rejects with an error code (see above).
-     */
-    TouchID.verifyFingerprint = function (message) { return; };
-    /**
-     * Show TouchID dialog and wait for a fingerprint scan. If user taps 'Enter Password' button, rejects with code '-3' (see above).
-     *
-     * @param {string} message  The message to display
-     * @return {Promise} Returns a Promise the resolves if the fingerprint scan was successful, rejects with an error code (see above).
-     */
-    TouchID.verifyFingerprintWithCustomPasswordFallback = function (message) { return; };
-    /**
-     * Show TouchID dialog with custom 'Enter Password' message and wait for a fingerprint scan. If user taps 'Enter Password' button, rejects with code '-3' (see above).
-     *
-     * @param {string} message  The message to display
-     * @param {string} enterPasswordLabel  Custom text for the 'Enter Password' button
-     * @return {Promise} Returns a Promise the resolves if the fingerprint scan was successful, rejects with an error code (see above).
-     */
-    TouchID.verifyFingerprintWithCustomPasswordFallbackAndEnterPasswordLabel = function (message, enterPasswordLabel) { return; };
-    __decorate([
-        plugin_1.Cordova()
-    ], TouchID.prototype, "isAvailable", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], TouchID, "verifyFingerprint", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], TouchID, "verifyFingerprintWithCustomPasswordFallback", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], TouchID, "verifyFingerprintWithCustomPasswordFallbackAndEnterPasswordLabel", null);
-    TouchID = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-touch-id',
-            pluginRef: 'plugins.touchid',
-            repo: 'https://github.com/EddyVerbruggen/cordova-plugin-touch-id',
-            platforms: ['iOS']
-        })
-    ], TouchID);
-    return TouchID;
-}());
-exports.TouchID = TouchID;
 
-},{"./plugin":499}],512:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
 /**
- * @name Vibration
- * @description Vibrates the device
- * @usage
- * ```ts
- * import {Vibration} from 'ionic-native';
+ * Parse the given `str` and return milliseconds.
  *
- *
- *
- * // Vibrate the device for a second
- * Vibration.vibrate(1000);
- *
- * // Vibrate 2 seconds
- * // Pause for 1 second
- * // Vibrate for 2 seconds
- * // Patterns work on Android and Windows only
- * Vibration.vibrate([2000,1000,2000]);
- *
- * // Stop any current vibrations immediately
- * // Works on Android and Windows only
- * Vibration.vibrate(0);
- * ```
+ * @param {String} str
+ * @return {Number}
+ * @api private
  */
-var Vibration = (function () {
-    function Vibration() {
-    }
-    /**
-     * Vibrates the device for given amount of time.
-     * @param time {number|Array<number>} Milliseconds to vibrate the device. If passed an array of numbers, it will define a vibration pattern. Pass 0 to stop any vibration immediately.
-     */
-    Vibration.vibrate = function (time) { };
-    __decorate([
-        plugin_1.Cordova({
-            sync: true
-        })
-    ], Vibration, "vibrate", null);
-    Vibration = __decorate([
-        plugin_1.Plugin({
-            plugin: 'cordova-plugin-vibration',
-            pluginRef: 'navigator',
-            repo: 'https://github.com/apache/cordova-plugin-vibration',
-            platforms: ['Android', 'iOS', 'Windows 8.1 Phone', 'Windows 8.1', 'Windows 10']
-        })
-    ], Vibration);
-    return Vibration;
-}());
-exports.Vibration = Vibration;
 
-},{"./plugin":499}],513:[function(require,module,exports){
-"use strict";
-var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
-    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
-    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
-    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
-    return c > 3 && r && Object.defineProperty(target, key, r), r;
-};
-var plugin_1 = require('./plugin');
-/**
- * @name WebIntent
- * @description
- * @usage
- * For usage information please refer to the plugin's Github repo.
- */
-var WebIntent = (function () {
-    function WebIntent() {
-    }
-    Object.defineProperty(WebIntent, "ACTION_VIEW", {
-        get: function () {
-            return window.plugins.webintent.ACTION_VIEW;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    Object.defineProperty(WebIntent, "EXTRA_TEXT", {
-        get: function () {
-            return window.plugins.webintent.EXTRA_TEXT;
-        },
-        enumerable: true,
-        configurable: true
-    });
-    WebIntent.startActivity = function (options) { return; };
-    WebIntent.hasExtra = function (extra) { return; };
-    WebIntent.getExtra = function (extra) { return; };
-    WebIntent.getUri = function () { return; };
-    ;
-    WebIntent.onNewIntent = function () { return; };
-    ;
-    WebIntent.sendBroadcast = function (options) { return; };
-    __decorate([
-        plugin_1.CordovaProperty
-    ], WebIntent, "ACTION_VIEW", null);
-    __decorate([
-        plugin_1.CordovaProperty
-    ], WebIntent, "EXTRA_TEXT", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], WebIntent, "startActivity", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], WebIntent, "hasExtra", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], WebIntent, "getExtra", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], WebIntent, "getUri", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], WebIntent, "onNewIntent", null);
-    __decorate([
-        plugin_1.Cordova()
-    ], WebIntent, "sendBroadcast", null);
-    WebIntent = __decorate([
-        plugin_1.Plugin({
-            plugin: 'https://github.com/Initsogar/cordova-webintent.git',
-            pluginRef: 'window.plugins.webintent',
-            repo: 'https://github.com/Initsogar/cordova-webintent.git',
-            platforms: ['Android']
-        })
-    ], WebIntent);
-    return WebIntent;
-}());
-exports.WebIntent = WebIntent;
-
-},{"./plugin":499}],514:[function(require,module,exports){
-"use strict";
-function get(obj, path) {
-    for (var i = 0, path = path.split('.'), len = path.length; i < len; i++) {
-        if (!obj) {
-            return null;
-        }
-        obj = obj[path[i]];
-    }
-    return obj;
+function parse(str) {
+  str = '' + str;
+  if (str.length > 10000) return;
+  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str);
+  if (!match) return;
+  var n = parseFloat(match[1]);
+  var type = (match[2] || 'ms').toLowerCase();
+  switch (type) {
+    case 'years':
+    case 'year':
+    case 'yrs':
+    case 'yr':
+    case 'y':
+      return n * y;
+    case 'days':
+    case 'day':
+    case 'd':
+      return n * d;
+    case 'hours':
+    case 'hour':
+    case 'hrs':
+    case 'hr':
+    case 'h':
+      return n * h;
+    case 'minutes':
+    case 'minute':
+    case 'mins':
+    case 'min':
+    case 'm':
+      return n * m;
+    case 'seconds':
+    case 'second':
+    case 'secs':
+    case 'sec':
+    case 's':
+      return n * s;
+    case 'milliseconds':
+    case 'millisecond':
+    case 'msecs':
+    case 'msec':
+    case 'ms':
+      return n;
+  }
 }
-exports.get = get;
-;
 
-},{}],515:[function(require,module,exports){
+/**
+ * Short format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function short(ms) {
+  if (ms >= d) return Math.round(ms / d) + 'd';
+  if (ms >= h) return Math.round(ms / h) + 'h';
+  if (ms >= m) return Math.round(ms / m) + 'm';
+  if (ms >= s) return Math.round(ms / s) + 's';
+  return ms + 'ms';
+}
+
+/**
+ * Long format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function long(ms) {
+  return plural(ms, d, 'day')
+    || plural(ms, h, 'hour')
+    || plural(ms, m, 'minute')
+    || plural(ms, s, 'second')
+    || ms + ' ms';
+}
+
+/**
+ * Pluralization helper.
+ */
+
+function plural(ms, n, name) {
+  if (ms < n) return;
+  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
+  return Math.ceil(ms / n) + ' ' + name + 's';
+}
+
+},{}],481:[function(require,module,exports){
+(function (global){
+/**
+ * JSON parse.
+ *
+ * @see Based on jQuery#parseJSON (MIT) and JSON2
+ * @api private
+ */
+
+var rvalidchars = /^[\],:{}\s]*$/;
+var rvalidescape = /\\(?:["\\\/bfnrt]|u[0-9a-fA-F]{4})/g;
+var rvalidtokens = /"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g;
+var rvalidbraces = /(?:^|:|,)(?:\s*\[)+/g;
+var rtrimLeft = /^\s+/;
+var rtrimRight = /\s+$/;
+
+module.exports = function parsejson(data) {
+  if ('string' != typeof data || !data) {
+    return null;
+  }
+
+  data = data.replace(rtrimLeft, '').replace(rtrimRight, '');
+
+  // Attempt to parse using the native JSON parser first
+  if (global.JSON && JSON.parse) {
+    return JSON.parse(data);
+  }
+
+  if (rvalidchars.test(data.replace(rvalidescape, '@')
+      .replace(rvalidtokens, ']')
+      .replace(rvalidbraces, ''))) {
+    return (new Function('return ' + data))();
+  }
+};
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{}],482:[function(require,module,exports){
+/**
+ * Compiles a querystring
+ * Returns string representation of the object
+ *
+ * @param {Object}
+ * @api private
+ */
+
+exports.encode = function (obj) {
+  var str = '';
+
+  for (var i in obj) {
+    if (obj.hasOwnProperty(i)) {
+      if (str.length) str += '&';
+      str += encodeURIComponent(i) + '=' + encodeURIComponent(obj[i]);
+    }
+  }
+
+  return str;
+};
+
+/**
+ * Parses a simple querystring into an object
+ *
+ * @param {String} qs
+ * @api private
+ */
+
+exports.decode = function(qs){
+  var qry = {};
+  var pairs = qs.split('&');
+  for (var i = 0, l = pairs.length; i < l; i++) {
+    var pair = pairs[i].split('=');
+    qry[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1]);
+  }
+  return qry;
+};
+
+},{}],483:[function(require,module,exports){
+/**
+ * Parses an URI
+ *
+ * @author Steven Levithan <stevenlevithan.com> (MIT license)
+ * @api private
+ */
+
+var re = /^(?:(?![^:@]+:[^:@\/]*@)(http|https|ws|wss):\/\/)?((?:(([^:@]*)(?::([^:@]*))?)?@)?((?:[a-f0-9]{0,4}:){2,7}[a-f0-9]{0,4}|[^:\/?#]*)(?::(\d*))?)(((\/(?:[^?#](?![^?#\/]*\.[^?#\/.]+(?:[?#]|$)))*\/?)?([^?#\/]*))(?:\?([^#]*))?(?:#(.*))?)/;
+
+var parts = [
+    'source', 'protocol', 'authority', 'userInfo', 'user', 'password', 'host', 'port', 'relative', 'path', 'directory', 'file', 'query', 'anchor'
+];
+
+module.exports = function parseuri(str) {
+    var src = str,
+        b = str.indexOf('['),
+        e = str.indexOf(']');
+
+    if (b != -1 && e != -1) {
+        str = str.substring(0, b) + str.substring(b, e).replace(/:/g, ';') + str.substring(e, str.length);
+    }
+
+    var m = re.exec(str || ''),
+        uri = {},
+        i = 14;
+
+    while (i--) {
+        uri[parts[i]] = m[i] || '';
+    }
+
+    if (b != -1 && e != -1) {
+        uri.source = src;
+        uri.host = uri.host.substring(1, uri.host.length - 1).replace(/;/g, ':');
+        uri.authority = uri.authority.replace('[', '').replace(']', '').replace(/;/g, ':');
+        uri.ipv6uri = true;
+    }
+
+    return uri;
+};
+
+},{}],484:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -86275,7 +82235,7 @@ var AsyncSubject = (function (_super) {
 }(Subject_1.Subject));
 exports.AsyncSubject = AsyncSubject;
 
-},{"./Subject":525}],516:[function(require,module,exports){
+},{"./Subject":494}],485:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -86330,7 +82290,7 @@ var BehaviorSubject = (function (_super) {
 }(Subject_1.Subject));
 exports.BehaviorSubject = BehaviorSubject;
 
-},{"./Subject":525,"./util/ObjectUnsubscribedError":773,"./util/throwError":787}],517:[function(require,module,exports){
+},{"./Subject":494,"./util/ObjectUnsubscribedError":742,"./util/throwError":756}],486:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -86367,7 +82327,7 @@ var InnerSubscriber = (function (_super) {
 }(Subscriber_1.Subscriber));
 exports.InnerSubscriber = InnerSubscriber;
 
-},{"./Subscriber":527}],518:[function(require,module,exports){
+},{"./Subscriber":496}],487:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('./Observable');
 /**
@@ -86494,7 +82454,7 @@ var Notification = (function () {
 }());
 exports.Notification = Notification;
 
-},{"./Observable":519}],519:[function(require,module,exports){
+},{"./Observable":488}],488:[function(require,module,exports){
 "use strict";
 var root_1 = require('./util/root');
 var observable_1 = require('./symbol/observable');
@@ -86630,7 +82590,7 @@ var Observable = (function () {
 }());
 exports.Observable = Observable;
 
-},{"./symbol/observable":765,"./util/root":785,"./util/toSubscriber":788}],520:[function(require,module,exports){
+},{"./symbol/observable":734,"./util/root":754,"./util/toSubscriber":757}],489:[function(require,module,exports){
 "use strict";
 exports.empty = {
     isUnsubscribed: true,
@@ -86639,7 +82599,7 @@ exports.empty = {
     complete: function () { }
 };
 
-},{}],521:[function(require,module,exports){
+},{}],490:[function(require,module,exports){
 "use strict";
 var Subscriber_1 = require('./Subscriber');
 var Operator = (function () {
@@ -86652,7 +82612,7 @@ var Operator = (function () {
 }());
 exports.Operator = Operator;
 
-},{"./Subscriber":527}],522:[function(require,module,exports){
+},{"./Subscriber":496}],491:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -86683,7 +82643,7 @@ var OuterSubscriber = (function (_super) {
 }(Subscriber_1.Subscriber));
 exports.OuterSubscriber = OuterSubscriber;
 
-},{"./Subscriber":527}],523:[function(require,module,exports){
+},{"./Subscriber":496}],492:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -86763,7 +82723,7 @@ var ReplayEvent = (function () {
     return ReplayEvent;
 }());
 
-},{"./Subject":525,"./operator/observeOn":712,"./scheduler/queue":763}],524:[function(require,module,exports){
+},{"./Subject":494,"./operator/observeOn":681,"./scheduler/queue":732}],493:[function(require,module,exports){
 "use strict";
 /* tslint:disable:no-unused-variable */
 // Subject imported before Observable to bypass circular dependency issue since
@@ -86950,7 +82910,7 @@ var Symbol = {
 };
 exports.Symbol = Symbol;
 
-},{"./AsyncSubject":515,"./BehaviorSubject":516,"./Notification":518,"./Observable":519,"./Operator":521,"./ReplaySubject":523,"./Subject":525,"./Subscriber":527,"./Subscription":528,"./add/observable/bindCallback":529,"./add/observable/bindNodeCallback":530,"./add/observable/combineLatest":531,"./add/observable/concat":532,"./add/observable/defer":533,"./add/observable/empty":534,"./add/observable/forkJoin":535,"./add/observable/from":536,"./add/observable/fromEvent":537,"./add/observable/fromEventPattern":538,"./add/observable/fromPromise":539,"./add/observable/interval":540,"./add/observable/merge":541,"./add/observable/never":542,"./add/observable/of":543,"./add/observable/race":544,"./add/observable/range":545,"./add/observable/throw":546,"./add/observable/timer":547,"./add/observable/zip":548,"./add/operator/audit":549,"./add/operator/auditTime":550,"./add/operator/buffer":551,"./add/operator/bufferCount":552,"./add/operator/bufferTime":553,"./add/operator/bufferToggle":554,"./add/operator/bufferWhen":555,"./add/operator/cache":556,"./add/operator/catch":557,"./add/operator/combineAll":558,"./add/operator/combineLatest":559,"./add/operator/concat":560,"./add/operator/concatAll":561,"./add/operator/concatMap":562,"./add/operator/concatMapTo":563,"./add/operator/count":564,"./add/operator/debounce":565,"./add/operator/debounceTime":566,"./add/operator/defaultIfEmpty":567,"./add/operator/delay":568,"./add/operator/delayWhen":569,"./add/operator/dematerialize":570,"./add/operator/distinctUntilChanged":571,"./add/operator/do":572,"./add/operator/every":573,"./add/operator/expand":574,"./add/operator/filter":575,"./add/operator/finally":576,"./add/operator/first":577,"./add/operator/groupBy":578,"./add/operator/ignoreElements":579,"./add/operator/last":580,"./add/operator/let":581,"./add/operator/map":582,"./add/operator/mapTo":583,"./add/operator/materialize":584,"./add/operator/merge":585,"./add/operator/mergeAll":586,"./add/operator/mergeMap":587,"./add/operator/mergeMapTo":588,"./add/operator/multicast":589,"./add/operator/observeOn":590,"./add/operator/partition":591,"./add/operator/pluck":592,"./add/operator/publish":593,"./add/operator/publishBehavior":594,"./add/operator/publishLast":595,"./add/operator/publishReplay":596,"./add/operator/race":597,"./add/operator/reduce":598,"./add/operator/repeat":599,"./add/operator/retry":600,"./add/operator/retryWhen":601,"./add/operator/sample":602,"./add/operator/sampleTime":603,"./add/operator/scan":604,"./add/operator/share":605,"./add/operator/single":606,"./add/operator/skip":607,"./add/operator/skipUntil":608,"./add/operator/skipWhile":609,"./add/operator/startWith":610,"./add/operator/subscribeOn":611,"./add/operator/switch":612,"./add/operator/switchMap":613,"./add/operator/switchMapTo":614,"./add/operator/take":615,"./add/operator/takeLast":616,"./add/operator/takeUntil":617,"./add/operator/takeWhile":618,"./add/operator/throttle":619,"./add/operator/throttleTime":620,"./add/operator/timeout":621,"./add/operator/timeoutWith":622,"./add/operator/toArray":623,"./add/operator/toPromise":624,"./add/operator/window":625,"./add/operator/windowCount":626,"./add/operator/windowTime":627,"./add/operator/windowToggle":628,"./add/operator/windowWhen":629,"./add/operator/withLatestFrom":630,"./add/operator/zip":631,"./add/operator/zipAll":632,"./observable/ConnectableObservable":637,"./scheduler/asap":761,"./scheduler/async":762,"./scheduler/queue":763,"./symbol/iterator":764,"./symbol/observable":765,"./symbol/rxSubscriber":766,"./util/ArgumentOutOfRangeError":767,"./util/EmptyError":768,"./util/ObjectUnsubscribedError":773,"./util/UnsubscriptionError":774}],525:[function(require,module,exports){
+},{"./AsyncSubject":484,"./BehaviorSubject":485,"./Notification":487,"./Observable":488,"./Operator":490,"./ReplaySubject":492,"./Subject":494,"./Subscriber":496,"./Subscription":497,"./add/observable/bindCallback":498,"./add/observable/bindNodeCallback":499,"./add/observable/combineLatest":500,"./add/observable/concat":501,"./add/observable/defer":502,"./add/observable/empty":503,"./add/observable/forkJoin":504,"./add/observable/from":505,"./add/observable/fromEvent":506,"./add/observable/fromEventPattern":507,"./add/observable/fromPromise":508,"./add/observable/interval":509,"./add/observable/merge":510,"./add/observable/never":511,"./add/observable/of":512,"./add/observable/race":513,"./add/observable/range":514,"./add/observable/throw":515,"./add/observable/timer":516,"./add/observable/zip":517,"./add/operator/audit":518,"./add/operator/auditTime":519,"./add/operator/buffer":520,"./add/operator/bufferCount":521,"./add/operator/bufferTime":522,"./add/operator/bufferToggle":523,"./add/operator/bufferWhen":524,"./add/operator/cache":525,"./add/operator/catch":526,"./add/operator/combineAll":527,"./add/operator/combineLatest":528,"./add/operator/concat":529,"./add/operator/concatAll":530,"./add/operator/concatMap":531,"./add/operator/concatMapTo":532,"./add/operator/count":533,"./add/operator/debounce":534,"./add/operator/debounceTime":535,"./add/operator/defaultIfEmpty":536,"./add/operator/delay":537,"./add/operator/delayWhen":538,"./add/operator/dematerialize":539,"./add/operator/distinctUntilChanged":540,"./add/operator/do":541,"./add/operator/every":542,"./add/operator/expand":543,"./add/operator/filter":544,"./add/operator/finally":545,"./add/operator/first":546,"./add/operator/groupBy":547,"./add/operator/ignoreElements":548,"./add/operator/last":549,"./add/operator/let":550,"./add/operator/map":551,"./add/operator/mapTo":552,"./add/operator/materialize":553,"./add/operator/merge":554,"./add/operator/mergeAll":555,"./add/operator/mergeMap":556,"./add/operator/mergeMapTo":557,"./add/operator/multicast":558,"./add/operator/observeOn":559,"./add/operator/partition":560,"./add/operator/pluck":561,"./add/operator/publish":562,"./add/operator/publishBehavior":563,"./add/operator/publishLast":564,"./add/operator/publishReplay":565,"./add/operator/race":566,"./add/operator/reduce":567,"./add/operator/repeat":568,"./add/operator/retry":569,"./add/operator/retryWhen":570,"./add/operator/sample":571,"./add/operator/sampleTime":572,"./add/operator/scan":573,"./add/operator/share":574,"./add/operator/single":575,"./add/operator/skip":576,"./add/operator/skipUntil":577,"./add/operator/skipWhile":578,"./add/operator/startWith":579,"./add/operator/subscribeOn":580,"./add/operator/switch":581,"./add/operator/switchMap":582,"./add/operator/switchMapTo":583,"./add/operator/take":584,"./add/operator/takeLast":585,"./add/operator/takeUntil":586,"./add/operator/takeWhile":587,"./add/operator/throttle":588,"./add/operator/throttleTime":589,"./add/operator/timeout":590,"./add/operator/timeoutWith":591,"./add/operator/toArray":592,"./add/operator/toPromise":593,"./add/operator/window":594,"./add/operator/windowCount":595,"./add/operator/windowTime":596,"./add/operator/windowToggle":597,"./add/operator/windowWhen":598,"./add/operator/withLatestFrom":599,"./add/operator/zip":600,"./add/operator/zipAll":601,"./observable/ConnectableObservable":606,"./scheduler/asap":730,"./scheduler/async":731,"./scheduler/queue":732,"./symbol/iterator":733,"./symbol/observable":734,"./symbol/rxSubscriber":735,"./util/ArgumentOutOfRangeError":736,"./util/EmptyError":737,"./util/ObjectUnsubscribedError":742,"./util/UnsubscriptionError":743}],494:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -87157,7 +83117,7 @@ var SubjectObservable = (function (_super) {
     return SubjectObservable;
 }(Observable_1.Observable));
 
-},{"./Observable":519,"./SubjectSubscription":526,"./Subscriber":527,"./Subscription":528,"./symbol/rxSubscriber":766,"./util/ObjectUnsubscribedError":773,"./util/throwError":787}],526:[function(require,module,exports){
+},{"./Observable":488,"./SubjectSubscription":495,"./Subscriber":496,"./Subscription":497,"./symbol/rxSubscriber":735,"./util/ObjectUnsubscribedError":742,"./util/throwError":756}],495:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -87198,7 +83158,7 @@ var SubjectSubscription = (function (_super) {
 }(Subscription_1.Subscription));
 exports.SubjectSubscription = SubjectSubscription;
 
-},{"./Subscription":528}],527:[function(require,module,exports){
+},{"./Subscription":497}],496:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -87450,7 +83410,7 @@ var SafeSubscriber = (function (_super) {
     return SafeSubscriber;
 }(Subscriber));
 
-},{"./Observer":520,"./Subscription":528,"./symbol/rxSubscriber":766,"./util/isFunction":778}],528:[function(require,module,exports){
+},{"./Observer":489,"./Subscription":497,"./symbol/rxSubscriber":735,"./util/isFunction":747}],497:[function(require,module,exports){
 "use strict";
 var isArray_1 = require('./util/isArray');
 var isObject_1 = require('./util/isObject');
@@ -87601,634 +83561,634 @@ var Subscription = (function () {
 }());
 exports.Subscription = Subscription;
 
-},{"./util/UnsubscriptionError":774,"./util/errorObject":775,"./util/isArray":776,"./util/isFunction":778,"./util/isObject":780,"./util/tryCatch":789}],529:[function(require,module,exports){
+},{"./util/UnsubscriptionError":743,"./util/errorObject":744,"./util/isArray":745,"./util/isFunction":747,"./util/isObject":749,"./util/tryCatch":758}],498:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var bindCallback_1 = require('../../observable/bindCallback');
 Observable_1.Observable.bindCallback = bindCallback_1.bindCallback;
 
-},{"../../Observable":519,"../../observable/bindCallback":653}],530:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/bindCallback":622}],499:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var bindNodeCallback_1 = require('../../observable/bindNodeCallback');
 Observable_1.Observable.bindNodeCallback = bindNodeCallback_1.bindNodeCallback;
 
-},{"../../Observable":519,"../../observable/bindNodeCallback":654}],531:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/bindNodeCallback":623}],500:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var combineLatest_1 = require('../../operator/combineLatest');
 Observable_1.Observable.combineLatest = combineLatest_1.combineLatestStatic;
 
-},{"../../Observable":519,"../../operator/combineLatest":681}],532:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/combineLatest":650}],501:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var concat_1 = require('../../observable/concat');
 Observable_1.Observable.concat = concat_1.concat;
 
-},{"../../Observable":519,"../../observable/concat":655}],533:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/concat":624}],502:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var defer_1 = require('../../observable/defer');
 Observable_1.Observable.defer = defer_1.defer;
 
-},{"../../Observable":519,"../../observable/defer":656}],534:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/defer":625}],503:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var empty_1 = require('../../observable/empty');
 Observable_1.Observable.empty = empty_1.empty;
 
-},{"../../Observable":519,"../../observable/empty":657}],535:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/empty":626}],504:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var forkJoin_1 = require('../../observable/forkJoin');
 Observable_1.Observable.forkJoin = forkJoin_1.forkJoin;
 
-},{"../../Observable":519,"../../observable/forkJoin":658}],536:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/forkJoin":627}],505:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var from_1 = require('../../observable/from');
 Observable_1.Observable.from = from_1.from;
 
-},{"../../Observable":519,"../../observable/from":659}],537:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/from":628}],506:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var fromEvent_1 = require('../../observable/fromEvent');
 Observable_1.Observable.fromEvent = fromEvent_1.fromEvent;
 
-},{"../../Observable":519,"../../observable/fromEvent":660}],538:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/fromEvent":629}],507:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var fromEventPattern_1 = require('../../observable/fromEventPattern');
 Observable_1.Observable.fromEventPattern = fromEventPattern_1.fromEventPattern;
 
-},{"../../Observable":519,"../../observable/fromEventPattern":661}],539:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/fromEventPattern":630}],508:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var fromPromise_1 = require('../../observable/fromPromise');
 Observable_1.Observable.fromPromise = fromPromise_1.fromPromise;
 
-},{"../../Observable":519,"../../observable/fromPromise":662}],540:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/fromPromise":631}],509:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var interval_1 = require('../../observable/interval');
 Observable_1.Observable.interval = interval_1.interval;
 
-},{"../../Observable":519,"../../observable/interval":663}],541:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/interval":632}],510:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var merge_1 = require('../../observable/merge');
 Observable_1.Observable.merge = merge_1.merge;
 
-},{"../../Observable":519,"../../observable/merge":664}],542:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/merge":633}],511:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var never_1 = require('../../observable/never');
 Observable_1.Observable.never = never_1.never;
 
-},{"../../Observable":519,"../../observable/never":665}],543:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/never":634}],512:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var of_1 = require('../../observable/of');
 Observable_1.Observable.of = of_1.of;
 
-},{"../../Observable":519,"../../observable/of":666}],544:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/of":635}],513:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var race_1 = require('../../operator/race');
 Observable_1.Observable.race = race_1.raceStatic;
 
-},{"../../Observable":519,"../../operator/race":719}],545:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/race":688}],514:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var range_1 = require('../../observable/range');
 Observable_1.Observable.range = range_1.range;
 
-},{"../../Observable":519,"../../observable/range":667}],546:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/range":636}],515:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var throw_1 = require('../../observable/throw');
 Observable_1.Observable.throw = throw_1._throw;
 
-},{"../../Observable":519,"../../observable/throw":668}],547:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/throw":637}],516:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var timer_1 = require('../../observable/timer');
 Observable_1.Observable.timer = timer_1.timer;
 
-},{"../../Observable":519,"../../observable/timer":669}],548:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/timer":638}],517:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var zip_1 = require('../../observable/zip');
 Observable_1.Observable.zip = zip_1.zip;
 
-},{"../../Observable":519,"../../observable/zip":670}],549:[function(require,module,exports){
+},{"../../Observable":488,"../../observable/zip":639}],518:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var audit_1 = require('../../operator/audit');
 Observable_1.Observable.prototype.audit = audit_1.audit;
 
-},{"../../Observable":519,"../../operator/audit":671}],550:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/audit":640}],519:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var auditTime_1 = require('../../operator/auditTime');
 Observable_1.Observable.prototype.auditTime = auditTime_1.auditTime;
 
-},{"../../Observable":519,"../../operator/auditTime":672}],551:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/auditTime":641}],520:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var buffer_1 = require('../../operator/buffer');
 Observable_1.Observable.prototype.buffer = buffer_1.buffer;
 
-},{"../../Observable":519,"../../operator/buffer":673}],552:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/buffer":642}],521:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var bufferCount_1 = require('../../operator/bufferCount');
 Observable_1.Observable.prototype.bufferCount = bufferCount_1.bufferCount;
 
-},{"../../Observable":519,"../../operator/bufferCount":674}],553:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/bufferCount":643}],522:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var bufferTime_1 = require('../../operator/bufferTime');
 Observable_1.Observable.prototype.bufferTime = bufferTime_1.bufferTime;
 
-},{"../../Observable":519,"../../operator/bufferTime":675}],554:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/bufferTime":644}],523:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var bufferToggle_1 = require('../../operator/bufferToggle');
 Observable_1.Observable.prototype.bufferToggle = bufferToggle_1.bufferToggle;
 
-},{"../../Observable":519,"../../operator/bufferToggle":676}],555:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/bufferToggle":645}],524:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var bufferWhen_1 = require('../../operator/bufferWhen');
 Observable_1.Observable.prototype.bufferWhen = bufferWhen_1.bufferWhen;
 
-},{"../../Observable":519,"../../operator/bufferWhen":677}],556:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/bufferWhen":646}],525:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var cache_1 = require('../../operator/cache');
 Observable_1.Observable.prototype.cache = cache_1.cache;
 
-},{"../../Observable":519,"../../operator/cache":678}],557:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/cache":647}],526:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var catch_1 = require('../../operator/catch');
 Observable_1.Observable.prototype.catch = catch_1._catch;
 
-},{"../../Observable":519,"../../operator/catch":679}],558:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/catch":648}],527:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var combineAll_1 = require('../../operator/combineAll');
 Observable_1.Observable.prototype.combineAll = combineAll_1.combineAll;
 
-},{"../../Observable":519,"../../operator/combineAll":680}],559:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/combineAll":649}],528:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var combineLatest_1 = require('../../operator/combineLatest');
 Observable_1.Observable.prototype.combineLatest = combineLatest_1.combineLatest;
 
-},{"../../Observable":519,"../../operator/combineLatest":681}],560:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/combineLatest":650}],529:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var concat_1 = require('../../operator/concat');
 Observable_1.Observable.prototype.concat = concat_1.concat;
 
-},{"../../Observable":519,"../../operator/concat":682}],561:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/concat":651}],530:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var concatAll_1 = require('../../operator/concatAll');
 Observable_1.Observable.prototype.concatAll = concatAll_1.concatAll;
 
-},{"../../Observable":519,"../../operator/concatAll":683}],562:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/concatAll":652}],531:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var concatMap_1 = require('../../operator/concatMap');
 Observable_1.Observable.prototype.concatMap = concatMap_1.concatMap;
 
-},{"../../Observable":519,"../../operator/concatMap":684}],563:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/concatMap":653}],532:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var concatMapTo_1 = require('../../operator/concatMapTo');
 Observable_1.Observable.prototype.concatMapTo = concatMapTo_1.concatMapTo;
 
-},{"../../Observable":519,"../../operator/concatMapTo":685}],564:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/concatMapTo":654}],533:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var count_1 = require('../../operator/count');
 Observable_1.Observable.prototype.count = count_1.count;
 
-},{"../../Observable":519,"../../operator/count":686}],565:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/count":655}],534:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var debounce_1 = require('../../operator/debounce');
 Observable_1.Observable.prototype.debounce = debounce_1.debounce;
 
-},{"../../Observable":519,"../../operator/debounce":687}],566:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/debounce":656}],535:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var debounceTime_1 = require('../../operator/debounceTime');
 Observable_1.Observable.prototype.debounceTime = debounceTime_1.debounceTime;
 
-},{"../../Observable":519,"../../operator/debounceTime":688}],567:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/debounceTime":657}],536:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var defaultIfEmpty_1 = require('../../operator/defaultIfEmpty');
 Observable_1.Observable.prototype.defaultIfEmpty = defaultIfEmpty_1.defaultIfEmpty;
 
-},{"../../Observable":519,"../../operator/defaultIfEmpty":689}],568:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/defaultIfEmpty":658}],537:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var delay_1 = require('../../operator/delay');
 Observable_1.Observable.prototype.delay = delay_1.delay;
 
-},{"../../Observable":519,"../../operator/delay":690}],569:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/delay":659}],538:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var delayWhen_1 = require('../../operator/delayWhen');
 Observable_1.Observable.prototype.delayWhen = delayWhen_1.delayWhen;
 
-},{"../../Observable":519,"../../operator/delayWhen":691}],570:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/delayWhen":660}],539:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var dematerialize_1 = require('../../operator/dematerialize');
 Observable_1.Observable.prototype.dematerialize = dematerialize_1.dematerialize;
 
-},{"../../Observable":519,"../../operator/dematerialize":692}],571:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/dematerialize":661}],540:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var distinctUntilChanged_1 = require('../../operator/distinctUntilChanged');
 Observable_1.Observable.prototype.distinctUntilChanged = distinctUntilChanged_1.distinctUntilChanged;
 
-},{"../../Observable":519,"../../operator/distinctUntilChanged":693}],572:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/distinctUntilChanged":662}],541:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var do_1 = require('../../operator/do');
 Observable_1.Observable.prototype.do = do_1._do;
 
-},{"../../Observable":519,"../../operator/do":694}],573:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/do":663}],542:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var every_1 = require('../../operator/every');
 Observable_1.Observable.prototype.every = every_1.every;
 
-},{"../../Observable":519,"../../operator/every":695}],574:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/every":664}],543:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var expand_1 = require('../../operator/expand');
 Observable_1.Observable.prototype.expand = expand_1.expand;
 
-},{"../../Observable":519,"../../operator/expand":696}],575:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/expand":665}],544:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var filter_1 = require('../../operator/filter');
 Observable_1.Observable.prototype.filter = filter_1.filter;
 
-},{"../../Observable":519,"../../operator/filter":697}],576:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/filter":666}],545:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var finally_1 = require('../../operator/finally');
 Observable_1.Observable.prototype.finally = finally_1._finally;
 
-},{"../../Observable":519,"../../operator/finally":698}],577:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/finally":667}],546:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var first_1 = require('../../operator/first');
 Observable_1.Observable.prototype.first = first_1.first;
 
-},{"../../Observable":519,"../../operator/first":699}],578:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/first":668}],547:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var groupBy_1 = require('../../operator/groupBy');
 Observable_1.Observable.prototype.groupBy = groupBy_1.groupBy;
 
-},{"../../Observable":519,"../../operator/groupBy":700}],579:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/groupBy":669}],548:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var ignoreElements_1 = require('../../operator/ignoreElements');
 Observable_1.Observable.prototype.ignoreElements = ignoreElements_1.ignoreElements;
 
-},{"../../Observable":519,"../../operator/ignoreElements":701}],580:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/ignoreElements":670}],549:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var last_1 = require('../../operator/last');
 Observable_1.Observable.prototype.last = last_1.last;
 
-},{"../../Observable":519,"../../operator/last":702}],581:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/last":671}],550:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var let_1 = require('../../operator/let');
 Observable_1.Observable.prototype.let = let_1.letProto;
 Observable_1.Observable.prototype.letBind = let_1.letProto;
 
-},{"../../Observable":519,"../../operator/let":703}],582:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/let":672}],551:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var map_1 = require('../../operator/map');
 Observable_1.Observable.prototype.map = map_1.map;
 
-},{"../../Observable":519,"../../operator/map":704}],583:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/map":673}],552:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var mapTo_1 = require('../../operator/mapTo');
 Observable_1.Observable.prototype.mapTo = mapTo_1.mapTo;
 
-},{"../../Observable":519,"../../operator/mapTo":705}],584:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/mapTo":674}],553:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var materialize_1 = require('../../operator/materialize');
 Observable_1.Observable.prototype.materialize = materialize_1.materialize;
 
-},{"../../Observable":519,"../../operator/materialize":706}],585:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/materialize":675}],554:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var merge_1 = require('../../operator/merge');
 Observable_1.Observable.prototype.merge = merge_1.merge;
 
-},{"../../Observable":519,"../../operator/merge":707}],586:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/merge":676}],555:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var mergeAll_1 = require('../../operator/mergeAll');
 Observable_1.Observable.prototype.mergeAll = mergeAll_1.mergeAll;
 
-},{"../../Observable":519,"../../operator/mergeAll":708}],587:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/mergeAll":677}],556:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var mergeMap_1 = require('../../operator/mergeMap');
 Observable_1.Observable.prototype.mergeMap = mergeMap_1.mergeMap;
 Observable_1.Observable.prototype.flatMap = mergeMap_1.mergeMap;
 
-},{"../../Observable":519,"../../operator/mergeMap":709}],588:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/mergeMap":678}],557:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var mergeMapTo_1 = require('../../operator/mergeMapTo');
 Observable_1.Observable.prototype.flatMapTo = mergeMapTo_1.mergeMapTo;
 Observable_1.Observable.prototype.mergeMapTo = mergeMapTo_1.mergeMapTo;
 
-},{"../../Observable":519,"../../operator/mergeMapTo":710}],589:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/mergeMapTo":679}],558:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var multicast_1 = require('../../operator/multicast');
 Observable_1.Observable.prototype.multicast = multicast_1.multicast;
 
-},{"../../Observable":519,"../../operator/multicast":711}],590:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/multicast":680}],559:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var observeOn_1 = require('../../operator/observeOn');
 Observable_1.Observable.prototype.observeOn = observeOn_1.observeOn;
 
-},{"../../Observable":519,"../../operator/observeOn":712}],591:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/observeOn":681}],560:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var partition_1 = require('../../operator/partition');
 Observable_1.Observable.prototype.partition = partition_1.partition;
 
-},{"../../Observable":519,"../../operator/partition":713}],592:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/partition":682}],561:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var pluck_1 = require('../../operator/pluck');
 Observable_1.Observable.prototype.pluck = pluck_1.pluck;
 
-},{"../../Observable":519,"../../operator/pluck":714}],593:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/pluck":683}],562:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var publish_1 = require('../../operator/publish');
 Observable_1.Observable.prototype.publish = publish_1.publish;
 
-},{"../../Observable":519,"../../operator/publish":715}],594:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/publish":684}],563:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var publishBehavior_1 = require('../../operator/publishBehavior');
 Observable_1.Observable.prototype.publishBehavior = publishBehavior_1.publishBehavior;
 
-},{"../../Observable":519,"../../operator/publishBehavior":716}],595:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/publishBehavior":685}],564:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var publishLast_1 = require('../../operator/publishLast');
 Observable_1.Observable.prototype.publishLast = publishLast_1.publishLast;
 
-},{"../../Observable":519,"../../operator/publishLast":717}],596:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/publishLast":686}],565:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var publishReplay_1 = require('../../operator/publishReplay');
 Observable_1.Observable.prototype.publishReplay = publishReplay_1.publishReplay;
 
-},{"../../Observable":519,"../../operator/publishReplay":718}],597:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/publishReplay":687}],566:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var race_1 = require('../../operator/race');
 Observable_1.Observable.prototype.race = race_1.race;
 
-},{"../../Observable":519,"../../operator/race":719}],598:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/race":688}],567:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var reduce_1 = require('../../operator/reduce');
 Observable_1.Observable.prototype.reduce = reduce_1.reduce;
 
-},{"../../Observable":519,"../../operator/reduce":720}],599:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/reduce":689}],568:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var repeat_1 = require('../../operator/repeat');
 Observable_1.Observable.prototype.repeat = repeat_1.repeat;
 
-},{"../../Observable":519,"../../operator/repeat":721}],600:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/repeat":690}],569:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var retry_1 = require('../../operator/retry');
 Observable_1.Observable.prototype.retry = retry_1.retry;
 
-},{"../../Observable":519,"../../operator/retry":722}],601:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/retry":691}],570:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var retryWhen_1 = require('../../operator/retryWhen');
 Observable_1.Observable.prototype.retryWhen = retryWhen_1.retryWhen;
 
-},{"../../Observable":519,"../../operator/retryWhen":723}],602:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/retryWhen":692}],571:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var sample_1 = require('../../operator/sample');
 Observable_1.Observable.prototype.sample = sample_1.sample;
 
-},{"../../Observable":519,"../../operator/sample":724}],603:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/sample":693}],572:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var sampleTime_1 = require('../../operator/sampleTime');
 Observable_1.Observable.prototype.sampleTime = sampleTime_1.sampleTime;
 
-},{"../../Observable":519,"../../operator/sampleTime":725}],604:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/sampleTime":694}],573:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var scan_1 = require('../../operator/scan');
 Observable_1.Observable.prototype.scan = scan_1.scan;
 
-},{"../../Observable":519,"../../operator/scan":726}],605:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/scan":695}],574:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var share_1 = require('../../operator/share');
 Observable_1.Observable.prototype.share = share_1.share;
 
-},{"../../Observable":519,"../../operator/share":727}],606:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/share":696}],575:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var single_1 = require('../../operator/single');
 Observable_1.Observable.prototype.single = single_1.single;
 
-},{"../../Observable":519,"../../operator/single":728}],607:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/single":697}],576:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var skip_1 = require('../../operator/skip');
 Observable_1.Observable.prototype.skip = skip_1.skip;
 
-},{"../../Observable":519,"../../operator/skip":729}],608:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/skip":698}],577:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var skipUntil_1 = require('../../operator/skipUntil');
 Observable_1.Observable.prototype.skipUntil = skipUntil_1.skipUntil;
 
-},{"../../Observable":519,"../../operator/skipUntil":730}],609:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/skipUntil":699}],578:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var skipWhile_1 = require('../../operator/skipWhile');
 Observable_1.Observable.prototype.skipWhile = skipWhile_1.skipWhile;
 
-},{"../../Observable":519,"../../operator/skipWhile":731}],610:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/skipWhile":700}],579:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var startWith_1 = require('../../operator/startWith');
 Observable_1.Observable.prototype.startWith = startWith_1.startWith;
 
-},{"../../Observable":519,"../../operator/startWith":732}],611:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/startWith":701}],580:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var subscribeOn_1 = require('../../operator/subscribeOn');
 Observable_1.Observable.prototype.subscribeOn = subscribeOn_1.subscribeOn;
 
-},{"../../Observable":519,"../../operator/subscribeOn":733}],612:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/subscribeOn":702}],581:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var switch_1 = require('../../operator/switch');
 Observable_1.Observable.prototype.switch = switch_1._switch;
 
-},{"../../Observable":519,"../../operator/switch":734}],613:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/switch":703}],582:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var switchMap_1 = require('../../operator/switchMap');
 Observable_1.Observable.prototype.switchMap = switchMap_1.switchMap;
 
-},{"../../Observable":519,"../../operator/switchMap":735}],614:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/switchMap":704}],583:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var switchMapTo_1 = require('../../operator/switchMapTo');
 Observable_1.Observable.prototype.switchMapTo = switchMapTo_1.switchMapTo;
 
-},{"../../Observable":519,"../../operator/switchMapTo":736}],615:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/switchMapTo":705}],584:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var take_1 = require('../../operator/take');
 Observable_1.Observable.prototype.take = take_1.take;
 
-},{"../../Observable":519,"../../operator/take":737}],616:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/take":706}],585:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var takeLast_1 = require('../../operator/takeLast');
 Observable_1.Observable.prototype.takeLast = takeLast_1.takeLast;
 
-},{"../../Observable":519,"../../operator/takeLast":738}],617:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/takeLast":707}],586:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var takeUntil_1 = require('../../operator/takeUntil');
 Observable_1.Observable.prototype.takeUntil = takeUntil_1.takeUntil;
 
-},{"../../Observable":519,"../../operator/takeUntil":739}],618:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/takeUntil":708}],587:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var takeWhile_1 = require('../../operator/takeWhile');
 Observable_1.Observable.prototype.takeWhile = takeWhile_1.takeWhile;
 
-},{"../../Observable":519,"../../operator/takeWhile":740}],619:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/takeWhile":709}],588:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var throttle_1 = require('../../operator/throttle');
 Observable_1.Observable.prototype.throttle = throttle_1.throttle;
 
-},{"../../Observable":519,"../../operator/throttle":741}],620:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/throttle":710}],589:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var throttleTime_1 = require('../../operator/throttleTime');
 Observable_1.Observable.prototype.throttleTime = throttleTime_1.throttleTime;
 
-},{"../../Observable":519,"../../operator/throttleTime":742}],621:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/throttleTime":711}],590:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var timeout_1 = require('../../operator/timeout');
 Observable_1.Observable.prototype.timeout = timeout_1.timeout;
 
-},{"../../Observable":519,"../../operator/timeout":743}],622:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/timeout":712}],591:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var timeoutWith_1 = require('../../operator/timeoutWith');
 Observable_1.Observable.prototype.timeoutWith = timeoutWith_1.timeoutWith;
 
-},{"../../Observable":519,"../../operator/timeoutWith":744}],623:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/timeoutWith":713}],592:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var toArray_1 = require('../../operator/toArray');
 Observable_1.Observable.prototype.toArray = toArray_1.toArray;
 
-},{"../../Observable":519,"../../operator/toArray":745}],624:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/toArray":714}],593:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var toPromise_1 = require('../../operator/toPromise');
 Observable_1.Observable.prototype.toPromise = toPromise_1.toPromise;
 
-},{"../../Observable":519,"../../operator/toPromise":746}],625:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/toPromise":715}],594:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var window_1 = require('../../operator/window');
 Observable_1.Observable.prototype.window = window_1.window;
 
-},{"../../Observable":519,"../../operator/window":747}],626:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/window":716}],595:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var windowCount_1 = require('../../operator/windowCount');
 Observable_1.Observable.prototype.windowCount = windowCount_1.windowCount;
 
-},{"../../Observable":519,"../../operator/windowCount":748}],627:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/windowCount":717}],596:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var windowTime_1 = require('../../operator/windowTime');
 Observable_1.Observable.prototype.windowTime = windowTime_1.windowTime;
 
-},{"../../Observable":519,"../../operator/windowTime":749}],628:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/windowTime":718}],597:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var windowToggle_1 = require('../../operator/windowToggle');
 Observable_1.Observable.prototype.windowToggle = windowToggle_1.windowToggle;
 
-},{"../../Observable":519,"../../operator/windowToggle":750}],629:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/windowToggle":719}],598:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var windowWhen_1 = require('../../operator/windowWhen');
 Observable_1.Observable.prototype.windowWhen = windowWhen_1.windowWhen;
 
-},{"../../Observable":519,"../../operator/windowWhen":751}],630:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/windowWhen":720}],599:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var withLatestFrom_1 = require('../../operator/withLatestFrom');
 Observable_1.Observable.prototype.withLatestFrom = withLatestFrom_1.withLatestFrom;
 
-},{"../../Observable":519,"../../operator/withLatestFrom":752}],631:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/withLatestFrom":721}],600:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var zip_1 = require('../../operator/zip');
 Observable_1.Observable.prototype.zip = zip_1.zipProto;
 
-},{"../../Observable":519,"../../operator/zip":753}],632:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/zip":722}],601:[function(require,module,exports){
 "use strict";
 var Observable_1 = require('../../Observable');
 var zipAll_1 = require('../../operator/zipAll');
 Observable_1.Observable.prototype.zipAll = zipAll_1.zipAll;
 
-},{"../../Observable":519,"../../operator/zipAll":754}],633:[function(require,module,exports){
+},{"../../Observable":488,"../../operator/zipAll":723}],602:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -88304,7 +84264,7 @@ var ArrayLikeObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.ArrayLikeObservable = ArrayLikeObservable;
 
-},{"../Observable":519,"./EmptyObservable":639,"./ScalarObservable":650}],634:[function(require,module,exports){
+},{"../Observable":488,"./EmptyObservable":608,"./ScalarObservable":619}],603:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -88427,7 +84387,7 @@ var ArrayObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.ArrayObservable = ArrayObservable;
 
-},{"../Observable":519,"../util/isScheduler":782,"./EmptyObservable":639,"./ScalarObservable":650}],635:[function(require,module,exports){
+},{"../Observable":488,"../util/isScheduler":751,"./EmptyObservable":608,"./ScalarObservable":619}],604:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -88570,7 +84530,7 @@ function dispatchError(arg) {
     subject.error(err);
 }
 
-},{"../AsyncSubject":515,"../Observable":519,"../util/errorObject":775,"../util/tryCatch":789}],636:[function(require,module,exports){
+},{"../AsyncSubject":484,"../Observable":488,"../util/errorObject":744,"../util/tryCatch":758}],605:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -88717,7 +84677,7 @@ function dispatchError(arg) {
     subject.error(err);
 }
 
-},{"../AsyncSubject":515,"../Observable":519,"../util/errorObject":775,"../util/tryCatch":789}],637:[function(require,module,exports){
+},{"../AsyncSubject":484,"../Observable":488,"../util/errorObject":744,"../util/tryCatch":758}],606:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -88866,7 +84826,7 @@ var RefCountSubscriber = (function (_super) {
     return RefCountSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Observable":519,"../Subscriber":527,"../Subscription":528}],638:[function(require,module,exports){
+},{"../Observable":488,"../Subscriber":496,"../Subscription":497}],607:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -88960,7 +84920,7 @@ var DeferSubscriber = (function (_super) {
     return DeferSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../Observable":519,"../OuterSubscriber":522,"../util/subscribeToResult":786}],639:[function(require,module,exports){
+},{"../Observable":488,"../OuterSubscriber":491,"../util/subscribeToResult":755}],608:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -89036,7 +84996,7 @@ var EmptyObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.EmptyObservable = EmptyObservable;
 
-},{"../Observable":519}],640:[function(require,module,exports){
+},{"../Observable":488}],609:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -89119,7 +85079,7 @@ var ErrorObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.ErrorObservable = ErrorObservable;
 
-},{"../Observable":519}],641:[function(require,module,exports){
+},{"../Observable":488}],610:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -89231,7 +85191,7 @@ var ForkJoinSubscriber = (function (_super) {
     return ForkJoinSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../Observable":519,"../OuterSubscriber":522,"../util/isArray":776,"../util/subscribeToResult":786,"./EmptyObservable":639}],642:[function(require,module,exports){
+},{"../Observable":488,"../OuterSubscriber":491,"../util/isArray":745,"../util/subscribeToResult":755,"./EmptyObservable":608}],611:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -89326,7 +85286,7 @@ var FromEventObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.FromEventObservable = FromEventObservable;
 
-},{"../Observable":519,"../Subscription":528,"../util/errorObject":775,"../util/tryCatch":789}],643:[function(require,module,exports){
+},{"../Observable":488,"../Subscription":497,"../util/errorObject":744,"../util/tryCatch":758}],612:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -89388,7 +85348,7 @@ var FromEventPatternObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.FromEventPatternObservable = FromEventPatternObservable;
 
-},{"../Observable":519,"../Subscription":528,"../util/errorObject":775,"../util/tryCatch":789}],644:[function(require,module,exports){
+},{"../Observable":488,"../Subscription":497,"../util/errorObject":744,"../util/tryCatch":758}],613:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -89466,7 +85426,7 @@ var FromObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.FromObservable = FromObservable;
 
-},{"../Observable":519,"../operator/observeOn":712,"../symbol/iterator":764,"../symbol/observable":765,"../util/isArray":776,"../util/isFunction":778,"../util/isPromise":781,"../util/isScheduler":782,"./ArrayLikeObservable":633,"./ArrayObservable":634,"./IteratorObservable":646,"./PromiseObservable":648}],645:[function(require,module,exports){
+},{"../Observable":488,"../operator/observeOn":681,"../symbol/iterator":733,"../symbol/observable":734,"../util/isArray":745,"../util/isFunction":747,"../util/isPromise":750,"../util/isScheduler":751,"./ArrayLikeObservable":602,"./ArrayObservable":603,"./IteratorObservable":615,"./PromiseObservable":617}],614:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -89555,7 +85515,7 @@ var IntervalObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.IntervalObservable = IntervalObservable;
 
-},{"../Observable":519,"../scheduler/async":762,"../util/isNumeric":779}],646:[function(require,module,exports){
+},{"../Observable":488,"../scheduler/async":731,"../util/isNumeric":748}],615:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -89749,7 +85709,7 @@ function sign(value) {
     return valueAsNumber < 0 ? -1 : 1;
 }
 
-},{"../Observable":519,"../symbol/iterator":764,"../util/errorObject":775,"../util/isFunction":778,"../util/isObject":780,"../util/root":785,"../util/tryCatch":789}],647:[function(require,module,exports){
+},{"../Observable":488,"../symbol/iterator":733,"../util/errorObject":744,"../util/isFunction":747,"../util/isObject":749,"../util/root":754,"../util/tryCatch":758}],616:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -89809,7 +85769,7 @@ var NeverObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.NeverObservable = NeverObservable;
 
-},{"../Observable":519,"../util/noop":783}],648:[function(require,module,exports){
+},{"../Observable":488,"../util/noop":752}],617:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -89915,7 +85875,7 @@ function dispatchError(arg) {
     }
 }
 
-},{"../Observable":519,"../util/root":785}],649:[function(require,module,exports){
+},{"../Observable":488,"../util/root":754}],618:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -90012,7 +85972,7 @@ var RangeObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.RangeObservable = RangeObservable;
 
-},{"../Observable":519}],650:[function(require,module,exports){
+},{"../Observable":488}],619:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -90068,7 +86028,7 @@ var ScalarObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.ScalarObservable = ScalarObservable;
 
-},{"../Observable":519}],651:[function(require,module,exports){
+},{"../Observable":488}],620:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -90120,7 +86080,7 @@ var SubscribeOnObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.SubscribeOnObservable = SubscribeOnObservable;
 
-},{"../Observable":519,"../scheduler/asap":761,"../util/isNumeric":779}],652:[function(require,module,exports){
+},{"../Observable":488,"../scheduler/asap":730,"../util/isNumeric":748}],621:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -90228,97 +86188,97 @@ var TimerObservable = (function (_super) {
 }(Observable_1.Observable));
 exports.TimerObservable = TimerObservable;
 
-},{"../Observable":519,"../scheduler/async":762,"../util/isDate":777,"../util/isNumeric":779,"../util/isScheduler":782}],653:[function(require,module,exports){
+},{"../Observable":488,"../scheduler/async":731,"../util/isDate":746,"../util/isNumeric":748,"../util/isScheduler":751}],622:[function(require,module,exports){
 "use strict";
 var BoundCallbackObservable_1 = require('./BoundCallbackObservable');
 exports.bindCallback = BoundCallbackObservable_1.BoundCallbackObservable.create;
 
-},{"./BoundCallbackObservable":635}],654:[function(require,module,exports){
+},{"./BoundCallbackObservable":604}],623:[function(require,module,exports){
 "use strict";
 var BoundNodeCallbackObservable_1 = require('./BoundNodeCallbackObservable');
 exports.bindNodeCallback = BoundNodeCallbackObservable_1.BoundNodeCallbackObservable.create;
 
-},{"./BoundNodeCallbackObservable":636}],655:[function(require,module,exports){
+},{"./BoundNodeCallbackObservable":605}],624:[function(require,module,exports){
 "use strict";
 var concat_1 = require('../operator/concat');
 exports.concat = concat_1.concatStatic;
 
-},{"../operator/concat":682}],656:[function(require,module,exports){
+},{"../operator/concat":651}],625:[function(require,module,exports){
 "use strict";
 var DeferObservable_1 = require('./DeferObservable');
 exports.defer = DeferObservable_1.DeferObservable.create;
 
-},{"./DeferObservable":638}],657:[function(require,module,exports){
+},{"./DeferObservable":607}],626:[function(require,module,exports){
 "use strict";
 var EmptyObservable_1 = require('./EmptyObservable');
 exports.empty = EmptyObservable_1.EmptyObservable.create;
 
-},{"./EmptyObservable":639}],658:[function(require,module,exports){
+},{"./EmptyObservable":608}],627:[function(require,module,exports){
 "use strict";
 var ForkJoinObservable_1 = require('./ForkJoinObservable');
 exports.forkJoin = ForkJoinObservable_1.ForkJoinObservable.create;
 
-},{"./ForkJoinObservable":641}],659:[function(require,module,exports){
+},{"./ForkJoinObservable":610}],628:[function(require,module,exports){
 "use strict";
 var FromObservable_1 = require('./FromObservable');
 exports.from = FromObservable_1.FromObservable.create;
 
-},{"./FromObservable":644}],660:[function(require,module,exports){
+},{"./FromObservable":613}],629:[function(require,module,exports){
 "use strict";
 var FromEventObservable_1 = require('./FromEventObservable');
 exports.fromEvent = FromEventObservable_1.FromEventObservable.create;
 
-},{"./FromEventObservable":642}],661:[function(require,module,exports){
+},{"./FromEventObservable":611}],630:[function(require,module,exports){
 "use strict";
 var FromEventPatternObservable_1 = require('./FromEventPatternObservable');
 exports.fromEventPattern = FromEventPatternObservable_1.FromEventPatternObservable.create;
 
-},{"./FromEventPatternObservable":643}],662:[function(require,module,exports){
+},{"./FromEventPatternObservable":612}],631:[function(require,module,exports){
 "use strict";
 var PromiseObservable_1 = require('./PromiseObservable');
 exports.fromPromise = PromiseObservable_1.PromiseObservable.create;
 
-},{"./PromiseObservable":648}],663:[function(require,module,exports){
+},{"./PromiseObservable":617}],632:[function(require,module,exports){
 "use strict";
 var IntervalObservable_1 = require('./IntervalObservable');
 exports.interval = IntervalObservable_1.IntervalObservable.create;
 
-},{"./IntervalObservable":645}],664:[function(require,module,exports){
+},{"./IntervalObservable":614}],633:[function(require,module,exports){
 "use strict";
 var merge_1 = require('../operator/merge');
 exports.merge = merge_1.mergeStatic;
 
-},{"../operator/merge":707}],665:[function(require,module,exports){
+},{"../operator/merge":676}],634:[function(require,module,exports){
 "use strict";
 var NeverObservable_1 = require('./NeverObservable');
 exports.never = NeverObservable_1.NeverObservable.create;
 
-},{"./NeverObservable":647}],666:[function(require,module,exports){
+},{"./NeverObservable":616}],635:[function(require,module,exports){
 "use strict";
 var ArrayObservable_1 = require('./ArrayObservable');
 exports.of = ArrayObservable_1.ArrayObservable.of;
 
-},{"./ArrayObservable":634}],667:[function(require,module,exports){
+},{"./ArrayObservable":603}],636:[function(require,module,exports){
 "use strict";
 var RangeObservable_1 = require('./RangeObservable');
 exports.range = RangeObservable_1.RangeObservable.create;
 
-},{"./RangeObservable":649}],668:[function(require,module,exports){
+},{"./RangeObservable":618}],637:[function(require,module,exports){
 "use strict";
 var ErrorObservable_1 = require('./ErrorObservable');
 exports._throw = ErrorObservable_1.ErrorObservable.create;
 
-},{"./ErrorObservable":640}],669:[function(require,module,exports){
+},{"./ErrorObservable":609}],638:[function(require,module,exports){
 "use strict";
 var TimerObservable_1 = require('./TimerObservable');
 exports.timer = TimerObservable_1.TimerObservable.create;
 
-},{"./TimerObservable":652}],670:[function(require,module,exports){
+},{"./TimerObservable":621}],639:[function(require,module,exports){
 "use strict";
 var zip_1 = require('../operator/zip');
 exports.zip = zip_1.zipStatic;
 
-},{"../operator/zip":753}],671:[function(require,module,exports){
+},{"../operator/zip":722}],640:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -90395,7 +86355,7 @@ var AuditSubscriber = (function (_super) {
     return AuditSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/errorObject":775,"../util/subscribeToResult":786,"../util/tryCatch":789}],672:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/errorObject":744,"../util/subscribeToResult":755,"../util/tryCatch":758}],641:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -90465,7 +86425,7 @@ function dispatchNext(subscriber) {
     subscriber.clearThrottle();
 }
 
-},{"../Subscriber":527,"../scheduler/async":762}],673:[function(require,module,exports){
+},{"../Subscriber":496,"../scheduler/async":731}],642:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -90542,7 +86502,7 @@ var BufferSubscriber = (function (_super) {
     return BufferSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],674:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],643:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -90656,7 +86616,7 @@ var BufferCountSubscriber = (function (_super) {
     return BufferCountSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],675:[function(require,module,exports){
+},{"../Subscriber":496}],644:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -90805,7 +86765,7 @@ function dispatchBufferClose(arg) {
     subscriber.closeBuffer(buffer);
 }
 
-},{"../Subscriber":527,"../scheduler/async":762}],676:[function(require,module,exports){
+},{"../Subscriber":496,"../scheduler/async":731}],645:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -90958,7 +86918,7 @@ var BufferToggleSubscriber = (function (_super) {
     return BufferToggleSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../Subscription":528,"../util/subscribeToResult":786}],677:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../Subscription":497,"../util/subscribeToResult":755}],646:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -91081,7 +87041,7 @@ var BufferWhenSubscriber = (function (_super) {
     return BufferWhenSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../Subscription":528,"../util/errorObject":775,"../util/subscribeToResult":786,"../util/tryCatch":789}],678:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../Subscription":497,"../util/errorObject":744,"../util/subscribeToResult":755,"../util/tryCatch":758}],647:[function(require,module,exports){
 "use strict";
 var publishReplay_1 = require('./publishReplay');
 /**
@@ -91099,7 +87059,7 @@ function cache(bufferSize, windowTime, scheduler) {
 }
 exports.cache = cache;
 
-},{"./publishReplay":718}],679:[function(require,module,exports){
+},{"./publishReplay":687}],648:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -91167,7 +87127,7 @@ var CatchSubscriber = (function (_super) {
     return CatchSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],680:[function(require,module,exports){
+},{"../Subscriber":496}],649:[function(require,module,exports){
 "use strict";
 var combineLatest_1 = require('./combineLatest');
 /**
@@ -91215,7 +87175,7 @@ function combineAll(project) {
 }
 exports.combineAll = combineAll;
 
-},{"./combineLatest":681}],681:[function(require,module,exports){
+},{"./combineLatest":650}],650:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -91401,7 +87361,7 @@ var CombineLatestSubscriber = (function (_super) {
 }(OuterSubscriber_1.OuterSubscriber));
 exports.CombineLatestSubscriber = CombineLatestSubscriber;
 
-},{"../OuterSubscriber":522,"../observable/ArrayObservable":634,"../util/isArray":776,"../util/isScheduler":782,"../util/subscribeToResult":786}],682:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../observable/ArrayObservable":603,"../util/isArray":745,"../util/isScheduler":751,"../util/subscribeToResult":755}],651:[function(require,module,exports){
 "use strict";
 var isScheduler_1 = require('../util/isScheduler');
 var ArrayObservable_1 = require('../observable/ArrayObservable');
@@ -91510,7 +87470,7 @@ function concatStatic() {
 }
 exports.concatStatic = concatStatic;
 
-},{"../observable/ArrayObservable":634,"../util/isScheduler":782,"./mergeAll":708}],683:[function(require,module,exports){
+},{"../observable/ArrayObservable":603,"../util/isScheduler":751,"./mergeAll":677}],652:[function(require,module,exports){
 "use strict";
 var mergeAll_1 = require('./mergeAll');
 /**
@@ -91560,7 +87520,7 @@ function concatAll() {
 }
 exports.concatAll = concatAll;
 
-},{"./mergeAll":708}],684:[function(require,module,exports){
+},{"./mergeAll":677}],653:[function(require,module,exports){
 "use strict";
 var mergeMap_1 = require('./mergeMap');
 /**
@@ -91624,7 +87584,7 @@ function concatMap(project, resultSelector) {
 }
 exports.concatMap = concatMap;
 
-},{"./mergeMap":709}],685:[function(require,module,exports){
+},{"./mergeMap":678}],654:[function(require,module,exports){
 "use strict";
 var mergeMapTo_1 = require('./mergeMapTo');
 /**
@@ -91682,7 +87642,7 @@ function concatMapTo(innerObservable, resultSelector) {
 }
 exports.concatMapTo = concatMapTo;
 
-},{"./mergeMapTo":710}],686:[function(require,module,exports){
+},{"./mergeMapTo":679}],655:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -91791,7 +87751,7 @@ var CountSubscriber = (function (_super) {
     return CountSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],687:[function(require,module,exports){
+},{"../Subscriber":496}],656:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -91889,7 +87849,7 @@ var DebounceSubscriber = (function (_super) {
     return DebounceSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],688:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],657:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -91974,7 +87934,7 @@ function dispatchNext(subscriber) {
     subscriber.debouncedNext();
 }
 
-},{"../Subscriber":527,"../scheduler/async":762}],689:[function(require,module,exports){
+},{"../Subscriber":496,"../scheduler/async":731}],658:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -92028,7 +87988,7 @@ var DefaultIfEmptySubscriber = (function (_super) {
     return DefaultIfEmptySubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],690:[function(require,module,exports){
+},{"../Subscriber":496}],659:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -92164,7 +88124,7 @@ var DelayMessage = (function () {
     return DelayMessage;
 }());
 
-},{"../Notification":518,"../Subscriber":527,"../scheduler/async":762,"../util/isDate":777}],691:[function(require,module,exports){
+},{"../Notification":487,"../Subscriber":496,"../scheduler/async":731,"../util/isDate":746}],660:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -92319,7 +88279,7 @@ var SubscriptionDelaySubscriber = (function (_super) {
     return SubscriptionDelaySubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Observable":519,"../OuterSubscriber":522,"../Subscriber":527,"../util/subscribeToResult":786}],692:[function(require,module,exports){
+},{"../Observable":488,"../OuterSubscriber":491,"../Subscriber":496,"../util/subscribeToResult":755}],661:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -92364,7 +88324,7 @@ var DeMaterializeSubscriber = (function (_super) {
     return DeMaterializeSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],693:[function(require,module,exports){
+},{"../Subscriber":496}],662:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -92442,7 +88402,7 @@ var DistinctUntilChangedSubscriber = (function (_super) {
     return DistinctUntilChangedSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527,"../util/errorObject":775,"../util/tryCatch":789}],694:[function(require,module,exports){
+},{"../Subscriber":496,"../util/errorObject":744,"../util/tryCatch":758}],663:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -92555,7 +88515,7 @@ var DoSubscriber = (function (_super) {
     return DoSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],695:[function(require,module,exports){
+},{"../Subscriber":496}],664:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -92625,7 +88585,7 @@ var EverySubscriber = (function (_super) {
     return EverySubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],696:[function(require,module,exports){
+},{"../Subscriber":496}],665:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -92741,7 +88701,7 @@ var ExpandSubscriber = (function (_super) {
 }(OuterSubscriber_1.OuterSubscriber));
 exports.ExpandSubscriber = ExpandSubscriber;
 
-},{"../OuterSubscriber":522,"../util/errorObject":775,"../util/subscribeToResult":786,"../util/tryCatch":789}],697:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/errorObject":744,"../util/subscribeToResult":755,"../util/tryCatch":758}],666:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -92835,7 +88795,7 @@ var FilterSubscriber = (function (_super) {
     return FilterSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],698:[function(require,module,exports){
+},{"../Subscriber":496}],667:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -92879,7 +88839,7 @@ var FinallySubscriber = (function (_super) {
     return FinallySubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527,"../Subscription":528}],699:[function(require,module,exports){
+},{"../Subscriber":496,"../Subscription":497}],668:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -93028,7 +88988,7 @@ var FirstSubscriber = (function (_super) {
     return FirstSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527,"../util/EmptyError":768}],700:[function(require,module,exports){
+},{"../Subscriber":496,"../util/EmptyError":737}],669:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -93279,7 +89239,7 @@ var InnerRefCountSubscription = (function (_super) {
     return InnerRefCountSubscription;
 }(Subscription_1.Subscription));
 
-},{"../Observable":519,"../Subject":525,"../Subscriber":527,"../Subscription":528,"../util/FastMap":769,"../util/Map":771}],701:[function(require,module,exports){
+},{"../Observable":488,"../Subject":494,"../Subscriber":496,"../Subscription":497,"../util/FastMap":738,"../util/Map":740}],670:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -93327,7 +89287,7 @@ var IgnoreElementsSubscriber = (function (_super) {
     return IgnoreElementsSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527,"../util/noop":783}],702:[function(require,module,exports){
+},{"../Subscriber":496,"../util/noop":752}],671:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -93446,7 +89406,7 @@ var LastSubscriber = (function (_super) {
     return LastSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527,"../util/EmptyError":768}],703:[function(require,module,exports){
+},{"../Subscriber":496,"../util/EmptyError":737}],672:[function(require,module,exports){
 "use strict";
 /**
  * @param func
@@ -93459,7 +89419,7 @@ function letProto(func) {
 }
 exports.letProto = letProto;
 
-},{}],704:[function(require,module,exports){
+},{}],673:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -93546,7 +89506,7 @@ var MapSubscriber = (function (_super) {
     return MapSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],705:[function(require,module,exports){
+},{"../Subscriber":496}],674:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -93610,7 +89570,7 @@ var MapToSubscriber = (function (_super) {
     return MapToSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],706:[function(require,module,exports){
+},{"../Subscriber":496}],675:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -93672,7 +89632,7 @@ var MaterializeSubscriber = (function (_super) {
     return MaterializeSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Notification":518,"../Subscriber":527}],707:[function(require,module,exports){
+},{"../Notification":487,"../Subscriber":496}],676:[function(require,module,exports){
 "use strict";
 var ArrayObservable_1 = require('../observable/ArrayObservable');
 var mergeAll_1 = require('./mergeAll');
@@ -93803,7 +89763,7 @@ function mergeStatic() {
 }
 exports.mergeStatic = mergeStatic;
 
-},{"../observable/ArrayObservable":634,"../util/isScheduler":782,"./mergeAll":708}],708:[function(require,module,exports){
+},{"../observable/ArrayObservable":603,"../util/isScheduler":751,"./mergeAll":677}],677:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -93915,7 +89875,7 @@ var MergeAllSubscriber = (function (_super) {
 }(OuterSubscriber_1.OuterSubscriber));
 exports.MergeAllSubscriber = MergeAllSubscriber;
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],709:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],678:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -94077,7 +90037,7 @@ var MergeMapSubscriber = (function (_super) {
 }(OuterSubscriber_1.OuterSubscriber));
 exports.MergeMapSubscriber = MergeMapSubscriber;
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],710:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],679:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -94232,7 +90192,7 @@ var MergeMapToSubscriber = (function (_super) {
 }(OuterSubscriber_1.OuterSubscriber));
 exports.MergeMapToSubscriber = MergeMapToSubscriber;
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],711:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],680:[function(require,module,exports){
 "use strict";
 var ConnectableObservable_1 = require('../observable/ConnectableObservable');
 /**
@@ -94265,7 +90225,7 @@ function multicast(subjectOrSubjectFactory) {
 }
 exports.multicast = multicast;
 
-},{"../observable/ConnectableObservable":637}],712:[function(require,module,exports){
+},{"../observable/ConnectableObservable":606}],681:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -94341,7 +90301,7 @@ var ObserveOnMessage = (function () {
 }());
 exports.ObserveOnMessage = ObserveOnMessage;
 
-},{"../Notification":518,"../Subscriber":527}],713:[function(require,module,exports){
+},{"../Notification":487,"../Subscriber":496}],682:[function(require,module,exports){
 "use strict";
 var not_1 = require('../util/not');
 var filter_1 = require('./filter');
@@ -94360,7 +90320,7 @@ function partition(predicate, thisArg) {
 }
 exports.partition = partition;
 
-},{"../util/not":784,"./filter":697}],714:[function(require,module,exports){
+},{"../util/not":753,"./filter":666}],683:[function(require,module,exports){
 "use strict";
 var map_1 = require('./map');
 /**
@@ -94419,7 +90379,7 @@ function plucker(props, length) {
     return mapper;
 }
 
-},{"./map":704}],715:[function(require,module,exports){
+},{"./map":673}],684:[function(require,module,exports){
 "use strict";
 var Subject_1 = require('../Subject');
 var multicast_1 = require('./multicast');
@@ -94438,7 +90398,7 @@ function publish() {
 }
 exports.publish = publish;
 
-},{"../Subject":525,"./multicast":711}],716:[function(require,module,exports){
+},{"../Subject":494,"./multicast":680}],685:[function(require,module,exports){
 "use strict";
 var BehaviorSubject_1 = require('../BehaviorSubject');
 var multicast_1 = require('./multicast');
@@ -94453,7 +90413,7 @@ function publishBehavior(value) {
 }
 exports.publishBehavior = publishBehavior;
 
-},{"../BehaviorSubject":516,"./multicast":711}],717:[function(require,module,exports){
+},{"../BehaviorSubject":485,"./multicast":680}],686:[function(require,module,exports){
 "use strict";
 var AsyncSubject_1 = require('../AsyncSubject');
 var multicast_1 = require('./multicast');
@@ -94467,7 +90427,7 @@ function publishLast() {
 }
 exports.publishLast = publishLast;
 
-},{"../AsyncSubject":515,"./multicast":711}],718:[function(require,module,exports){
+},{"../AsyncSubject":484,"./multicast":680}],687:[function(require,module,exports){
 "use strict";
 var ReplaySubject_1 = require('../ReplaySubject');
 var multicast_1 = require('./multicast');
@@ -94486,7 +90446,7 @@ function publishReplay(bufferSize, windowTime, scheduler) {
 }
 exports.publishReplay = publishReplay;
 
-},{"../ReplaySubject":523,"./multicast":711}],719:[function(require,module,exports){
+},{"../ReplaySubject":492,"./multicast":680}],688:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -94596,7 +90556,7 @@ var RaceSubscriber = (function (_super) {
 }(OuterSubscriber_1.OuterSubscriber));
 exports.RaceSubscriber = RaceSubscriber;
 
-},{"../OuterSubscriber":522,"../observable/ArrayObservable":634,"../util/isArray":776,"../util/subscribeToResult":786}],720:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../observable/ArrayObservable":603,"../util/isArray":745,"../util/subscribeToResult":755}],689:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -94681,7 +90641,7 @@ var ReduceSubscriber = (function (_super) {
 }(Subscriber_1.Subscriber));
 exports.ReduceSubscriber = ReduceSubscriber;
 
-},{"../Subscriber":527}],721:[function(require,module,exports){
+},{"../Subscriber":496}],690:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -94757,7 +90717,7 @@ var RepeatSubscriber = (function (_super) {
     return RepeatSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527,"../observable/EmptyObservable":639}],722:[function(require,module,exports){
+},{"../Subscriber":496,"../observable/EmptyObservable":608}],691:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -94827,7 +90787,7 @@ var RetrySubscriber = (function (_super) {
     return RetrySubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],723:[function(require,module,exports){
+},{"../Subscriber":496}],692:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -94934,7 +90894,7 @@ var RetryWhenSubscriber = (function (_super) {
     return RetryWhenSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../Subject":525,"../util/errorObject":775,"../util/subscribeToResult":786,"../util/tryCatch":789}],724:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../Subject":494,"../util/errorObject":744,"../util/subscribeToResult":755,"../util/tryCatch":758}],693:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95000,7 +90960,7 @@ var SampleSubscriber = (function (_super) {
     return SampleSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],725:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],694:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95063,7 +91023,7 @@ function dispatchNotification(state) {
     this.schedule(state, delay);
 }
 
-},{"../Subscriber":527,"../scheduler/async":762}],726:[function(require,module,exports){
+},{"../Subscriber":496,"../scheduler/async":731}],695:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95171,7 +91131,7 @@ var ScanSubscriber = (function (_super) {
     return ScanSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],727:[function(require,module,exports){
+},{"../Subscriber":496}],696:[function(require,module,exports){
 "use strict";
 var multicast_1 = require('./multicast');
 var Subject_1 = require('../Subject');
@@ -95196,7 +91156,7 @@ function share() {
 exports.share = share;
 ;
 
-},{"../Subject":525,"./multicast":711}],728:[function(require,module,exports){
+},{"../Subject":494,"./multicast":680}],697:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95292,7 +91252,7 @@ var SingleSubscriber = (function (_super) {
     return SingleSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527,"../util/EmptyError":768}],729:[function(require,module,exports){
+},{"../Subscriber":496,"../util/EmptyError":737}],698:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95344,7 +91304,7 @@ var SkipSubscriber = (function (_super) {
     return SkipSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],730:[function(require,module,exports){
+},{"../Subscriber":496}],699:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95416,7 +91376,7 @@ var SkipUntilSubscriber = (function (_super) {
     return SkipUntilSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],731:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],700:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95483,7 +91443,7 @@ var SkipWhileSubscriber = (function (_super) {
     return SkipWhileSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],732:[function(require,module,exports){
+},{"../Subscriber":496}],701:[function(require,module,exports){
 "use strict";
 var ArrayObservable_1 = require('../observable/ArrayObservable');
 var ScalarObservable_1 = require('../observable/ScalarObservable');
@@ -95527,7 +91487,7 @@ function startWith() {
 }
 exports.startWith = startWith;
 
-},{"../observable/ArrayObservable":634,"../observable/EmptyObservable":639,"../observable/ScalarObservable":650,"../util/isScheduler":782,"./concat":682}],733:[function(require,module,exports){
+},{"../observable/ArrayObservable":603,"../observable/EmptyObservable":608,"../observable/ScalarObservable":619,"../util/isScheduler":751,"./concat":651}],702:[function(require,module,exports){
 "use strict";
 var SubscribeOnObservable_1 = require('../observable/SubscribeOnObservable');
 /**
@@ -95547,7 +91507,7 @@ function subscribeOn(scheduler, delay) {
 }
 exports.subscribeOn = subscribeOn;
 
-},{"../observable/SubscribeOnObservable":651}],734:[function(require,module,exports){
+},{"../observable/SubscribeOnObservable":620}],703:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95656,7 +91616,7 @@ var SwitchSubscriber = (function (_super) {
     return SwitchSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],735:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],704:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95796,7 +91756,7 @@ var SwitchMapSubscriber = (function (_super) {
     return SwitchMapSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],736:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],705:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95923,7 +91883,7 @@ var SwitchMapToSubscriber = (function (_super) {
     return SwitchMapToSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],737:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],706:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -95987,7 +91947,7 @@ var TakeSubscriber = (function (_super) {
     return TakeSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527,"../observable/EmptyObservable":639,"../util/ArgumentOutOfRangeError":767}],738:[function(require,module,exports){
+},{"../Subscriber":496,"../observable/EmptyObservable":608,"../util/ArgumentOutOfRangeError":736}],707:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -96067,7 +92027,7 @@ var TakeLastSubscriber = (function (_super) {
     return TakeLastSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527,"../observable/EmptyObservable":639,"../util/ArgumentOutOfRangeError":767}],739:[function(require,module,exports){
+},{"../Subscriber":496,"../observable/EmptyObservable":608,"../util/ArgumentOutOfRangeError":736}],708:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -96116,7 +92076,7 @@ var TakeUntilSubscriber = (function (_super) {
     return TakeUntilSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],740:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],709:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -96179,7 +92139,7 @@ var TakeWhileSubscriber = (function (_super) {
     return TakeWhileSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],741:[function(require,module,exports){
+},{"../Subscriber":496}],710:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -96256,7 +92216,7 @@ var ThrottleSubscriber = (function (_super) {
     return ThrottleSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],742:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],711:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -96320,7 +92280,7 @@ function dispatchNext(arg) {
     subscriber.clearThrottle();
 }
 
-},{"../Subscriber":527,"../scheduler/async":762}],743:[function(require,module,exports){
+},{"../Subscriber":496,"../scheduler/async":731}],712:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -96423,7 +92383,7 @@ var TimeoutSubscriber = (function (_super) {
     return TimeoutSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527,"../scheduler/async":762,"../util/isDate":777}],744:[function(require,module,exports){
+},{"../Subscriber":496,"../scheduler/async":731,"../util/isDate":746}],713:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -96534,7 +92494,7 @@ var TimeoutWithSubscriber = (function (_super) {
     return TimeoutWithSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../scheduler/async":762,"../util/isDate":777,"../util/subscribeToResult":786}],745:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../scheduler/async":731,"../util/isDate":746,"../util/subscribeToResult":755}],714:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -96580,7 +92540,7 @@ var ToArraySubscriber = (function (_super) {
     return ToArraySubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subscriber":527}],746:[function(require,module,exports){
+},{"../Subscriber":496}],715:[function(require,module,exports){
 "use strict";
 var root_1 = require('../util/root');
 /**
@@ -96609,7 +92569,7 @@ function toPromise(PromiseCtor) {
 }
 exports.toPromise = toPromise;
 
-},{"../util/root":785}],747:[function(require,module,exports){
+},{"../util/root":754}],716:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -96715,7 +92675,7 @@ var WindowSubscriber = (function (_super) {
     return WindowSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../Subject":525,"../util/subscribeToResult":786}],748:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../Subject":494,"../util/subscribeToResult":755}],717:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -96842,7 +92802,7 @@ var WindowCountSubscriber = (function (_super) {
     return WindowCountSubscriber;
 }(Subscriber_1.Subscriber));
 
-},{"../Subject":525,"../Subscriber":527}],749:[function(require,module,exports){
+},{"../Subject":494,"../Subscriber":496}],718:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -97013,7 +92973,7 @@ function dispatchWindowClose(arg) {
     subscriber.closeWindow(window);
 }
 
-},{"../Subject":525,"../Subscriber":527,"../scheduler/async":762}],750:[function(require,module,exports){
+},{"../Subject":494,"../Subscriber":496,"../scheduler/async":731}],719:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -97194,7 +93154,7 @@ var WindowToggleSubscriber = (function (_super) {
     return WindowToggleSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../Subject":525,"../Subscription":528,"../util/errorObject":775,"../util/subscribeToResult":786,"../util/tryCatch":789}],751:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../Subject":494,"../Subscription":497,"../util/errorObject":744,"../util/subscribeToResult":755,"../util/tryCatch":758}],720:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -97323,7 +93283,7 @@ var WindowSubscriber = (function (_super) {
     return WindowSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../Subject":525,"../util/errorObject":775,"../util/subscribeToResult":786,"../util/tryCatch":789}],752:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../Subject":494,"../util/errorObject":744,"../util/subscribeToResult":755,"../util/tryCatch":758}],721:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -97454,7 +93414,7 @@ var WithLatestFromSubscriber = (function (_super) {
     return WithLatestFromSubscriber;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../util/subscribeToResult":786}],753:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../util/subscribeToResult":755}],722:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -97709,7 +93669,7 @@ var ZipBufferIterator = (function (_super) {
     return ZipBufferIterator;
 }(OuterSubscriber_1.OuterSubscriber));
 
-},{"../OuterSubscriber":522,"../Subscriber":527,"../observable/ArrayObservable":634,"../symbol/iterator":764,"../util/isArray":776,"../util/subscribeToResult":786}],754:[function(require,module,exports){
+},{"../OuterSubscriber":491,"../Subscriber":496,"../observable/ArrayObservable":603,"../symbol/iterator":733,"../util/isArray":745,"../util/subscribeToResult":755}],723:[function(require,module,exports){
 "use strict";
 var zip_1 = require('./zip');
 /**
@@ -97723,7 +93683,7 @@ function zipAll(project) {
 }
 exports.zipAll = zipAll;
 
-},{"./zip":753}],755:[function(require,module,exports){
+},{"./zip":722}],724:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -97775,7 +93735,7 @@ var AsapAction = (function (_super) {
 }(FutureAction_1.FutureAction));
 exports.AsapAction = AsapAction;
 
-},{"../util/Immediate":770,"./FutureAction":758}],756:[function(require,module,exports){
+},{"../util/Immediate":739,"./FutureAction":727}],725:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -97796,7 +93756,7 @@ var AsapScheduler = (function (_super) {
 }(QueueScheduler_1.QueueScheduler));
 exports.AsapScheduler = AsapScheduler;
 
-},{"./AsapAction":755,"./QueueScheduler":760}],757:[function(require,module,exports){
+},{"./AsapAction":724,"./QueueScheduler":729}],726:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -97817,7 +93777,7 @@ var AsyncScheduler = (function (_super) {
 }(QueueScheduler_1.QueueScheduler));
 exports.AsyncScheduler = AsyncScheduler;
 
-},{"./FutureAction":758,"./QueueScheduler":760}],758:[function(require,module,exports){
+},{"./FutureAction":727,"./QueueScheduler":729}],727:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -97953,7 +93913,7 @@ var FutureAction = (function (_super) {
 }(Subscription_1.Subscription));
 exports.FutureAction = FutureAction;
 
-},{"../Subscription":528,"../util/root":785}],759:[function(require,module,exports){
+},{"../Subscription":497,"../util/root":754}],728:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -97987,7 +93947,7 @@ var QueueAction = (function (_super) {
 }(FutureAction_1.FutureAction));
 exports.QueueAction = QueueAction;
 
-},{"./FutureAction":758}],760:[function(require,module,exports){
+},{"./FutureAction":727}],729:[function(require,module,exports){
 "use strict";
 var QueueAction_1 = require('./QueueAction');
 var FutureAction_1 = require('./FutureAction');
@@ -98032,22 +93992,22 @@ var QueueScheduler = (function () {
 }());
 exports.QueueScheduler = QueueScheduler;
 
-},{"./FutureAction":758,"./QueueAction":759}],761:[function(require,module,exports){
+},{"./FutureAction":727,"./QueueAction":728}],730:[function(require,module,exports){
 "use strict";
 var AsapScheduler_1 = require('./AsapScheduler');
 exports.asap = new AsapScheduler_1.AsapScheduler();
 
-},{"./AsapScheduler":756}],762:[function(require,module,exports){
+},{"./AsapScheduler":725}],731:[function(require,module,exports){
 "use strict";
 var AsyncScheduler_1 = require('./AsyncScheduler');
 exports.async = new AsyncScheduler_1.AsyncScheduler();
 
-},{"./AsyncScheduler":757}],763:[function(require,module,exports){
+},{"./AsyncScheduler":726}],732:[function(require,module,exports){
 "use strict";
 var QueueScheduler_1 = require('./QueueScheduler');
 exports.queue = new QueueScheduler_1.QueueScheduler();
 
-},{"./QueueScheduler":760}],764:[function(require,module,exports){
+},{"./QueueScheduler":729}],733:[function(require,module,exports){
 "use strict";
 var root_1 = require('../util/root');
 var Symbol = root_1.root.Symbol;
@@ -98080,7 +94040,7 @@ else {
     }
 }
 
-},{"../util/root":785}],765:[function(require,module,exports){
+},{"../util/root":754}],734:[function(require,module,exports){
 "use strict";
 var root_1 = require('../util/root');
 var Symbol = root_1.root.Symbol;
@@ -98102,14 +94062,14 @@ else {
     exports.$$observable = '@@observable';
 }
 
-},{"../util/root":785}],766:[function(require,module,exports){
+},{"../util/root":754}],735:[function(require,module,exports){
 "use strict";
 var root_1 = require('../util/root');
 var Symbol = root_1.root.Symbol;
 exports.$$rxSubscriber = (typeof Symbol === 'function' && typeof Symbol.for === 'function') ?
     Symbol.for('rxSubscriber') : '@@rxSubscriber';
 
-},{"../util/root":785}],767:[function(require,module,exports){
+},{"../util/root":754}],736:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -98136,7 +94096,7 @@ var ArgumentOutOfRangeError = (function (_super) {
 }(Error));
 exports.ArgumentOutOfRangeError = ArgumentOutOfRangeError;
 
-},{}],768:[function(require,module,exports){
+},{}],737:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -98163,7 +94123,7 @@ var EmptyError = (function (_super) {
 }(Error));
 exports.EmptyError = EmptyError;
 
-},{}],769:[function(require,module,exports){
+},{}],738:[function(require,module,exports){
 "use strict";
 var FastMap = (function () {
     function FastMap() {
@@ -98195,7 +94155,7 @@ var FastMap = (function () {
 }());
 exports.FastMap = FastMap;
 
-},{}],770:[function(require,module,exports){
+},{}],739:[function(require,module,exports){
 /**
 Some credit for this helper goes to http://github.com/YuzuJS/setImmediate
 */
@@ -98405,13 +94365,13 @@ var ImmediateDefinition = (function () {
 exports.ImmediateDefinition = ImmediateDefinition;
 exports.Immediate = new ImmediateDefinition(root_1.root);
 
-},{"./root":785}],771:[function(require,module,exports){
+},{"./root":754}],740:[function(require,module,exports){
 "use strict";
 var root_1 = require('./root');
 var MapPolyfill_1 = require('./MapPolyfill');
 exports.Map = root_1.root.Map || (function () { return MapPolyfill_1.MapPolyfill; })();
 
-},{"./MapPolyfill":772,"./root":785}],772:[function(require,module,exports){
+},{"./MapPolyfill":741,"./root":754}],741:[function(require,module,exports){
 "use strict";
 var MapPolyfill = (function () {
     function MapPolyfill() {
@@ -98459,7 +94419,7 @@ var MapPolyfill = (function () {
 }());
 exports.MapPolyfill = MapPolyfill;
 
-},{}],773:[function(require,module,exports){
+},{}],742:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -98485,7 +94445,7 @@ var ObjectUnsubscribedError = (function (_super) {
 }(Error));
 exports.ObjectUnsubscribedError = ObjectUnsubscribedError;
 
-},{}],774:[function(require,module,exports){
+},{}],743:[function(require,module,exports){
 "use strict";
 var __extends = (this && this.__extends) || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
@@ -98508,30 +94468,30 @@ var UnsubscriptionError = (function (_super) {
 }(Error));
 exports.UnsubscriptionError = UnsubscriptionError;
 
-},{}],775:[function(require,module,exports){
+},{}],744:[function(require,module,exports){
 "use strict";
 // typeof any so that it we don't have to cast when comparing a result to the error object
 exports.errorObject = { e: {} };
 
-},{}],776:[function(require,module,exports){
+},{}],745:[function(require,module,exports){
 "use strict";
 exports.isArray = Array.isArray || (function (x) { return x && typeof x.length === 'number'; });
 
-},{}],777:[function(require,module,exports){
+},{}],746:[function(require,module,exports){
 "use strict";
 function isDate(value) {
     return value instanceof Date && !isNaN(+value);
 }
 exports.isDate = isDate;
 
-},{}],778:[function(require,module,exports){
+},{}],747:[function(require,module,exports){
 "use strict";
 function isFunction(x) {
     return typeof x === 'function';
 }
 exports.isFunction = isFunction;
 
-},{}],779:[function(require,module,exports){
+},{}],748:[function(require,module,exports){
 "use strict";
 var isArray_1 = require('../util/isArray');
 function isNumeric(val) {
@@ -98544,34 +94504,34 @@ function isNumeric(val) {
 exports.isNumeric = isNumeric;
 ;
 
-},{"../util/isArray":776}],780:[function(require,module,exports){
+},{"../util/isArray":745}],749:[function(require,module,exports){
 "use strict";
 function isObject(x) {
     return x != null && typeof x === 'object';
 }
 exports.isObject = isObject;
 
-},{}],781:[function(require,module,exports){
+},{}],750:[function(require,module,exports){
 "use strict";
 function isPromise(value) {
     return value && typeof value.subscribe !== 'function' && typeof value.then === 'function';
 }
 exports.isPromise = isPromise;
 
-},{}],782:[function(require,module,exports){
+},{}],751:[function(require,module,exports){
 "use strict";
 function isScheduler(value) {
     return value && typeof value.schedule === 'function';
 }
 exports.isScheduler = isScheduler;
 
-},{}],783:[function(require,module,exports){
+},{}],752:[function(require,module,exports){
 "use strict";
 /* tslint:disable:no-empty */
 function noop() { }
 exports.noop = noop;
 
-},{}],784:[function(require,module,exports){
+},{}],753:[function(require,module,exports){
 "use strict";
 function not(pred, thisArg) {
     function notPred() {
@@ -98583,7 +94543,7 @@ function not(pred, thisArg) {
 }
 exports.not = not;
 
-},{}],785:[function(require,module,exports){
+},{}],754:[function(require,module,exports){
 (function (global){
 "use strict";
 var objectTypes = {
@@ -98605,7 +94565,7 @@ if (freeGlobal && (freeGlobal.global === freeGlobal || freeGlobal.window === fre
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 
-},{}],786:[function(require,module,exports){
+},{}],755:[function(require,module,exports){
 "use strict";
 var root_1 = require('./root');
 var isArray_1 = require('./isArray');
@@ -98677,12 +94637,12 @@ function subscribeToResult(outerSubscriber, result, outerValue, outerIndex) {
 }
 exports.subscribeToResult = subscribeToResult;
 
-},{"../InnerSubscriber":517,"../Observable":519,"../symbol/iterator":764,"../symbol/observable":765,"./isArray":776,"./isPromise":781,"./root":785}],787:[function(require,module,exports){
+},{"../InnerSubscriber":486,"../Observable":488,"../symbol/iterator":733,"../symbol/observable":734,"./isArray":745,"./isPromise":750,"./root":754}],756:[function(require,module,exports){
 "use strict";
 function throwError(e) { throw e; }
 exports.throwError = throwError;
 
-},{}],788:[function(require,module,exports){
+},{}],757:[function(require,module,exports){
 "use strict";
 var Subscriber_1 = require('../Subscriber');
 var rxSubscriber_1 = require('../symbol/rxSubscriber');
@@ -98699,7 +94659,7 @@ function toSubscriber(nextOrObserver, error, complete) {
 }
 exports.toSubscriber = toSubscriber;
 
-},{"../Subscriber":527,"../symbol/rxSubscriber":766}],789:[function(require,module,exports){
+},{"../Subscriber":496,"../symbol/rxSubscriber":735}],758:[function(require,module,exports){
 "use strict";
 var errorObject_1 = require('./errorObject');
 var tryCatchTarget;
@@ -98719,9 +94679,2105 @@ function tryCatch(fn) {
 exports.tryCatch = tryCatch;
 ;
 
-},{"./errorObject":775}],790:[function(require,module,exports){
+},{"./errorObject":744}],759:[function(require,module,exports){
 
-},{}]},{},[1,790])
+/**
+ * Module dependencies.
+ */
+
+var url = require('./url');
+var parser = require('socket.io-parser');
+var Manager = require('./manager');
+var debug = require('debug')('socket.io-client');
+
+/**
+ * Module exports.
+ */
+
+module.exports = exports = lookup;
+
+/**
+ * Managers cache.
+ */
+
+var cache = exports.managers = {};
+
+/**
+ * Looks up an existing `Manager` for multiplexing.
+ * If the user summons:
+ *
+ *   `io('http://localhost/a');`
+ *   `io('http://localhost/b');`
+ *
+ * We reuse the existing instance based on same scheme/port/host,
+ * and we initialize sockets for each namespace.
+ *
+ * @api public
+ */
+
+function lookup (uri, opts) {
+  if (typeof uri === 'object') {
+    opts = uri;
+    uri = undefined;
+  }
+
+  opts = opts || {};
+
+  var parsed = url(uri);
+  var source = parsed.source;
+  var id = parsed.id;
+  var path = parsed.path;
+  var sameNamespace = cache[id] && path in cache[id].nsps;
+  var newConnection = opts.forceNew || opts['force new connection'] ||
+                      false === opts.multiplex || sameNamespace;
+
+  var io;
+
+  if (newConnection) {
+    debug('ignoring socket cache for %s', source);
+    io = Manager(source, opts);
+  } else {
+    if (!cache[id]) {
+      debug('new io instance for %s', source);
+      cache[id] = Manager(source, opts);
+    }
+    io = cache[id];
+  }
+  if (parsed.query && !opts.query) {
+    opts.query = parsed.query;
+  } else if (opts && 'object' === typeof opts.query) {
+    opts.query = encodeQueryString(opts.query);
+  }
+  return io.socket(parsed.path, opts);
+}
+/**
+ *  Helper method to parse query objects to string.
+ * @param {object} query
+ * @returns {string}
+ */
+function encodeQueryString (obj) {
+  var str = [];
+  for (var p in obj) {
+    if (obj.hasOwnProperty(p)) {
+      str.push(encodeURIComponent(p) + '=' + encodeURIComponent(obj[p]));
+    }
+  }
+  return str.join('&');
+}
+/**
+ * Protocol version.
+ *
+ * @api public
+ */
+
+exports.protocol = parser.protocol;
+
+/**
+ * `connect`.
+ *
+ * @param {String} uri
+ * @api public
+ */
+
+exports.connect = lookup;
+
+/**
+ * Expose constructors for standalone build.
+ *
+ * @api public
+ */
+
+exports.Manager = require('./manager');
+exports.Socket = require('./socket');
+
+},{"./manager":760,"./socket":762,"./url":763,"debug":346,"socket.io-parser":765}],760:[function(require,module,exports){
+
+/**
+ * Module dependencies.
+ */
+
+var eio = require('engine.io-client');
+var Socket = require('./socket');
+var Emitter = require('component-emitter');
+var parser = require('socket.io-parser');
+var on = require('./on');
+var bind = require('component-bind');
+var debug = require('debug')('socket.io-client:manager');
+var indexOf = require('indexof');
+var Backoff = require('backo2');
+
+/**
+ * IE6+ hasOwnProperty
+ */
+
+var has = Object.prototype.hasOwnProperty;
+
+/**
+ * Module exports
+ */
+
+module.exports = Manager;
+
+/**
+ * `Manager` constructor.
+ *
+ * @param {String} engine instance or engine uri/opts
+ * @param {Object} options
+ * @api public
+ */
+
+function Manager (uri, opts) {
+  if (!(this instanceof Manager)) return new Manager(uri, opts);
+  if (uri && ('object' === typeof uri)) {
+    opts = uri;
+    uri = undefined;
+  }
+  opts = opts || {};
+
+  opts.path = opts.path || '/socket.io';
+  this.nsps = {};
+  this.subs = [];
+  this.opts = opts;
+  this.reconnection(opts.reconnection !== false);
+  this.reconnectionAttempts(opts.reconnectionAttempts || Infinity);
+  this.reconnectionDelay(opts.reconnectionDelay || 1000);
+  this.reconnectionDelayMax(opts.reconnectionDelayMax || 5000);
+  this.randomizationFactor(opts.randomizationFactor || 0.5);
+  this.backoff = new Backoff({
+    min: this.reconnectionDelay(),
+    max: this.reconnectionDelayMax(),
+    jitter: this.randomizationFactor()
+  });
+  this.timeout(null == opts.timeout ? 20000 : opts.timeout);
+  this.readyState = 'closed';
+  this.uri = uri;
+  this.connecting = [];
+  this.lastPing = null;
+  this.encoding = false;
+  this.packetBuffer = [];
+  this.encoder = new parser.Encoder();
+  this.decoder = new parser.Decoder();
+  this.autoConnect = opts.autoConnect !== false;
+  if (this.autoConnect) this.open();
+}
+
+/**
+ * Propagate given event to sockets and emit on `this`
+ *
+ * @api private
+ */
+
+Manager.prototype.emitAll = function () {
+  this.emit.apply(this, arguments);
+  for (var nsp in this.nsps) {
+    if (has.call(this.nsps, nsp)) {
+      this.nsps[nsp].emit.apply(this.nsps[nsp], arguments);
+    }
+  }
+};
+
+/**
+ * Update `socket.id` of all sockets
+ *
+ * @api private
+ */
+
+Manager.prototype.updateSocketIds = function () {
+  for (var nsp in this.nsps) {
+    if (has.call(this.nsps, nsp)) {
+      this.nsps[nsp].id = this.engine.id;
+    }
+  }
+};
+
+/**
+ * Mix in `Emitter`.
+ */
+
+Emitter(Manager.prototype);
+
+/**
+ * Sets the `reconnection` config.
+ *
+ * @param {Boolean} true/false if it should automatically reconnect
+ * @return {Manager} self or value
+ * @api public
+ */
+
+Manager.prototype.reconnection = function (v) {
+  if (!arguments.length) return this._reconnection;
+  this._reconnection = !!v;
+  return this;
+};
+
+/**
+ * Sets the reconnection attempts config.
+ *
+ * @param {Number} max reconnection attempts before giving up
+ * @return {Manager} self or value
+ * @api public
+ */
+
+Manager.prototype.reconnectionAttempts = function (v) {
+  if (!arguments.length) return this._reconnectionAttempts;
+  this._reconnectionAttempts = v;
+  return this;
+};
+
+/**
+ * Sets the delay between reconnections.
+ *
+ * @param {Number} delay
+ * @return {Manager} self or value
+ * @api public
+ */
+
+Manager.prototype.reconnectionDelay = function (v) {
+  if (!arguments.length) return this._reconnectionDelay;
+  this._reconnectionDelay = v;
+  this.backoff && this.backoff.setMin(v);
+  return this;
+};
+
+Manager.prototype.randomizationFactor = function (v) {
+  if (!arguments.length) return this._randomizationFactor;
+  this._randomizationFactor = v;
+  this.backoff && this.backoff.setJitter(v);
+  return this;
+};
+
+/**
+ * Sets the maximum delay between reconnections.
+ *
+ * @param {Number} delay
+ * @return {Manager} self or value
+ * @api public
+ */
+
+Manager.prototype.reconnectionDelayMax = function (v) {
+  if (!arguments.length) return this._reconnectionDelayMax;
+  this._reconnectionDelayMax = v;
+  this.backoff && this.backoff.setMax(v);
+  return this;
+};
+
+/**
+ * Sets the connection timeout. `false` to disable
+ *
+ * @return {Manager} self or value
+ * @api public
+ */
+
+Manager.prototype.timeout = function (v) {
+  if (!arguments.length) return this._timeout;
+  this._timeout = v;
+  return this;
+};
+
+/**
+ * Starts trying to reconnect if reconnection is enabled and we have not
+ * started reconnecting yet
+ *
+ * @api private
+ */
+
+Manager.prototype.maybeReconnectOnOpen = function () {
+  // Only try to reconnect if it's the first time we're connecting
+  if (!this.reconnecting && this._reconnection && this.backoff.attempts === 0) {
+    // keeps reconnection from firing twice for the same reconnection loop
+    this.reconnect();
+  }
+};
+
+/**
+ * Sets the current transport `socket`.
+ *
+ * @param {Function} optional, callback
+ * @return {Manager} self
+ * @api public
+ */
+
+Manager.prototype.open =
+Manager.prototype.connect = function (fn, opts) {
+  debug('readyState %s', this.readyState);
+  if (~this.readyState.indexOf('open')) return this;
+
+  debug('opening %s', this.uri);
+  this.engine = eio(this.uri, this.opts);
+  var socket = this.engine;
+  var self = this;
+  this.readyState = 'opening';
+  this.skipReconnect = false;
+
+  // emit `open`
+  var openSub = on(socket, 'open', function () {
+    self.onopen();
+    fn && fn();
+  });
+
+  // emit `connect_error`
+  var errorSub = on(socket, 'error', function (data) {
+    debug('connect_error');
+    self.cleanup();
+    self.readyState = 'closed';
+    self.emitAll('connect_error', data);
+    if (fn) {
+      var err = new Error('Connection error');
+      err.data = data;
+      fn(err);
+    } else {
+      // Only do this if there is no fn to handle the error
+      self.maybeReconnectOnOpen();
+    }
+  });
+
+  // emit `connect_timeout`
+  if (false !== this._timeout) {
+    var timeout = this._timeout;
+    debug('connect attempt will timeout after %d', timeout);
+
+    // set timer
+    var timer = setTimeout(function () {
+      debug('connect attempt timed out after %d', timeout);
+      openSub.destroy();
+      socket.close();
+      socket.emit('error', 'timeout');
+      self.emitAll('connect_timeout', timeout);
+    }, timeout);
+
+    this.subs.push({
+      destroy: function () {
+        clearTimeout(timer);
+      }
+    });
+  }
+
+  this.subs.push(openSub);
+  this.subs.push(errorSub);
+
+  return this;
+};
+
+/**
+ * Called upon transport open.
+ *
+ * @api private
+ */
+
+Manager.prototype.onopen = function () {
+  debug('open');
+
+  // clear old subs
+  this.cleanup();
+
+  // mark as open
+  this.readyState = 'open';
+  this.emit('open');
+
+  // add new subs
+  var socket = this.engine;
+  this.subs.push(on(socket, 'data', bind(this, 'ondata')));
+  this.subs.push(on(socket, 'ping', bind(this, 'onping')));
+  this.subs.push(on(socket, 'pong', bind(this, 'onpong')));
+  this.subs.push(on(socket, 'error', bind(this, 'onerror')));
+  this.subs.push(on(socket, 'close', bind(this, 'onclose')));
+  this.subs.push(on(this.decoder, 'decoded', bind(this, 'ondecoded')));
+};
+
+/**
+ * Called upon a ping.
+ *
+ * @api private
+ */
+
+Manager.prototype.onping = function () {
+  this.lastPing = new Date();
+  this.emitAll('ping');
+};
+
+/**
+ * Called upon a packet.
+ *
+ * @api private
+ */
+
+Manager.prototype.onpong = function () {
+  this.emitAll('pong', new Date() - this.lastPing);
+};
+
+/**
+ * Called with data.
+ *
+ * @api private
+ */
+
+Manager.prototype.ondata = function (data) {
+  this.decoder.add(data);
+};
+
+/**
+ * Called when parser fully decodes a packet.
+ *
+ * @api private
+ */
+
+Manager.prototype.ondecoded = function (packet) {
+  this.emit('packet', packet);
+};
+
+/**
+ * Called upon socket error.
+ *
+ * @api private
+ */
+
+Manager.prototype.onerror = function (err) {
+  debug('error', err);
+  this.emitAll('error', err);
+};
+
+/**
+ * Creates a new socket for the given `nsp`.
+ *
+ * @return {Socket}
+ * @api public
+ */
+
+Manager.prototype.socket = function (nsp, opts) {
+  var socket = this.nsps[nsp];
+  if (!socket) {
+    socket = new Socket(this, nsp, opts);
+    this.nsps[nsp] = socket;
+    var self = this;
+    socket.on('connecting', onConnecting);
+    socket.on('connect', function () {
+      socket.id = self.engine.id;
+    });
+
+    if (this.autoConnect) {
+      // manually call here since connecting evnet is fired before listening
+      onConnecting();
+    }
+  }
+
+  function onConnecting () {
+    if (!~indexOf(self.connecting, socket)) {
+      self.connecting.push(socket);
+    }
+  }
+
+  return socket;
+};
+
+/**
+ * Called upon a socket close.
+ *
+ * @param {Socket} socket
+ */
+
+Manager.prototype.destroy = function (socket) {
+  var index = indexOf(this.connecting, socket);
+  if (~index) this.connecting.splice(index, 1);
+  if (this.connecting.length) return;
+
+  this.close();
+};
+
+/**
+ * Writes a packet.
+ *
+ * @param {Object} packet
+ * @api private
+ */
+
+Manager.prototype.packet = function (packet) {
+  debug('writing packet %j', packet);
+  var self = this;
+  if (packet.query && packet.type === 0) packet.nsp += '?' + packet.query;
+
+  if (!self.encoding) {
+    // encode, then write to engine with result
+    self.encoding = true;
+    this.encoder.encode(packet, function (encodedPackets) {
+      for (var i = 0; i < encodedPackets.length; i++) {
+        self.engine.write(encodedPackets[i], packet.options);
+      }
+      self.encoding = false;
+      self.processPacketQueue();
+    });
+  } else { // add packet to the queue
+    self.packetBuffer.push(packet);
+  }
+};
+
+/**
+ * If packet buffer is non-empty, begins encoding the
+ * next packet in line.
+ *
+ * @api private
+ */
+
+Manager.prototype.processPacketQueue = function () {
+  if (this.packetBuffer.length > 0 && !this.encoding) {
+    var pack = this.packetBuffer.shift();
+    this.packet(pack);
+  }
+};
+
+/**
+ * Clean up transport subscriptions and packet buffer.
+ *
+ * @api private
+ */
+
+Manager.prototype.cleanup = function () {
+  debug('cleanup');
+
+  var subsLength = this.subs.length;
+  for (var i = 0; i < subsLength; i++) {
+    var sub = this.subs.shift();
+    sub.destroy();
+  }
+
+  this.packetBuffer = [];
+  this.encoding = false;
+  this.lastPing = null;
+
+  this.decoder.destroy();
+};
+
+/**
+ * Close the current socket.
+ *
+ * @api private
+ */
+
+Manager.prototype.close =
+Manager.prototype.disconnect = function () {
+  debug('disconnect');
+  this.skipReconnect = true;
+  this.reconnecting = false;
+  if ('opening' === this.readyState) {
+    // `onclose` will not fire because
+    // an open event never happened
+    this.cleanup();
+  }
+  this.backoff.reset();
+  this.readyState = 'closed';
+  if (this.engine) this.engine.close();
+};
+
+/**
+ * Called upon engine close.
+ *
+ * @api private
+ */
+
+Manager.prototype.onclose = function (reason) {
+  debug('onclose');
+
+  this.cleanup();
+  this.backoff.reset();
+  this.readyState = 'closed';
+  this.emit('close', reason);
+
+  if (this._reconnection && !this.skipReconnect) {
+    this.reconnect();
+  }
+};
+
+/**
+ * Attempt a reconnection.
+ *
+ * @api private
+ */
+
+Manager.prototype.reconnect = function () {
+  if (this.reconnecting || this.skipReconnect) return this;
+
+  var self = this;
+
+  if (this.backoff.attempts >= this._reconnectionAttempts) {
+    debug('reconnect failed');
+    this.backoff.reset();
+    this.emitAll('reconnect_failed');
+    this.reconnecting = false;
+  } else {
+    var delay = this.backoff.duration();
+    debug('will wait %dms before reconnect attempt', delay);
+
+    this.reconnecting = true;
+    var timer = setTimeout(function () {
+      if (self.skipReconnect) return;
+
+      debug('attempting reconnect');
+      self.emitAll('reconnect_attempt', self.backoff.attempts);
+      self.emitAll('reconnecting', self.backoff.attempts);
+
+      // check again for the case socket closed in above events
+      if (self.skipReconnect) return;
+
+      self.open(function (err) {
+        if (err) {
+          debug('reconnect attempt error');
+          self.reconnecting = false;
+          self.reconnect();
+          self.emitAll('reconnect_error', err.data);
+        } else {
+          debug('reconnect success');
+          self.onreconnect();
+        }
+      });
+    }, delay);
+
+    this.subs.push({
+      destroy: function () {
+        clearTimeout(timer);
+      }
+    });
+  }
+};
+
+/**
+ * Called upon successful reconnect.
+ *
+ * @api private
+ */
+
+Manager.prototype.onreconnect = function () {
+  var attempt = this.backoff.attempts;
+  this.reconnecting = false;
+  this.backoff.reset();
+  this.updateSocketIds();
+  this.emitAll('reconnect', attempt);
+};
+
+},{"./on":761,"./socket":762,"backo2":339,"component-bind":343,"component-emitter":344,"debug":346,"engine.io-client":348,"indexof":364,"socket.io-parser":765}],761:[function(require,module,exports){
+
+/**
+ * Module exports.
+ */
+
+module.exports = on;
+
+/**
+ * Helper for subscriptions.
+ *
+ * @param {Object|EventEmitter} obj with `Emitter` mixin or `EventEmitter`
+ * @param {String} event name
+ * @param {Function} callback
+ * @api public
+ */
+
+function on (obj, ev, fn) {
+  obj.on(ev, fn);
+  return {
+    destroy: function () {
+      obj.removeListener(ev, fn);
+    }
+  };
+}
+
+},{}],762:[function(require,module,exports){
+
+/**
+ * Module dependencies.
+ */
+
+var parser = require('socket.io-parser');
+var Emitter = require('component-emitter');
+var toArray = require('to-array');
+var on = require('./on');
+var bind = require('component-bind');
+var debug = require('debug')('socket.io-client:socket');
+var hasBin = require('has-binary');
+
+/**
+ * Module exports.
+ */
+
+module.exports = exports = Socket;
+
+/**
+ * Internal events (blacklisted).
+ * These events can't be emitted by the user.
+ *
+ * @api private
+ */
+
+var events = {
+  connect: 1,
+  connect_error: 1,
+  connect_timeout: 1,
+  connecting: 1,
+  disconnect: 1,
+  error: 1,
+  reconnect: 1,
+  reconnect_attempt: 1,
+  reconnect_failed: 1,
+  reconnect_error: 1,
+  reconnecting: 1,
+  ping: 1,
+  pong: 1
+};
+
+/**
+ * Shortcut to `Emitter#emit`.
+ */
+
+var emit = Emitter.prototype.emit;
+
+/**
+ * `Socket` constructor.
+ *
+ * @api public
+ */
+
+function Socket (io, nsp, opts) {
+  this.io = io;
+  this.nsp = nsp;
+  this.json = this; // compat
+  this.ids = 0;
+  this.acks = {};
+  this.receiveBuffer = [];
+  this.sendBuffer = [];
+  this.connected = false;
+  this.disconnected = true;
+  if (opts && opts.query) {
+    this.query = opts.query;
+  }
+  if (this.io.autoConnect) this.open();
+}
+
+/**
+ * Mix in `Emitter`.
+ */
+
+Emitter(Socket.prototype);
+
+/**
+ * Subscribe to open, close and packet events
+ *
+ * @api private
+ */
+
+Socket.prototype.subEvents = function () {
+  if (this.subs) return;
+
+  var io = this.io;
+  this.subs = [
+    on(io, 'open', bind(this, 'onopen')),
+    on(io, 'packet', bind(this, 'onpacket')),
+    on(io, 'close', bind(this, 'onclose'))
+  ];
+};
+
+/**
+ * "Opens" the socket.
+ *
+ * @api public
+ */
+
+Socket.prototype.open =
+Socket.prototype.connect = function () {
+  if (this.connected) return this;
+
+  this.subEvents();
+  this.io.open(); // ensure open
+  if ('open' === this.io.readyState) this.onopen();
+  this.emit('connecting');
+  return this;
+};
+
+/**
+ * Sends a `message` event.
+ *
+ * @return {Socket} self
+ * @api public
+ */
+
+Socket.prototype.send = function () {
+  var args = toArray(arguments);
+  args.unshift('message');
+  this.emit.apply(this, args);
+  return this;
+};
+
+/**
+ * Override `emit`.
+ * If the event is in `events`, it's emitted normally.
+ *
+ * @param {String} event name
+ * @return {Socket} self
+ * @api public
+ */
+
+Socket.prototype.emit = function (ev) {
+  if (events.hasOwnProperty(ev)) {
+    emit.apply(this, arguments);
+    return this;
+  }
+
+  var args = toArray(arguments);
+  var parserType = parser.EVENT; // default
+  if (hasBin(args)) { parserType = parser.BINARY_EVENT; } // binary
+  var packet = { type: parserType, data: args };
+
+  packet.options = {};
+  packet.options.compress = !this.flags || false !== this.flags.compress;
+
+  // event ack callback
+  if ('function' === typeof args[args.length - 1]) {
+    debug('emitting packet with ack id %d', this.ids);
+    this.acks[this.ids] = args.pop();
+    packet.id = this.ids++;
+  }
+
+  if (this.connected) {
+    this.packet(packet);
+  } else {
+    this.sendBuffer.push(packet);
+  }
+
+  delete this.flags;
+
+  return this;
+};
+
+/**
+ * Sends a packet.
+ *
+ * @param {Object} packet
+ * @api private
+ */
+
+Socket.prototype.packet = function (packet) {
+  packet.nsp = this.nsp;
+  this.io.packet(packet);
+};
+
+/**
+ * Called upon engine `open`.
+ *
+ * @api private
+ */
+
+Socket.prototype.onopen = function () {
+  debug('transport is open - connecting');
+
+  // write connect packet if necessary
+  if ('/' !== this.nsp) {
+    if (this.query) {
+      this.packet({type: parser.CONNECT, query: this.query});
+    } else {
+      this.packet({type: parser.CONNECT});
+    }
+  }
+};
+
+/**
+ * Called upon engine `close`.
+ *
+ * @param {String} reason
+ * @api private
+ */
+
+Socket.prototype.onclose = function (reason) {
+  debug('close (%s)', reason);
+  this.connected = false;
+  this.disconnected = true;
+  delete this.id;
+  this.emit('disconnect', reason);
+};
+
+/**
+ * Called with socket packet.
+ *
+ * @param {Object} packet
+ * @api private
+ */
+
+Socket.prototype.onpacket = function (packet) {
+  if (packet.nsp !== this.nsp) return;
+
+  switch (packet.type) {
+    case parser.CONNECT:
+      this.onconnect();
+      break;
+
+    case parser.EVENT:
+      this.onevent(packet);
+      break;
+
+    case parser.BINARY_EVENT:
+      this.onevent(packet);
+      break;
+
+    case parser.ACK:
+      this.onack(packet);
+      break;
+
+    case parser.BINARY_ACK:
+      this.onack(packet);
+      break;
+
+    case parser.DISCONNECT:
+      this.ondisconnect();
+      break;
+
+    case parser.ERROR:
+      this.emit('error', packet.data);
+      break;
+  }
+};
+
+/**
+ * Called upon a server event.
+ *
+ * @param {Object} packet
+ * @api private
+ */
+
+Socket.prototype.onevent = function (packet) {
+  var args = packet.data || [];
+  debug('emitting event %j', args);
+
+  if (null != packet.id) {
+    debug('attaching ack callback to event');
+    args.push(this.ack(packet.id));
+  }
+
+  if (this.connected) {
+    emit.apply(this, args);
+  } else {
+    this.receiveBuffer.push(args);
+  }
+};
+
+/**
+ * Produces an ack callback to emit with an event.
+ *
+ * @api private
+ */
+
+Socket.prototype.ack = function (id) {
+  var self = this;
+  var sent = false;
+  return function () {
+    // prevent double callbacks
+    if (sent) return;
+    sent = true;
+    var args = toArray(arguments);
+    debug('sending ack %j', args);
+
+    var type = hasBin(args) ? parser.BINARY_ACK : parser.ACK;
+    self.packet({
+      type: type,
+      id: id,
+      data: args
+    });
+  };
+};
+
+/**
+ * Called upon a server acknowlegement.
+ *
+ * @param {Object} packet
+ * @api private
+ */
+
+Socket.prototype.onack = function (packet) {
+  var ack = this.acks[packet.id];
+  if ('function' === typeof ack) {
+    debug('calling ack %s with %j', packet.id, packet.data);
+    ack.apply(this, packet.data);
+    delete this.acks[packet.id];
+  } else {
+    debug('bad ack %s', packet.id);
+  }
+};
+
+/**
+ * Called upon server connect.
+ *
+ * @api private
+ */
+
+Socket.prototype.onconnect = function () {
+  this.connected = true;
+  this.disconnected = false;
+  this.emit('connect');
+  this.emitBuffered();
+};
+
+/**
+ * Emit buffered events (received and emitted).
+ *
+ * @api private
+ */
+
+Socket.prototype.emitBuffered = function () {
+  var i;
+  for (i = 0; i < this.receiveBuffer.length; i++) {
+    emit.apply(this, this.receiveBuffer[i]);
+  }
+  this.receiveBuffer = [];
+
+  for (i = 0; i < this.sendBuffer.length; i++) {
+    this.packet(this.sendBuffer[i]);
+  }
+  this.sendBuffer = [];
+};
+
+/**
+ * Called upon server disconnect.
+ *
+ * @api private
+ */
+
+Socket.prototype.ondisconnect = function () {
+  debug('server disconnect (%s)', this.nsp);
+  this.destroy();
+  this.onclose('io server disconnect');
+};
+
+/**
+ * Called upon forced client/server side disconnections,
+ * this method ensures the manager stops tracking us and
+ * that reconnections don't get triggered for this.
+ *
+ * @api private.
+ */
+
+Socket.prototype.destroy = function () {
+  if (this.subs) {
+    // clean subscriptions to avoid reconnections
+    for (var i = 0; i < this.subs.length; i++) {
+      this.subs[i].destroy();
+    }
+    this.subs = null;
+  }
+
+  this.io.destroy(this);
+};
+
+/**
+ * Disconnects the socket manually.
+ *
+ * @return {Socket} self
+ * @api public
+ */
+
+Socket.prototype.close =
+Socket.prototype.disconnect = function () {
+  if (this.connected) {
+    debug('performing disconnect (%s)', this.nsp);
+    this.packet({ type: parser.DISCONNECT });
+  }
+
+  // remove socket from pool
+  this.destroy();
+
+  if (this.connected) {
+    // fire events
+    this.onclose('io client disconnect');
+  }
+  return this;
+};
+
+/**
+ * Sets the compress flag.
+ *
+ * @param {Boolean} if `true`, compresses the sending data
+ * @return {Socket} self
+ * @api public
+ */
+
+Socket.prototype.compress = function (compress) {
+  this.flags = this.flags || {};
+  this.flags.compress = compress;
+  return this;
+};
+
+},{"./on":761,"component-bind":343,"component-emitter":344,"debug":346,"has-binary":362,"socket.io-parser":765,"to-array":768}],763:[function(require,module,exports){
+(function (global){
+
+/**
+ * Module dependencies.
+ */
+
+var parseuri = require('parseuri');
+var debug = require('debug')('socket.io-client:url');
+
+/**
+ * Module exports.
+ */
+
+module.exports = url;
+
+/**
+ * URL parser.
+ *
+ * @param {String} url
+ * @param {Object} An object meant to mimic window.location.
+ *                 Defaults to window.location.
+ * @api public
+ */
+
+function url (uri, loc) {
+  var obj = uri;
+
+  // default to window.location
+  loc = loc || global.location;
+  if (null == uri) uri = loc.protocol + '//' + loc.host;
+
+  // relative path support
+  if ('string' === typeof uri) {
+    if ('/' === uri.charAt(0)) {
+      if ('/' === uri.charAt(1)) {
+        uri = loc.protocol + uri;
+      } else {
+        uri = loc.host + uri;
+      }
+    }
+
+    if (!/^(https?|wss?):\/\//.test(uri)) {
+      debug('protocol-less url %s', uri);
+      if ('undefined' !== typeof loc) {
+        uri = loc.protocol + '//' + uri;
+      } else {
+        uri = 'https://' + uri;
+      }
+    }
+
+    // parse
+    debug('parse %s', uri);
+    obj = parseuri(uri);
+  }
+
+  // make sure we treat `localhost:80` and `localhost` equally
+  if (!obj.port) {
+    if (/^(http|ws)$/.test(obj.protocol)) {
+      obj.port = '80';
+    } else if (/^(http|ws)s$/.test(obj.protocol)) {
+      obj.port = '443';
+    }
+  }
+
+  obj.path = obj.path || '/';
+
+  var ipv6 = obj.host.indexOf(':') !== -1;
+  var host = ipv6 ? '[' + obj.host + ']' : obj.host;
+
+  // define unique id
+  obj.id = obj.protocol + '://' + host + ':' + obj.port;
+  // define href
+  obj.href = obj.protocol + '://' + host + (loc && loc.port === obj.port ? '' : (':' + obj.port));
+
+  return obj;
+}
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"debug":346,"parseuri":483}],764:[function(require,module,exports){
+(function (global){
+/*global Blob,File*/
+
+/**
+ * Module requirements
+ */
+
+var isArray = require('isarray');
+var isBuf = require('./is-buffer');
+
+/**
+ * Replaces every Buffer | ArrayBuffer in packet with a numbered placeholder.
+ * Anything with blobs or files should be fed through removeBlobs before coming
+ * here.
+ *
+ * @param {Object} packet - socket.io event packet
+ * @return {Object} with deconstructed packet and list of buffers
+ * @api public
+ */
+
+exports.deconstructPacket = function(packet){
+  var buffers = [];
+  var packetData = packet.data;
+
+  function _deconstructPacket(data) {
+    if (!data) return data;
+
+    if (isBuf(data)) {
+      var placeholder = { _placeholder: true, num: buffers.length };
+      buffers.push(data);
+      return placeholder;
+    } else if (isArray(data)) {
+      var newData = new Array(data.length);
+      for (var i = 0; i < data.length; i++) {
+        newData[i] = _deconstructPacket(data[i]);
+      }
+      return newData;
+    } else if ('object' == typeof data && !(data instanceof Date)) {
+      var newData = {};
+      for (var key in data) {
+        newData[key] = _deconstructPacket(data[key]);
+      }
+      return newData;
+    }
+    return data;
+  }
+
+  var pack = packet;
+  pack.data = _deconstructPacket(packetData);
+  pack.attachments = buffers.length; // number of binary 'attachments'
+  return {packet: pack, buffers: buffers};
+};
+
+/**
+ * Reconstructs a binary packet from its placeholder packet and buffers
+ *
+ * @param {Object} packet - event packet with placeholders
+ * @param {Array} buffers - binary buffers to put in placeholder positions
+ * @return {Object} reconstructed packet
+ * @api public
+ */
+
+exports.reconstructPacket = function(packet, buffers) {
+  var curPlaceHolder = 0;
+
+  function _reconstructPacket(data) {
+    if (data && data._placeholder) {
+      var buf = buffers[data.num]; // appropriate buffer (should be natural order anyway)
+      return buf;
+    } else if (isArray(data)) {
+      for (var i = 0; i < data.length; i++) {
+        data[i] = _reconstructPacket(data[i]);
+      }
+      return data;
+    } else if (data && 'object' == typeof data) {
+      for (var key in data) {
+        data[key] = _reconstructPacket(data[key]);
+      }
+      return data;
+    }
+    return data;
+  }
+
+  packet.data = _reconstructPacket(packet.data);
+  packet.attachments = undefined; // no longer useful
+  return packet;
+};
+
+/**
+ * Asynchronously removes Blobs or Files from data via
+ * FileReader's readAsArrayBuffer method. Used before encoding
+ * data as msgpack. Calls callback with the blobless data.
+ *
+ * @param {Object} data
+ * @param {Function} callback
+ * @api private
+ */
+
+exports.removeBlobs = function(data, callback) {
+  function _removeBlobs(obj, curKey, containingObject) {
+    if (!obj) return obj;
+
+    // convert any blob
+    if ((global.Blob && obj instanceof Blob) ||
+        (global.File && obj instanceof File)) {
+      pendingBlobs++;
+
+      // async filereader
+      var fileReader = new FileReader();
+      fileReader.onload = function() { // this.result == arraybuffer
+        if (containingObject) {
+          containingObject[curKey] = this.result;
+        }
+        else {
+          bloblessData = this.result;
+        }
+
+        // if nothing pending its callback time
+        if(! --pendingBlobs) {
+          callback(bloblessData);
+        }
+      };
+
+      fileReader.readAsArrayBuffer(obj); // blob -> arraybuffer
+    } else if (isArray(obj)) { // handle array
+      for (var i = 0; i < obj.length; i++) {
+        _removeBlobs(obj[i], i, obj);
+      }
+    } else if (obj && 'object' == typeof obj && !isBuf(obj)) { // and object
+      for (var key in obj) {
+        _removeBlobs(obj[key], key, obj);
+      }
+    }
+  }
+
+  var pendingBlobs = 0;
+  var bloblessData = data;
+  _removeBlobs(bloblessData);
+  if (!pendingBlobs) {
+    callback(bloblessData);
+  }
+};
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{"./is-buffer":766,"isarray":478}],765:[function(require,module,exports){
+
+/**
+ * Module dependencies.
+ */
+
+var debug = require('debug')('socket.io-parser');
+var json = require('json3');
+var Emitter = require('component-emitter');
+var binary = require('./binary');
+var isBuf = require('./is-buffer');
+
+/**
+ * Protocol version.
+ *
+ * @api public
+ */
+
+exports.protocol = 4;
+
+/**
+ * Packet types.
+ *
+ * @api public
+ */
+
+exports.types = [
+  'CONNECT',
+  'DISCONNECT',
+  'EVENT',
+  'ACK',
+  'ERROR',
+  'BINARY_EVENT',
+  'BINARY_ACK'
+];
+
+/**
+ * Packet type `connect`.
+ *
+ * @api public
+ */
+
+exports.CONNECT = 0;
+
+/**
+ * Packet type `disconnect`.
+ *
+ * @api public
+ */
+
+exports.DISCONNECT = 1;
+
+/**
+ * Packet type `event`.
+ *
+ * @api public
+ */
+
+exports.EVENT = 2;
+
+/**
+ * Packet type `ack`.
+ *
+ * @api public
+ */
+
+exports.ACK = 3;
+
+/**
+ * Packet type `error`.
+ *
+ * @api public
+ */
+
+exports.ERROR = 4;
+
+/**
+ * Packet type 'binary event'
+ *
+ * @api public
+ */
+
+exports.BINARY_EVENT = 5;
+
+/**
+ * Packet type `binary ack`. For acks with binary arguments.
+ *
+ * @api public
+ */
+
+exports.BINARY_ACK = 6;
+
+/**
+ * Encoder constructor.
+ *
+ * @api public
+ */
+
+exports.Encoder = Encoder;
+
+/**
+ * Decoder constructor.
+ *
+ * @api public
+ */
+
+exports.Decoder = Decoder;
+
+/**
+ * A socket.io Encoder instance
+ *
+ * @api public
+ */
+
+function Encoder() {}
+
+/**
+ * Encode a packet as a single string if non-binary, or as a
+ * buffer sequence, depending on packet type.
+ *
+ * @param {Object} obj - packet object
+ * @param {Function} callback - function to handle encodings (likely engine.write)
+ * @return Calls callback with Array of encodings
+ * @api public
+ */
+
+Encoder.prototype.encode = function(obj, callback){
+  debug('encoding packet %j', obj);
+
+  if (exports.BINARY_EVENT == obj.type || exports.BINARY_ACK == obj.type) {
+    encodeAsBinary(obj, callback);
+  }
+  else {
+    var encoding = encodeAsString(obj);
+    callback([encoding]);
+  }
+};
+
+/**
+ * Encode packet as string.
+ *
+ * @param {Object} packet
+ * @return {String} encoded
+ * @api private
+ */
+
+function encodeAsString(obj) {
+  var str = '';
+  var nsp = false;
+
+  // first is type
+  str += obj.type;
+
+  // attachments if we have them
+  if (exports.BINARY_EVENT == obj.type || exports.BINARY_ACK == obj.type) {
+    str += obj.attachments;
+    str += '-';
+  }
+
+  // if we have a namespace other than `/`
+  // we append it followed by a comma `,`
+  if (obj.nsp && '/' != obj.nsp) {
+    nsp = true;
+    str += obj.nsp;
+  }
+
+  // immediately followed by the id
+  if (null != obj.id) {
+    if (nsp) {
+      str += ',';
+      nsp = false;
+    }
+    str += obj.id;
+  }
+
+  // json data
+  if (null != obj.data) {
+    if (nsp) str += ',';
+    str += json.stringify(obj.data);
+  }
+
+  debug('encoded %j as %s', obj, str);
+  return str;
+}
+
+/**
+ * Encode packet as 'buffer sequence' by removing blobs, and
+ * deconstructing packet into object with placeholders and
+ * a list of buffers.
+ *
+ * @param {Object} packet
+ * @return {Buffer} encoded
+ * @api private
+ */
+
+function encodeAsBinary(obj, callback) {
+
+  function writeEncoding(bloblessData) {
+    var deconstruction = binary.deconstructPacket(bloblessData);
+    var pack = encodeAsString(deconstruction.packet);
+    var buffers = deconstruction.buffers;
+
+    buffers.unshift(pack); // add packet info to beginning of data list
+    callback(buffers); // write all the buffers
+  }
+
+  binary.removeBlobs(obj, writeEncoding);
+}
+
+/**
+ * A socket.io Decoder instance
+ *
+ * @return {Object} decoder
+ * @api public
+ */
+
+function Decoder() {
+  this.reconstructor = null;
+}
+
+/**
+ * Mix in `Emitter` with Decoder.
+ */
+
+Emitter(Decoder.prototype);
+
+/**
+ * Decodes an ecoded packet string into packet JSON.
+ *
+ * @param {String} obj - encoded packet
+ * @return {Object} packet
+ * @api public
+ */
+
+Decoder.prototype.add = function(obj) {
+  var packet;
+  if ('string' == typeof obj) {
+    packet = decodeString(obj);
+    if (exports.BINARY_EVENT == packet.type || exports.BINARY_ACK == packet.type) { // binary packet's json
+      this.reconstructor = new BinaryReconstructor(packet);
+
+      // no attachments, labeled binary but no binary data to follow
+      if (this.reconstructor.reconPack.attachments === 0) {
+        this.emit('decoded', packet);
+      }
+    } else { // non-binary full packet
+      this.emit('decoded', packet);
+    }
+  }
+  else if (isBuf(obj) || obj.base64) { // raw binary data
+    if (!this.reconstructor) {
+      throw new Error('got binary data when not reconstructing a packet');
+    } else {
+      packet = this.reconstructor.takeBinaryData(obj);
+      if (packet) { // received final buffer
+        this.reconstructor = null;
+        this.emit('decoded', packet);
+      }
+    }
+  }
+  else {
+    throw new Error('Unknown type: ' + obj);
+  }
+};
+
+/**
+ * Decode a packet String (JSON data)
+ *
+ * @param {String} str
+ * @return {Object} packet
+ * @api private
+ */
+
+function decodeString(str) {
+  var p = {};
+  var i = 0;
+
+  // look up type
+  p.type = Number(str.charAt(0));
+  if (null == exports.types[p.type]) return error();
+
+  // look up attachments if type binary
+  if (exports.BINARY_EVENT == p.type || exports.BINARY_ACK == p.type) {
+    var buf = '';
+    while (str.charAt(++i) != '-') {
+      buf += str.charAt(i);
+      if (i == str.length) break;
+    }
+    if (buf != Number(buf) || str.charAt(i) != '-') {
+      throw new Error('Illegal attachments');
+    }
+    p.attachments = Number(buf);
+  }
+
+  // look up namespace (if any)
+  if ('/' == str.charAt(i + 1)) {
+    p.nsp = '';
+    while (++i) {
+      var c = str.charAt(i);
+      if (',' == c) break;
+      p.nsp += c;
+      if (i == str.length) break;
+    }
+  } else {
+    p.nsp = '/';
+  }
+
+  // look up id
+  var next = str.charAt(i + 1);
+  if ('' !== next && Number(next) == next) {
+    p.id = '';
+    while (++i) {
+      var c = str.charAt(i);
+      if (null == c || Number(c) != c) {
+        --i;
+        break;
+      }
+      p.id += str.charAt(i);
+      if (i == str.length) break;
+    }
+    p.id = Number(p.id);
+  }
+
+  // look up json data
+  if (str.charAt(++i)) {
+    p = tryParse(p, str.substr(i));
+  }
+
+  debug('decoded %s as %j', str, p);
+  return p;
+}
+
+function tryParse(p, str) {
+  try {
+    p.data = json.parse(str);
+  } catch(e){
+    return error();
+  }
+  return p; 
+};
+
+/**
+ * Deallocates a parser's resources
+ *
+ * @api public
+ */
+
+Decoder.prototype.destroy = function() {
+  if (this.reconstructor) {
+    this.reconstructor.finishedReconstruction();
+  }
+};
+
+/**
+ * A manager of a binary event's 'buffer sequence'. Should
+ * be constructed whenever a packet of type BINARY_EVENT is
+ * decoded.
+ *
+ * @param {Object} packet
+ * @return {BinaryReconstructor} initialized reconstructor
+ * @api private
+ */
+
+function BinaryReconstructor(packet) {
+  this.reconPack = packet;
+  this.buffers = [];
+}
+
+/**
+ * Method to be called when binary data received from connection
+ * after a BINARY_EVENT packet.
+ *
+ * @param {Buffer | ArrayBuffer} binData - the raw binary data received
+ * @return {null | Object} returns null if more binary data is expected or
+ *   a reconstructed packet object if all buffers have been received.
+ * @api private
+ */
+
+BinaryReconstructor.prototype.takeBinaryData = function(binData) {
+  this.buffers.push(binData);
+  if (this.buffers.length == this.reconPack.attachments) { // done with buffer list
+    var packet = binary.reconstructPacket(this.reconPack, this.buffers);
+    this.finishedReconstruction();
+    return packet;
+  }
+  return null;
+};
+
+/**
+ * Cleans up binary packet reconstruction variables.
+ *
+ * @api private
+ */
+
+BinaryReconstructor.prototype.finishedReconstruction = function() {
+  this.reconPack = null;
+  this.buffers = [];
+};
+
+function error(data){
+  return {
+    type: exports.ERROR,
+    data: 'parser error'
+  };
+}
+
+},{"./binary":764,"./is-buffer":766,"component-emitter":767,"debug":346,"json3":479}],766:[function(require,module,exports){
+(function (global){
+
+module.exports = isBuf;
+
+/**
+ * Returns true if obj is a buffer or an arraybuffer.
+ *
+ * @api private
+ */
+
+function isBuf(obj) {
+  return (global.Buffer && global.Buffer.isBuffer(obj)) ||
+         (global.ArrayBuffer && obj instanceof ArrayBuffer);
+}
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{}],767:[function(require,module,exports){
+arguments[4][358][0].apply(exports,arguments)
+},{"dup":358}],768:[function(require,module,exports){
+module.exports = toArray
+
+function toArray(list, index) {
+    var array = []
+
+    index = index || 0
+
+    for (var i = index || 0; i < list.length; i++) {
+        array[i - index] = list[i]
+    }
+
+    return array
+}
+
+},{}],769:[function(require,module,exports){
+(function (global){
+/*! https://mths.be/wtf8 v1.0.0 by @mathias */
+;(function(root) {
+
+	// Detect free variables `exports`
+	var freeExports = typeof exports == 'object' && exports;
+
+	// Detect free variable `module`
+	var freeModule = typeof module == 'object' && module &&
+		module.exports == freeExports && module;
+
+	// Detect free variable `global`, from Node.js or Browserified code,
+	// and use it as `root`
+	var freeGlobal = typeof global == 'object' && global;
+	if (freeGlobal.global === freeGlobal || freeGlobal.window === freeGlobal) {
+		root = freeGlobal;
+	}
+
+	/*--------------------------------------------------------------------------*/
+
+	var stringFromCharCode = String.fromCharCode;
+
+	// Taken from https://mths.be/punycode
+	function ucs2decode(string) {
+		var output = [];
+		var counter = 0;
+		var length = string.length;
+		var value;
+		var extra;
+		while (counter < length) {
+			value = string.charCodeAt(counter++);
+			if (value >= 0xD800 && value <= 0xDBFF && counter < length) {
+				// high surrogate, and there is a next character
+				extra = string.charCodeAt(counter++);
+				if ((extra & 0xFC00) == 0xDC00) { // low surrogate
+					output.push(((value & 0x3FF) << 10) + (extra & 0x3FF) + 0x10000);
+				} else {
+					// unmatched surrogate; only append this code unit, in case the next
+					// code unit is the high surrogate of a surrogate pair
+					output.push(value);
+					counter--;
+				}
+			} else {
+				output.push(value);
+			}
+		}
+		return output;
+	}
+
+	// Taken from https://mths.be/punycode
+	function ucs2encode(array) {
+		var length = array.length;
+		var index = -1;
+		var value;
+		var output = '';
+		while (++index < length) {
+			value = array[index];
+			if (value > 0xFFFF) {
+				value -= 0x10000;
+				output += stringFromCharCode(value >>> 10 & 0x3FF | 0xD800);
+				value = 0xDC00 | value & 0x3FF;
+			}
+			output += stringFromCharCode(value);
+		}
+		return output;
+	}
+
+	/*--------------------------------------------------------------------------*/
+
+	function createByte(codePoint, shift) {
+		return stringFromCharCode(((codePoint >> shift) & 0x3F) | 0x80);
+	}
+
+	function encodeCodePoint(codePoint) {
+		if ((codePoint & 0xFFFFFF80) == 0) { // 1-byte sequence
+			return stringFromCharCode(codePoint);
+		}
+		var symbol = '';
+		if ((codePoint & 0xFFFFF800) == 0) { // 2-byte sequence
+			symbol = stringFromCharCode(((codePoint >> 6) & 0x1F) | 0xC0);
+		}
+		else if ((codePoint & 0xFFFF0000) == 0) { // 3-byte sequence
+			symbol = stringFromCharCode(((codePoint >> 12) & 0x0F) | 0xE0);
+			symbol += createByte(codePoint, 6);
+		}
+		else if ((codePoint & 0xFFE00000) == 0) { // 4-byte sequence
+			symbol = stringFromCharCode(((codePoint >> 18) & 0x07) | 0xF0);
+			symbol += createByte(codePoint, 12);
+			symbol += createByte(codePoint, 6);
+		}
+		symbol += stringFromCharCode((codePoint & 0x3F) | 0x80);
+		return symbol;
+	}
+
+	function wtf8encode(string) {
+		var codePoints = ucs2decode(string);
+		var length = codePoints.length;
+		var index = -1;
+		var codePoint;
+		var byteString = '';
+		while (++index < length) {
+			codePoint = codePoints[index];
+			byteString += encodeCodePoint(codePoint);
+		}
+		return byteString;
+	}
+
+	/*--------------------------------------------------------------------------*/
+
+	function readContinuationByte() {
+		if (byteIndex >= byteCount) {
+			throw Error('Invalid byte index');
+		}
+
+		var continuationByte = byteArray[byteIndex] & 0xFF;
+		byteIndex++;
+
+		if ((continuationByte & 0xC0) == 0x80) {
+			return continuationByte & 0x3F;
+		}
+
+		// If we end up here, it’s not a continuation byte.
+		throw Error('Invalid continuation byte');
+	}
+
+	function decodeSymbol() {
+		var byte1;
+		var byte2;
+		var byte3;
+		var byte4;
+		var codePoint;
+
+		if (byteIndex > byteCount) {
+			throw Error('Invalid byte index');
+		}
+
+		if (byteIndex == byteCount) {
+			return false;
+		}
+
+		// Read the first byte.
+		byte1 = byteArray[byteIndex] & 0xFF;
+		byteIndex++;
+
+		// 1-byte sequence (no continuation bytes)
+		if ((byte1 & 0x80) == 0) {
+			return byte1;
+		}
+
+		// 2-byte sequence
+		if ((byte1 & 0xE0) == 0xC0) {
+			var byte2 = readContinuationByte();
+			codePoint = ((byte1 & 0x1F) << 6) | byte2;
+			if (codePoint >= 0x80) {
+				return codePoint;
+			} else {
+				throw Error('Invalid continuation byte');
+			}
+		}
+
+		// 3-byte sequence (may include unpaired surrogates)
+		if ((byte1 & 0xF0) == 0xE0) {
+			byte2 = readContinuationByte();
+			byte3 = readContinuationByte();
+			codePoint = ((byte1 & 0x0F) << 12) | (byte2 << 6) | byte3;
+			if (codePoint >= 0x0800) {
+				return codePoint;
+			} else {
+				throw Error('Invalid continuation byte');
+			}
+		}
+
+		// 4-byte sequence
+		if ((byte1 & 0xF8) == 0xF0) {
+			byte2 = readContinuationByte();
+			byte3 = readContinuationByte();
+			byte4 = readContinuationByte();
+			codePoint = ((byte1 & 0x0F) << 0x12) | (byte2 << 0x0C) |
+				(byte3 << 0x06) | byte4;
+			if (codePoint >= 0x010000 && codePoint <= 0x10FFFF) {
+				return codePoint;
+			}
+		}
+
+		throw Error('Invalid WTF-8 detected');
+	}
+
+	var byteArray;
+	var byteCount;
+	var byteIndex;
+	function wtf8decode(byteString) {
+		byteArray = ucs2decode(byteString);
+		byteCount = byteArray.length;
+		byteIndex = 0;
+		var codePoints = [];
+		var tmp;
+		while ((tmp = decodeSymbol()) !== false) {
+			codePoints.push(tmp);
+		}
+		return ucs2encode(codePoints);
+	}
+
+	/*--------------------------------------------------------------------------*/
+
+	var wtf8 = {
+		'version': '1.0.0',
+		'encode': wtf8encode,
+		'decode': wtf8decode
+	};
+
+	// Some AMD build optimizers, like r.js, check for specific condition patterns
+	// like the following:
+	if (
+		typeof define == 'function' &&
+		typeof define.amd == 'object' &&
+		define.amd
+	) {
+		define(function() {
+			return wtf8;
+		});
+	}	else if (freeExports && !freeExports.nodeType) {
+		if (freeModule) { // in Node.js or RingoJS v0.8.0+
+			freeModule.exports = wtf8;
+		} else { // in Narwhal or RingoJS v0.7.0-
+			var object = {};
+			var hasOwnProperty = object.hasOwnProperty;
+			for (var key in wtf8) {
+				hasOwnProperty.call(wtf8, key) && (freeExports[key] = wtf8[key]);
+			}
+		}
+	} else { // in Rhino or a web browser
+		root.wtf8 = wtf8;
+	}
+
+}(this));
+
+}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+
+},{}],770:[function(require,module,exports){
+'use strict';
+
+var alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_'.split('')
+  , length = 64
+  , map = {}
+  , seed = 0
+  , i = 0
+  , prev;
+
+/**
+ * Return a string representing the specified number.
+ *
+ * @param {Number} num The number to convert.
+ * @returns {String} The string representation of the number.
+ * @api public
+ */
+function encode(num) {
+  var encoded = '';
+
+  do {
+    encoded = alphabet[num % length] + encoded;
+    num = Math.floor(num / length);
+  } while (num > 0);
+
+  return encoded;
+}
+
+/**
+ * Return the integer value specified by the given string.
+ *
+ * @param {String} str The string to convert.
+ * @returns {Number} The integer value represented by the string.
+ * @api public
+ */
+function decode(str) {
+  var decoded = 0;
+
+  for (i = 0; i < str.length; i++) {
+    decoded = decoded * length + map[str.charAt(i)];
+  }
+
+  return decoded;
+}
+
+/**
+ * Yeast: A tiny growing id generator.
+ *
+ * @returns {String} A unique id.
+ * @api public
+ */
+function yeast() {
+  var now = encode(+new Date());
+
+  if (now !== prev) return seed = 0, prev = now;
+  return now +'.'+ encode(seed++);
+}
+
+//
+// Map each character to its index.
+//
+for (; i < length; i++) map[alphabet[i]] = i;
+
+//
+// Expose the `yeast`, `encode` and `decode` functions.
+//
+yeast.encode = encode;
+yeast.decode = decode;
+module.exports = yeast;
+
+},{}],771:[function(require,module,exports){
+arguments[4][342][0].apply(exports,arguments)
+},{"dup":342}]},{},[1,771])
 
 
 //# sourceMappingURL=app.bundle.js.map

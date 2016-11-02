@@ -1,5 +1,5 @@
 import {Component, AfterContentInit, HostListener } from '@angular/core'
-import {NavController, Modal, Toast} from 'ionic-angular';
+import {NavController, ViewController, Modal, Toast} from 'ionic-angular';
 import {Input, Output} from '@angular/core'; 
 
 import {bitcoin_page} from './service/bitcoin';
@@ -8,14 +8,14 @@ import {user_page} from './service/user';
 import {BuskerPage, BuskerHeartPage} from './../Busker/Busker';
 import {BuskerListPage} from './../BuskerList/BuskerList';
 
-import {Socket_service} from './../../service/socket';
+import {Socket_service_busking} from './../../service/socket';
 
 @Component({
   templateUrl: 'build/pages/Main/Main.html',
-  directives : [bitcoin_page, heart_page, user_page, BuskerPage, BuskerListPage, BuskerHeartPage, Socket_service]
+  directives : [bitcoin_page, heart_page, user_page, BuskerPage, BuskerListPage, BuskerHeartPage],
+  providers : [Socket_service_busking]
 })
 export class MainPage{
-
 
     private animation_object_queue = [];                    //animation object queue
 
@@ -133,7 +133,9 @@ export class MainPage{
     }
 
 
-    constructor(private nav :NavController, private IO : Socket_service){
+    constructor(private nav :NavController,
+                private view :ViewController, 
+                private IO : Socket_service_busking){
         
         this.IO.socket.on('start', (data) => {
 
@@ -141,6 +143,11 @@ export class MainPage{
             this.Busker_Toast(temp_data.ID, temp_data.Location);
 
         });
+        setTimeout(()=>{
+          
+          this.Busker_Toast("버스킹 클라우드에 오신것을 환영합니다.", "from MIRO internet of things team");
+        
+        },3000);
     }
 
     ngAfterContentInit(){
@@ -262,13 +269,15 @@ export class MainPage{
 
     menu_controller(index : string){
 
+
+      console.log("[+] view change");
       let target : any;
 
       switch(index){
 
         case "bitcoin_page" : target = Modal.create(bitcoin_page);
         break;
-        case "heart_page" : target = Modal.create(heart_page);
+        case "heart_page" : target= Modal.create(heart_page);
         break;
         case "user_page" : target = Modal.create(user_page);
         break;
@@ -276,14 +285,15 @@ export class MainPage{
         break;
         case "BuskerListPage": target = Modal.create(BuskerListPage);
         break;
-        case "BuskerHeartPage" : target = Modal.create(BuskerHeartPage);
+        case "BuskerHeartPage" : target= Modal.create(BuskerHeartPage);
         break;
 
       }
       navigator.vibrate(200);
+
       this.nav.present(target);
 
-    }
+  }
 
     Busker_Toast(who : string, location : string){
 

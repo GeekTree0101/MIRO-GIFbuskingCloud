@@ -7,8 +7,9 @@ ion-content(class="Main")
             ion-icon(name="logo-bitcoin")    
         button((click)="menu_controller(view_list.C.name)" style="background-color : #FF88FC")
             ion-icon(name="heart")   
-        button((click)="menu_controller(view_list.D.name)" style="background-color : #FDA856")
+        button((click)="menu_controller(view_list.D.name)"  style="background-color : #FDA856")
             ion-icon(name="{{view_list.D.icon}}")   
+
     div((click)="mode_change()"  class="Coin_button")
     div((press)="open_menu()" class="Coin_howl")
     h3(class="Coin_text") {{toggle_state.name}}

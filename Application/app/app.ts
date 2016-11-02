@@ -17,12 +17,12 @@ export class MyApp {
 
   constructor(private platform:Platform, private DB : localStorage_service) {
 
-    this.rootPage = this.Auth();
-
     if(!this.DB.check("userdata")){
 
+      console.log("[+] Create userdata");
+
       let data = {
-        ID : 0,
+        ID : "test",
         user_coin : 0,
         busker_coin : 0,
         busker_heart : 0
@@ -30,14 +30,18 @@ export class MyApp {
 
       DB.create(data,"userdata");
 
+      this.rootPage = LoginPage;
     }
-
-
+    else{
+        
+      this.rootPage = this.Auth();
+    }
+    /*
     platform.ready().then(() => {
 
       StatusBar.styleDefault();
     });
-
+    */
   }
   
   Auth() : any{
@@ -46,9 +50,17 @@ export class MyApp {
 
     let id = this.DB.load("ID","userdata");
 
-    if(typeof(id) != "number"){
-      flag = true;
+    console.log("[+] check userdata", id );
+    if(id == "test" || id == undefined ){
+      
+        flag = false;
     }
+    else{
+
+        flag = true;
+    }
+
+    
 
     if(flag){
       

@@ -11,16 +11,21 @@ import {HttpProtocalService} from '../../../service/HttpProtocol';
 })
 export class heart_page{
 
-    private NFC_ID : any;
+    private NFC_ID  = null;
     
+    private NFC_FLAG = true;
+
     private GET_DATA = {
         flag : false,                    //Bit coin I/O controll
     }
 
-    private custom_coin = 888;           //User Want to send money
+    private custom_coin = 1000;           //User Want to send money
     private user_coin = this.DB.load("user_coin", "userdata")           //user money
 
     private show_state = true;
+
+    private message : any;
+
     private donation_method = [
         {
             image : "image/ionic.png",
@@ -44,7 +49,7 @@ export class heart_page{
         },                        
     ]
 
-    constructor(private ctrl :ViewController, 
+    constructor(private view :ViewController, 
                 private nav : NavController,
                 private http : HttpProtocalService,
                 public event : Events,
@@ -54,9 +59,7 @@ export class heart_page{
 
     ngAfterContentInit(){
 
-         this.NFC_ID = "Please pus [PUSH] button!";       
-         this.NFCrun();
-
+         this.NFCrun();       
          setTimeout(()=>{
              this.informationAlert("closeYourCard");
          },3000);
@@ -64,31 +67,36 @@ export class heart_page{
 
     @Input() close(){
         navigator.vibrate(200);
-        this.ctrl.dismiss();
+    
+        this.view.dismiss();
+        
     }
 
     @Input() coin_size_up(touch : boolean, index :number){
 
         navigator.vibrate(200);
+        this.show_state = false;
+        
         if(touch){
+
             this.custom_coin++;
         }
         else{
-            this.show_state = false;
-            this.custom_coin = index;
+            
+            if(index == 0){
+
+                this.custom_coin = 0;
+                this.message = "좋아요를 기부하셨습니다.";
+            }
+            else{
+
+                this.custom_coin = 0;
+                this.custom_coin = index;
+                this.message =  "비트코인을 " + this.custom_coin + " 만큼 기부하였습니다." ;
+            }
         }
     }
 
-    @HostListener('press',['$event']) press_coin_size_up(event){
-        navigator.vibrate(50);
-        if(event.target.className == "resize_coin"){
-
-            this.coin_size_up(true,0);
-        }
-        else{
-            this.show_state = true;
-        }
-    }
 
     @HostListener('swipe',['$event']) delete_press_event(event){
         navigator.vibrate(50);
@@ -104,6 +112,7 @@ export class heart_page{
             (data) =>{
               //callback data -> nfc infomation
               
+              console.log("[+] nfc tag start")
               let ID_array = data.tag.id;
               let ID_value = "";
               
@@ -119,24 +128,34 @@ export class heart_page{
               //return nfc id to VIEW component
               this.NFC_ID = ID_value;
               
+              if(this.NFC_FLAG && this.show_state == false){
+                
+                //console.log("[+] nfc post start");
+                this.NFC_FLAG = false;
+                this.POST();
+
+              }
+              else{
+                this.Bit_coin_toast(false);
+              }
             },
             (sucess) => {
                 // nfc listenner commit!
-                console.log(sucess);
-                this.Get();
+
+              //  console.log("[+] nfc tag addeventlistner success", sucess);
             },
             (err) => {
                 // Must Check NFC activatied!
-                console.log(err);
+                console.log("[-] nfc tag error", err);
                 this.informationAlert("failed");
                 
             }
         )
     }
     
-    @Output() Get(){
+    @Output() POST(){
         
-        if(this.NFC_ID != null){
+        if(this.NFC_ID != null && this.NFC_FLAG == false){
             
             let token = {
               NFC_ID : this.NFC_ID,
@@ -144,22 +163,21 @@ export class heart_page{
               send_coin : this.custom_coin
             }
 
-            this.http.POST(token, "application/json", "http://192.168.1.9:7777/Donation");   
+            //console.log("[+] post donation");
+            this.http.POST(token, "application/json", "http://192.168.1.9:7777/Donation", "heart");   
             
-            this.event.subscribe("POST",
+            this.event.subscribe("heart",
             
-            (event : any) => { //Async Event
-                console.log("[+] Succes POST data");
+            (data : any) => { //Async Event
+                
+                if(this.show_state == false){
+                    
+                    console.log("[+] update coin");
+                    let check = this.DB.save(data[0], "userdata", ["user_coin"]);
 
-                //coin or heart --
-                let data = {
-                    user_coin : this.user_coin - this.custom_coin
-                }
-
-                let check = this.DB.save(data, "userdata", ["user_coin"]);
-
-                if(check){
-                    this.user_coin = this.DB.load("user_coin", "userdata");
+                    if(check){
+                        this.user_coin = this.DB.load("user_coin", "userdata");
+                    }
                 }
 
                 //flag setting
@@ -167,13 +185,16 @@ export class heart_page{
                 this.GET_DATA.flag = true; //Show UI
 
                 this.Bit_coin_toast(true);
+                this.NFC_FLAG = true;
+                this.NFC_ID = null;
+                this.show_state = true;
             },
             (err) => {
                 
-                console.log(err);
-                this.Bit_coin_toast(false);
+                console.log("NFC",err);
+              //this.Bit_coin_toast(false);
             }
-            )
+          )
             
         }
         else{
@@ -236,22 +257,15 @@ export class heart_page{
     }
 
     Bit_coin_toast(flag : boolean){
-      
-      let message_value = "비트코인을 " + this.custom_coin + " 만큼 기부하였습니다." 
-
-      if(flag){
-   
-        if(this.custom_coin == 0){
-            message_value = "좋아요를 기부하셨습니다.";
-        }
-
-      }
-      else{
-          message_value = "서버상태가 원활하지 않습니다.";
+     
+      if(!flag){
+     
+          this.message = "원하시는 코인을 터치해주세요";
+          this.custom_coin = 0;
       }
       let make = Toast.create({
 
-          message : message_value,
+          message : this.message,
           duration : 3000,
           position : 'top',
           showCloseButton : true,

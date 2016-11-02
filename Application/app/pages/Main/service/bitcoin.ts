@@ -14,10 +14,12 @@ export class bitcoin_page{
 
     private Bit_Coin = 0;
     private Accept_Coin = this.DB.load("user_coin", "userdata");
-
+    
+    private popup : any;
+    private button_box : any;
     private user_charge_coin = 100;
 
-    constructor(private ctrl :ViewController,
+    constructor(private view :ViewController,
                 private nav : NavController,
                 private DB : localStorage_service, 
                 private http : HttpProtocalService,
@@ -26,32 +28,34 @@ export class bitcoin_page{
         
         this.Bit_Coin = this.Accept_Coin - 100;
 
-        let sizeUp = setInterval(() => {
-
-            this.Bit_Coin++;
+        if(this.Accept_Coin > 100){
             
-            if(this.Bit_Coin == this.Accept_Coin){
-                clearInterval(sizeUp);
-            }
+            let sizeUp = setInterval(() => {
 
-        }, 10);
+                this.Bit_Coin++;
+            
+                if(this.Bit_Coin == this.Accept_Coin){
+                    clearInterval(sizeUp);
+                }
+
+            }, 10);
+        }
+        else{
+            this.Bit_Coin = this.Accept_Coin;
+        }
     }
 
     @Input() close(){
-        
-        //memory free
-        this.Bit_Coin = null;
-        this.Accept_Coin = null;
-
+        console.log("coin page close");
         navigator.vibrate(200);
-        this.ctrl.dismiss();
+        this.view.dismiss();
     }
 
     @Output() charge(){
 
         console.log("[+] User charging bit coin");
 
-        let input_box = Alert.create({
+        this.button_box = Alert.create({
               title : "비트코인 충전",
               message : "충전하실 비트코인을 입력하세요",
               inputs  : [
@@ -63,14 +67,20 @@ export class bitcoin_page{
               buttons : [{
                   text : "OK",
                   handler : (money : any) => {
-                  
-                        this.user_charge_coin = parseInt(money);
 
+                        console.log("button");
+
+                        this.user_charge_coin = parseInt(money.coin);
+
+                        console.log("입력하신금액", money.coin);
+                        
                         if(isNaN(this.user_charge_coin)){
 
-                            this.feel_the_toast("금액을 잘못된 값으로 입력하셨습비다.");
+                            this.feel_the_toast("금액을 잘못된 값으로 입력하셨습니다.");
                         }
                         else{
+                            
+                            this.button_box.dismiss();
 
                             let charge_money_data = { 
                             
@@ -78,15 +88,15 @@ export class bitcoin_page{
                                 charge_coin : this.user_charge_coin 
                             }
 
-                            this.http.POST(charge_money_data,"application/json","https://192.168.1.9:7000/CashSystem");
+                            this.http.POST(charge_money_data,"application/json","http://192.168.1.9:7777/CashSystem","bitcoin");
 
-                            this.event.subscribe("POST",
+                            this.event.subscribe("bitcoin",
             
                                     (data) => { //Async Event
             
                                                 console.log("[+] Succes POST data");
 
-                                                let check = this.DB.save(data, "userdata", ["user_coin"]);
+                                                let check = this.DB.save(data[0], "userdata", ["user_coin"]);
 
                                                 if(check){
                     
@@ -94,36 +104,42 @@ export class bitcoin_page{
                                                 }
   
                                                 this.feel_the_toast("+ " + this.user_charge_coin + " 만큼 충전되었습니다.")
+                                                
                                     },
             
                                     (err) => {
                 
-                                                console.log(err);
-                                                this.feel_the_toast("서버의 상태가 원활하지 않습니다.");
+                                                console.log("[+] Bitcoin error",err);
+                                     //           this.feel_the_toast("서버의 상태가 원활하지 않습니다.");
                                     }
                             );  //event end
-
+                         
                         }
                   }
               }]
 
             });  // prompt end        
 
-
-        this.nav.present(input_box);                            
+        if(this.nav.length() > 1){
+            this.nav.last().dismiss();
+        } 
+        this.nav.present(this.button_box);
+                   
     }
 
     feel_the_toast(message_value : string){
 
-        let obj = Toast.create({
+        this.popup = Toast.create({
             message : message_value,
-            duration : 3000,
-            position : 'bottom',
+            duration : 2000,
+            position : 'top',
             showCloseButton : true,
             closeButtonText : "OK"            
         });
+
         navigator.vibrate(200);
-        this.nav.present(obj);
+
+        this.nav.present(this.popup);
     }    
 
 }

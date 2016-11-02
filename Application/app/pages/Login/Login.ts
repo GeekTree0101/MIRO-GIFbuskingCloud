@@ -38,8 +38,20 @@ export class LoginPage {
   }
 
   @Output() quick_login(){
-        
-        window.location.reload();
+    
+        let data = {
+        ID : "miro_master",
+        user_coin : 1000,
+        busker_coin : 1000,
+        busker_heart : 1000
+        }       
+         
+        let auth = this.DB.save(data,"userdata",["ID","user_coin","busker_coin","busker_heart"]);
+                  
+        if(auth){
+
+           this.nav.setRoot(MainPage);
+        }
   }
 
   @Output() Auth_Login(){
@@ -67,43 +79,43 @@ export class LoginPage {
               "Password" : this.password
             }
             
-            this.http.GET("JSON","http://192.168.1.9:7777/Auth", token);   
+            this.http.GET("JSON","http://192.168.1.9:7777/Auth", token, "login");   
             
-            this.event.subscribe("GET",
+            this.event.subscribe("login",
             
               (data) => { //Async Event
             
-                          console.log("[+] Succes GET data", data);
-                          if(data[0].ID == "error"){
+                    console.log("[+] Succes GET data", data);
+            
+                    if(data[0].ID == "error"){
+                        console.log("[-] error", data[0].ID);                
+                        this.Auth_alert(4);
+                    }
+
+                    else{
+
                             
-                            this.Auth_alert(4);
-                          }
-                          else{
-
-                            if(data != null){
-                                
-                                  let auth = this.DB.save(data,"userdata",["ID","user_coin","busker_coin","busker_heart"]);
+                        let auth = this.DB.save(data,"userdata",["ID","user_coin","busker_coin","busker_heart"]);
                   
-                                  if(auth){
+                        console.log("[+] auth data state", auth);
+                        
+                        if(auth){
 
-                                      this.Auth_alert(1);       
-                                  }
-                                 else{
+                                this.Auth_alert(1);       
+                        }
+                        else{
                     
-                                      this.Auth_alert(2);
-                                  }
+                                this.Auth_alert(2);
+                        }
 
-                            }
-                            else{
                               
-                                  this.Auth_alert(3);
-                            }
-                          }
+                          
+                  }
               },
               
               (err) => {
                         
-                        this.Auth_alert(3);
+                       // this.Auth_alert(3);
               }
           );
       }
@@ -142,7 +154,7 @@ export class LoginPage {
                   console.log("[+] button evented");
                   if(select == 1){
 
-                      window.location.reload();
+                      this.nav.setRoot(MainPage);
                   }
                } 
               }]

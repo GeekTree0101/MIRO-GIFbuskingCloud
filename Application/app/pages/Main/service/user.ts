@@ -8,19 +8,20 @@ export class user_page{
 
     private user_name = JSON.parse(localStorage.getItem("userdata")).ID
 
-    constructor(private ctrl :ViewController){
+    constructor(private view :ViewController){
         
     }
 
     @Input() close(){
         navigator.vibrate(200);
-        this.ctrl.dismiss();
+     
+        this.view.dismiss();
+        
     }
 
     @Output() logout(){
         navigator.vibrate(200);
         console.log("[-] User Logout");
-        localStorage.removeItem("Auth");
         localStorage.removeItem("userdata");
         
         setTimeout(()=>{

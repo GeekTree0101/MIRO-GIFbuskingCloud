@@ -8,9 +8,9 @@ let io = IO.listen(8000);
 var router = express.Router();
 
 /* 버스킹 시작 및 사용자에게 알려주는 라우터 */
-router.get('/', function(req, res, next) {
+router.get('/', function(req : any, res, next) {
   
-    let data = JSON.parse(req.headers['authorization']);
+    let data = JSON.parse(req.headers.authorization);
     console.log("[+ 버스커 " + data.ID + " 님이 버스킹을 시작하였습니다.");
 
     let NFC_ID = data.NFC_ID;
@@ -34,7 +34,7 @@ router.get('/', function(req, res, next) {
 
         }
     }    
-
+    
     res.end();
 });
 

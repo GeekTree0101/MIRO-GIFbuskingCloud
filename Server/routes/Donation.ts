@@ -10,9 +10,9 @@ var router = express.Router();
 /* 사용자가 버스커에게 기부하는 라우터 POST */
 router.post('/', function(req, res, next) {
   
-    let data = JSON.parse(req.body);
+    let data = req.body;
     console.log("[+ 사용자 버스커기기 " + data.NFC_ID + " 으로 기부요청");
-
+  
     var temp = {
         user_coin : 0
     }
@@ -33,10 +33,10 @@ router.post('/', function(req, res, next) {
                 }));
         }
     }    
-
+    res.set('Content-Type','application/json');
     res.send(JSON.stringify(temp));
-
     res.end();
+    
 });
 
 
