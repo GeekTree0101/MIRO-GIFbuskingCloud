@@ -154,7 +154,7 @@ export class LoginPage {
                   console.log("[+] button evented");
                   if(select == 1){
 
-                      this.nav.setRoot(MainPage);
+                      window.location.reload();
                   }
                } 
               }]

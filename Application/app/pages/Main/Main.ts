@@ -143,11 +143,7 @@ export class MainPage{
             this.Busker_Toast(temp_data.ID, temp_data.Location);
 
         });
-        setTimeout(()=>{
-          
-          this.Busker_Toast("버스킹 클라우드에 오신것을 환영합니다.", "from MIRO internet of things team");
-        
-        },3000);
+
     }
 
     ngAfterContentInit(){

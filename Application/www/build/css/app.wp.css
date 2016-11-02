@@ -9665,6 +9665,7 @@ body {
 
 .Login img {
   margin-top: 10vmax;
+  width: 35vmax;
   -webkit-animation-direction: forward;
   animation-direction: forward;
   -webkit-animation-name: img-animation;

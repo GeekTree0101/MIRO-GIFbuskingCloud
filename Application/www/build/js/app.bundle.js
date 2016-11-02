@@ -544,7 +544,6 @@ var LoginPage = (function () {
         }
     };
     LoginPage.prototype.Auth_alert = function (select) {
-        var _this = this;
         var title_value;
         var message_content;
         if (select == 1) {
@@ -571,7 +570,7 @@ var LoginPage = (function () {
                     handler: function (data) {
                         console.log("[+] button evented");
                         if (select == 1) {
-                            _this.nav.setRoot(Main_1.MainPage);
+                            window.location.reload();
                         }
                     }
                 }]
@@ -735,9 +734,6 @@ var MainPage = (function () {
             var temp_data = JSON.parse(data);
             _this.Busker_Toast(temp_data.ID, temp_data.Location);
         });
-        setTimeout(function () {
-            _this.Busker_Toast("버스킹 클라우드에 오신것을 환영합니다.", "from MIRO internet of things team");
-        }, 3000);
     }
     MainPage.prototype.ngAfterContentInit = function () {
         this.UI_component(".Coin_button", "Coin_button", true, 0);
@@ -1046,25 +1042,21 @@ var heart_page = (function () {
         this.show_state = true;
         this.donation_method = [
             {
-                image: "image/ionic.png",
+                image: "image/like.png",
                 name: "Like"
             },
             {
-                image: "image/ionic.png",
+                image: "image/bitcoin100.png",
                 name: "100 coin"
             },
             {
-                image: "image/ionic.png",
+                image: "image/bitcoin1000.png",
                 name: "1000 coin"
             },
             {
-                image: "image/ionic.png",
+                image: "image/bitcoin10000.png",
                 name: "10000 coin"
-            },
-            {
-                image: "image/ionic.png",
-                name: " coin"
-            },
+            }
         ];
     }
     heart_page.prototype.ngAfterContentInit = function () {
@@ -1072,7 +1064,7 @@ var heart_page = (function () {
         this.NFCrun();
         setTimeout(function () {
             _this.informationAlert("closeYourCard");
-        }, 3000);
+        }, 2000);
     };
     heart_page.prototype.close = function () {
         navigator.vibrate(200);
@@ -1192,8 +1184,8 @@ var heart_page = (function () {
             ]
         });
         var closeYourCard = ionic_angular_1.Alert.create({
-            title: "태그해주세요~",
-            message: "휴대폰으로 버스킹클라우드에 살짝 터치해주세요",
+            title: "선택 후 태그!",
+            message: "원하시는 선물을 터치 후 휴대폰으로 버스킹클라우드에 태그해주세요",
             buttons: ["OK"]
         });
         var noNFC = ionic_angular_1.Alert.create({

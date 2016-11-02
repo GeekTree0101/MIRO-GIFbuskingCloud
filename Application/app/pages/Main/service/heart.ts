@@ -28,25 +28,21 @@ export class heart_page{
 
     private donation_method = [
         {
-            image : "image/ionic.png",
+            image : "image/like.png",
             name : "Like"
         },
         {
-            image : "image/ionic.png",
+            image : "image/bitcoin100.png",
             name : "100 coin"
         },
         {
-            image : "image/ionic.png",
+            image : "image/bitcoin1000.png",
             name : "1000 coin"
         },
         {
-            image : "image/ionic.png",
+            image : "image/bitcoin10000.png",
             name : "10000 coin"
-        },
-        {
-            image : "image/ionic.png",
-            name : " coin"
-        },                        
+        }               
     ]
 
     constructor(private view :ViewController, 
@@ -62,7 +58,7 @@ export class heart_page{
          this.NFCrun();       
          setTimeout(()=>{
              this.informationAlert("closeYourCard");
-         },3000);
+         },2000);
     }
 
     @Input() close(){
@@ -230,8 +226,8 @@ export class heart_page{
         });
         
         let closeYourCard = Alert.create({
-            title : "태그해주세요~",
-            message :"휴대폰으로 버스킹클라우드에 살짝 터치해주세요",
+            title : "선택 후 태그!",
+            message :"원하시는 선물을 터치 후 휴대폰으로 버스킹클라우드에 태그해주세요",
             buttons :["OK"]
         })
         
