@@ -192,7 +192,7 @@ var BuskerPage = (function () {
                 Location: "대구광역시 북구 대학로 60 경북대학교 IT2-244"
             };
             console.log("[+] Busking 요청");
-            _this.http.GET("JSON", "http://192.168.1.9:7777/Start", send_token, "busker");
+            _this.http.GET("JSON", "http://192.168.1.3:7777/Start", send_token, "busker");
             _this.event.subscribe("busker", function (data) {
                 console.log("[+] busking 성공");
                 _this.feel_the_toast("사물과 연결이 되었습니다.");
@@ -231,7 +231,7 @@ var BuskerPage = (function () {
                 busker_coin: temp_busker_coin + _this.real_time_bitcoin,
                 busker_heart: temp_busker_heart + _this.real_time_heart
             };
-            _this.http.GET("JSON", "http://192.168.1.9:7777/Update", data, "update");
+            _this.http.GET("JSON", "http://192.168.1.3:7777/Update", data, "update");
             _this.event.subscribe("update", function (data) {
                 var check = _this.DB.save(data, "userdata", ["ID", "user_coin", "busker_coin", "busker_heart"]);
                 if (check) {
@@ -521,7 +521,7 @@ var LoginPage = (function () {
                 "ID": this.ID,
                 "Password": this.password
             };
-            this.http.GET("JSON", "http://192.168.1.9:7777/Auth", token, "login");
+            this.http.GET("JSON", "http://192.168.1.3:7777/Auth", token, "login");
             this.event.subscribe("login", function (data) {
                 console.log("[+] Succes GET data", data);
                 if (data[0].ID == "error") {
@@ -544,6 +544,7 @@ var LoginPage = (function () {
         }
     };
     LoginPage.prototype.Auth_alert = function (select) {
+        var _this = this;
         var title_value;
         var message_content;
         if (select == 1) {
@@ -570,7 +571,7 @@ var LoginPage = (function () {
                     handler: function (data) {
                         console.log("[+] button evented");
                         if (select == 1) {
-                            window.location.reload();
+                            _this.nav.setRoot(Main_1.MainPage);
                         }
                     }
                 }]
@@ -957,7 +958,7 @@ var bitcoin_page = (function () {
                                 ID: _this.DB.load("ID", "userdata"),
                                 charge_coin: _this.user_charge_coin
                             };
-                            _this.http.POST(charge_money_data, "application/json", "http://192.168.1.9:7777/CashSystem", "bitcoin");
+                            _this.http.POST(charge_money_data, "application/json", "http://192.168.1.3:7777/CashSystem", "bitcoin");
                             _this.event.subscribe("bitcoin", function (data) {
                                 console.log("[+] Succes POST data");
                                 var check = _this.DB.save(data[0], "userdata", ["user_coin"]);
@@ -1144,7 +1145,7 @@ var heart_page = (function () {
                 send_coin: this.custom_coin
             };
             //console.log("[+] post donation");
-            this.http.POST(token, "application/json", "http://192.168.1.9:7777/Donation", "heart");
+            this.http.POST(token, "application/json", "http://192.168.1.3:7777/Donation", "heart");
             this.event.subscribe("heart", function (data) {
                 if (_this.show_state == false) {
                     console.log("[+] update coin");
@@ -1472,7 +1473,7 @@ var io = require('socket.io-client'); //SOCKET.IO - CLINENT
 var Socket_service_busking = (function () {
     function Socket_service_busking() {
         console.log("socket init");
-        this.socket = io.connect("http://192.168.1.9:8000", { transports: ['websocket', 'poling', 'flashsocket'] });
+        this.socket = io.connect("http://192.168.1.3:8000", { transports: ['websocket', 'poling', 'flashsocket'] });
     }
     return Socket_service_busking;
 }());
@@ -1480,7 +1481,7 @@ exports.Socket_service_busking = Socket_service_busking;
 var Socket_service_donation = (function () {
     function Socket_service_donation() {
         console.log("socket init");
-        this.socket = io("http://192.168.1.9:9000", { transports: ['websocket', 'poling', 'flashsocket'] });
+        this.socket = io("http://192.168.1.3:9000", { transports: ['websocket', 'poling', 'flashsocket'] });
     }
     return Socket_service_donation;
 }());

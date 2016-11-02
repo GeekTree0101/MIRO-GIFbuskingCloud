@@ -160,7 +160,7 @@ export class BuskerPage{
             }        
 
             console.log("[+] Busking 요청");
-            this.http.GET("JSON", "http://192.168.1.9:7777/Start", send_token, "busker");
+            this.http.GET("JSON", "http://192.168.1.3:7777/Start", send_token, "busker");
 
             this.event.subscribe("busker", 
                 (data) => {
@@ -218,7 +218,7 @@ export class BuskerPage{
                     busker_heart : temp_busker_heart + this.real_time_heart
                 }
 
-                this.http.GET("JSON", "http://192.168.1.9:7777/Update", data, "update");
+                this.http.GET("JSON", "http://192.168.1.3:7777/Update", data, "update");
 
                 this.event.subscribe("update",
                 

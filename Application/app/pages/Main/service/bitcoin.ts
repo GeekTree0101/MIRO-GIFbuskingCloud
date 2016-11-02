@@ -88,7 +88,7 @@ export class bitcoin_page{
                                 charge_coin : this.user_charge_coin 
                             }
 
-                            this.http.POST(charge_money_data,"application/json","http://192.168.1.9:7777/CashSystem","bitcoin");
+                            this.http.POST(charge_money_data,"application/json","http://192.168.1.3:7777/CashSystem","bitcoin");
 
                             this.event.subscribe("bitcoin",
             

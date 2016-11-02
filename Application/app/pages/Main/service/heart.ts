@@ -164,7 +164,7 @@ export class heart_page{
             }
 
             //console.log("[+] post donation");
-            this.http.POST(token, "application/json", "http://192.168.1.9:7777/Donation", "heart");   
+            this.http.POST(token, "application/json", "http://192.168.1.3:7777/Donation", "heart");   
             
             this.event.subscribe("heart",
             
