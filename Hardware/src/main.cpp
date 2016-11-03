@@ -10,8 +10,6 @@
 #define LED_GREEN 6      //green color led
 #define LED_BLUE 7       //blue color ledq
 
-char NFC_chip_code_number[9] = "D15E47EA";    //NFC chip number
-
 void reset_light_function();     //reset light function
 void red_light_function();       //red light function
 void green_light_function();     //green light function
@@ -19,7 +17,7 @@ void blue_light_function();      //blue light function
 
 void setup(){
 
-  Serial.begin(9600);            //Bluetooth Serial Setting
+  Serial.begin(9600);            //Serial Serial Setting
   pinMode(LED_RED, OUTPUT);      //red led output state
   pinMode(LED_GREEN, OUTPUT);    //green led output state
   pinMode(LED_BLUE, OUTPUT);     //blue led output state
@@ -30,16 +28,24 @@ void setup(){
     char recv_data = (char)Serial.read();
     
     if(recv_data == '*'){                          //Confirm
-     
-        for(int i = 0; i < 7; i++){
-         
-          Serial.print(NFC_chip_code_number[i]);   // send data
-        }
-      
-        Serial.print('*');   // END send flag
+
+        Serial.println("D15E47EA");
         break;
     }
     
+  }
+  digitalWrite(LED_RED,LOW);
+  delay(500);
+  digitalWrite(LED_RED,HIGH);
+
+  while(1){
+
+    char recv_data = (char)Serial.read();
+    
+    if(recv_data == '*'){
+    
+      break;
+    }
   }
   
   digitalWrite(LED_RED,LOW);

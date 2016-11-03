@@ -79,7 +79,7 @@ export class LoginPage {
               "Password" : this.password
             }
             
-            this.http.GET("JSON","http://192.168.1.3:7777/Auth", token, "login");   
+            this.http.GET("JSON","http://192.168.1.77:7777/Auth", token, "login");   
             
             this.event.subscribe("login",
             

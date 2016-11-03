@@ -1,3 +1,4 @@
+//View lib
 import {Input, Output, Component} from '@angular/core'; 
 import {ViewController, NavController, Events, Toast, Alert} from 'ionic-angular';
 import {localStorage_service} from "../../../service/localStorage";
@@ -12,7 +13,10 @@ import {HttpProtocalService} from '../../../service/HttpProtocol';
 })
 export class bitcoin_page{
 
-    private Bit_Coin = 0;
+
+    //NOTE : Bitcoin page / Charge coin, Show coin
+    
+    private Bit_Coin = 0;                                           
     private Accept_Coin = this.DB.load("user_coin", "userdata");
     
     private popup : any;
@@ -23,8 +27,10 @@ export class bitcoin_page{
                 private nav : NavController,
                 private DB : localStorage_service, 
                 private http : HttpProtocalService,
-                public event : Events
-    ){
+                public event : Events)
+    {
+
+        //NOTE : Coin animation
         
         this.Bit_Coin = this.Accept_Coin - 100;
 
@@ -43,18 +49,19 @@ export class bitcoin_page{
         else{
             this.Bit_Coin = this.Accept_Coin;
         }
+
     }
 
-    @Input() close(){
-        console.log("coin page close");
+    @Input() close(){                                   //Close View
+
+        //console.log("coin page close");
         navigator.vibrate(200);
         this.view.dismiss();
     }
 
-    @Output() charge(){
+    @Output() charge(){                                 //Charge View
 
-        console.log("[+] User charging bit coin");
-
+        //console.log("[+] User charging bit coin");
         this.button_box = Alert.create({
               title : "비트코인 충전",
               message : "충전하실 비트코인을 입력하세요",
@@ -68,71 +75,66 @@ export class bitcoin_page{
                   text : "OK",
                   handler : (money : any) => {
 
-                        console.log("button");
-
-                        this.user_charge_coin = parseInt(money.coin);
-
-                        console.log("입력하신금액", money.coin);
+                    this.user_charge_coin = parseInt(money.coin);
+                    //console.log("입력하신금액", money.coin);
                         
-                        if(isNaN(this.user_charge_coin)){
+                    if(isNaN(this.user_charge_coin)){
+                        this.Coin_toast("금액을 잘못된 값으로 입력하셨습니다.");
+                    }
+                    else{
+                            
+                        this.button_box.dismiss();                         //For fast view
 
-                            this.feel_the_toast("금액을 잘못된 값으로 입력하셨습니다.");
+                        let charge_money_data = { 
+                            ID : this.DB.load("ID","userdata"), 
+                            charge_coin : this.user_charge_coin 
                         }
-                        else{
-                            
-                            this.button_box.dismiss();
 
-                            let charge_money_data = { 
-                            
-                                ID : this.DB.load("ID","userdata"), 
-                                charge_coin : this.user_charge_coin 
-                            }
+                        this.http.POST(charge_money_data,"application/json","http://192.168.1.77:7777/CashSystem","bitcoin");
 
-                            this.http.POST(charge_money_data,"application/json","http://192.168.1.3:7777/CashSystem","bitcoin");
-
-                            this.event.subscribe("bitcoin",
+                        this.event.subscribe("bitcoin",
             
-                                    (data) => { //Async Event
+                            (data) => { //Async Event
             
-                                                console.log("[+] Succes POST data");
+                                    //console.log("[+] Succes POST data");
 
-                                                let check = this.DB.save(data[0], "userdata", ["user_coin"]);
+                                    // [+] UPDATE
+                                    let check = this.DB.save(data[0], "userdata", ["user_coin"]);
 
-                                                if(check){
-                    
-                                                        this.Bit_Coin = this.DB.load("user_coin", "userdata");
-                                                }
+                                    if(check){
+                                         // [+] CHECK
+                                         this.Bit_Coin = this.DB.load("user_coin", "userdata");
+                                    }
   
-                                                this.feel_the_toast("+ " + this.user_charge_coin + " 만큼 충전되었습니다.")
+                                    // [+] TOAST
+                                    this.Coin_toast("+ " + this.user_charge_coin + " 만큼 충전되었습니다.")
                                                 
                                     },
             
-                                    (err) => {
-                
-                                                console.log("[+] Bitcoin error",err);
-                                     //           this.feel_the_toast("서버의 상태가 원활하지 않습니다.");
+                            (err) => {
+                                        //console.log("[+] Bitcoin error",err);
+                                        //this.Coin_toast("서버의 상태가 원활하지 않습니다.");
                                     }
-                            );  //event end
-                         
-                        }
+                        );
+                    }
                   }
               }]
-
             });  // prompt end        
 
         if(this.nav.length() > 1){
+
             this.nav.last().dismiss();
         } 
         this.nav.present(this.button_box);
                    
     }
 
-    feel_the_toast(message_value : string){
+    Coin_toast(message_value : string){                 //Coin Toast
 
         this.popup = Toast.create({
             message : message_value,
             duration : 2000,
-            position : 'top',
+            position : 'bottom',
             showCloseButton : true,
             closeButtonText : "OK"            
         });

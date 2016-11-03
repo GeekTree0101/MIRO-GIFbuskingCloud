@@ -57,7 +57,7 @@ export class HttpProtocalService{
                 .map(res => res.text())
                 .subscribe(
                          data => this.returnData = data,
-                         err => this.returnData = err ,
+                         err => this.returnData = "[+] ERROR : " + err ,
                          () => this.event.publish(event_type,this.returnData)
                 );
         }
@@ -69,7 +69,7 @@ export class HttpProtocalService{
                 .map(res => res.json())
                 .subscribe(
                          data => this.returnData = data,
-                         err => this.returnData = err ,
+                         err => this.returnData = "[+] ERROR : " + err ,
                          () => this.event.publish("GET",this.returnData)
                 );            
         }

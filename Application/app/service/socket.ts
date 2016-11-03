@@ -7,7 +7,7 @@ export class Socket_service_busking{
     constructor(){
         
         console.log("socket init");
-        this.socket = io.connect("http://192.168.1.3:8000",{transports:['websocket','poling','flashsocket']});
+        this.socket = io.connect("http://192.168.1.77:8000",{transports:['websocket','poling','flashsocket']});
 
     }
 
@@ -19,7 +19,7 @@ export class Socket_service_donation{
     constructor(){
         
         console.log("socket init");
-        this.socket = io("http://192.168.1.3:9000",{transports:['websocket','poling','flashsocket']});
+        this.socket = io("http://192.168.1.77:9000",{transports:['websocket','poling','flashsocket']});
 
     }   
 }

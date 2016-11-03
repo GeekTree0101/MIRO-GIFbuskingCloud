@@ -56,8 +56,5 @@ export class busker_unit_list{
     ];
 
 
-    constructor(){
-
-
-    }
+    constructor(){}
 }

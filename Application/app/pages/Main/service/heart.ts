@@ -11,6 +11,8 @@ import {HttpProtocalService} from '../../../service/HttpProtocol';
 })
 export class heart_page{
 
+    //NOTE : Donation page
+
     private NFC_ID  = null;
     
     private NFC_FLAG = true;
@@ -36,8 +38,20 @@ export class heart_page{
             name : "100 coin"
         },
         {
+            image : "image/bitcoin500.png",
+            name : "500 coin"
+        },
+        {
             image : "image/bitcoin1000.png",
             name : "1000 coin"
+        },
+        {
+            image : "image/bitcoin2000.png",
+            name : "2000 coin"
+        },
+        {
+            image : "image/bitcoin5000.png",
+            name : "5000 coin"
         },
         {
             image : "image/bitcoin10000.png",
@@ -50,10 +64,9 @@ export class heart_page{
                 private http : HttpProtocalService,
                 public event : Events,
                 private DB : localStorage_service
-                )
-    {}
+                ){}
 
-    ngAfterContentInit(){
+    ngAfterContentInit(){                                //NFC init 
 
          this.NFCrun();       
          setTimeout(()=>{
@@ -61,45 +74,40 @@ export class heart_page{
          },2000);
     }
 
-    @Input() close(){
+    @Input() close(){                                    //Close View
+       
         navigator.vibrate(200);
-    
         this.view.dismiss();
-        
     }
 
-    @Input() coin_size_up(touch : boolean, index :number){
+    @Input() Coin_task(index :number){               //Coin Selection
 
         navigator.vibrate(200);
+
         this.show_state = false;
         
-        if(touch){
+        if(index == 0){
 
-            this.custom_coin++;
+            this.custom_coin = 0;
+            this.message = "좋아요를 기부하셨습니다.";
         }
         else{
-            
-            if(index == 0){
 
-                this.custom_coin = 0;
-                this.message = "좋아요를 기부하셨습니다.";
-            }
-            else{
-
-                this.custom_coin = 0;
-                this.custom_coin = index;
-                this.message =  "비트코인을 " + this.custom_coin + " 만큼 기부하였습니다." ;
-            }
+            this.custom_coin = 0;
+            this.custom_coin = index;
+            this.message =  "비트코인을 " + this.custom_coin + " 만큼 기부하였습니다." ;
         }
+        
     }
 
 
-    @HostListener('swipe',['$event']) delete_press_event(event){
+    @HostListener('swipe',['$event']) delete_press_event(event){       //Swipe Task/init check state
+
         navigator.vibrate(50);
         this.show_state = true;
     }    
 
-    @Output() NFCrun(){
+    @Output() NFCrun(){                                                //NFC Task
          
         //TODO : start NFC activity
         navigator.vibrate(200);
@@ -107,8 +115,8 @@ export class heart_page{
         (<any>window).nfc.addTagDiscoveredListener(
             (data) =>{
               //callback data -> nfc infomation
+              //console.log("[+] nfc tag start")
               
-              console.log("[+] nfc tag start")
               let ID_array = data.tag.id;
               let ID_value = "";
               
@@ -129,7 +137,6 @@ export class heart_page{
                 //console.log("[+] nfc post start");
                 this.NFC_FLAG = false;
                 this.POST();
-
               }
               else{
                 this.Bit_coin_toast(false);
@@ -137,12 +144,11 @@ export class heart_page{
             },
             (sucess) => {
                 // nfc listenner commit!
-
-              //  console.log("[+] nfc tag addeventlistner success", sucess);
+                //console.log("[+] nfc tag addeventlistner success", sucess);
             },
             (err) => {
                 // Must Check NFC activatied!
-                console.log("[-] nfc tag error", err);
+                //console.log("[-] nfc tag error", err);
                 this.informationAlert("failed");
                 
             }
@@ -154,13 +160,13 @@ export class heart_page{
         if(this.NFC_ID != null && this.NFC_FLAG == false){
             
             let token = {
-              NFC_ID : this.NFC_ID,
-              ID : this.DB.load("ID","userdata"),
-              send_coin : this.custom_coin
+                NFC_ID : this.NFC_ID,
+                ID : this.DB.load("ID","userdata"),
+                send_coin : this.custom_coin
             }
 
             //console.log("[+] post donation");
-            this.http.POST(token, "application/json", "http://192.168.1.3:7777/Donation", "heart");   
+            this.http.POST(token, "application/json", "http://192.168.1.77:7777/Donation", "heart");   
             
             this.event.subscribe("heart",
             
@@ -168,50 +174,54 @@ export class heart_page{
                 
                 if(this.show_state == false){
                     
-                    console.log("[+] update coin");
+                    console.log("[+] UPDATE COIN");
                     let check = this.DB.save(data[0], "userdata", ["user_coin"]);
 
                     if(check){
+                        console.log("[+] CHECK DB STATE",check)
                         this.user_coin = this.DB.load("user_coin", "userdata");
+                        this.Bit_coin_toast(true);
+                    }
+                    else{
+                        this.Bit_coin_toast(false);
                     }
                 }
 
-                //flag setting
-
+                //Flage init
                 this.GET_DATA.flag = true; //Show UI
-
-                this.Bit_coin_toast(true);
                 this.NFC_FLAG = true;
                 this.NFC_ID = null;
                 this.show_state = true;
             },
-            (err) => {
-                
-                console.log("NFC",err);
+            (err) => {           
+              //console.log("NFC",err);
               //this.Bit_coin_toast(false);
             }
           )
             
         }
         else{
+
             this.informationAlert("closeYourCard");
         }
     }
     
-    informationAlert(target){
+    informationAlert(target){                                      //상태정보 TOAST
         
         //TODO : Popup aler
      
         let failed = Alert.create({
-           title : 'Confirm NFC module state',
-           message : 'you must check NFC module P2P receive state!',
+           title : 'NFC기능이 켜져있지않습니다.',
+           message : '확인을 누르신후 P2P기능으로 활성화 시켜주세요',
            buttons :[
                {
                    text: "Open",
                    handler: () => {
-                       console.log("[+] open NFC module setting!");
+
+                       //console.log("[+] open NFC module setting!");
                        (<any>window).nfc.showSettings(
-                           () => {console.log("success"); },
+                           () => {//console.log("success"); 
+                                 },
                            () => {this.informationAlert("noNFC");}
                        );                 
                    }
@@ -233,7 +243,7 @@ export class heart_page{
         
         
         let noNFC = Alert.create({
-            title : "No NFC module!",
+            title : "해당하는 기기는 NFC기능을 지원하지 않습니다.",
             message : "This device dose not support NFC",
             buttons : ["OK"]
         });
@@ -252,7 +262,7 @@ export class heart_page{
         
     }
 
-    Bit_coin_toast(flag : boolean){
+    Bit_coin_toast(flag : boolean){                                //Bitcoin TOAST
      
       if(!flag){
      
@@ -263,7 +273,7 @@ export class heart_page{
 
           message : this.message,
           duration : 3000,
-          position : 'top',
+          position : 'bottom',
           showCloseButton : true,
           closeButtonText : "OK"
       });
